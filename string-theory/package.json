@@ -1,0 +1,15 @@
+{
+  "name": "string-theory-showreel",
+  "version": "1.0.0",
+  "description": "A 15-second motion-graphics history of string theory, rendered from code.",
+  "scripts": {
+    "stills": "node render.mjs --stills",
+    "render": "bash build.sh"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.10"
+  },
+  "type": "module"
+}

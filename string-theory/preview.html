@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>String Theory — live preview</title>
+<style>
+  :root { color-scheme: dark; --ink: #eef1f8; --mute: #7c849a; --cyan: #5cf2ff; }
+  html, body { margin: 0; height: 100%; background: #03040a; color: var(--ink); font: 13px/1.4 JBMono, ui-monospace, monospace; }
+  main { display: grid; place-items: center; min-height: 100%; padding: 16px; box-sizing: border-box; gap: 12px; }
+  canvas { width: min(100%, 1280px); aspect-ratio: 16 / 9; display: block; background: #000; }
+  .bar { width: min(100%, 1280px); display: flex; gap: 12px; align-items: center; }
+  button { background: none; border: 1px solid var(--cyan); color: var(--cyan); padding: 6px 14px; font: inherit; cursor: pointer; border-radius: 99px; }
+  input[type=range] { flex: 1; accent-color: var(--cyan); }
+  label, #tc { color: var(--mute); white-space: nowrap; }
+</style>
+</head>
+<body>
+<main>
+  <canvas id="c" width="1920" height="1080"></canvas>
+  <div class="bar">
+    <button id="play">Play</button>
+    <input id="scrub" type="range" min="0" max="899" value="0">
+    <span id="tc">00:00</span>
+    <label><input id="fx" type="checkbox" checked> lens fx</label>
+  </div>
+</main>
+<audio id="score" src="audio/score.m4a" preload="auto"></audio>
+<script type="module">
+  import { setCanvasFactory } from './src/engine.js';
+  import { renderFrame, drawWorld, FPS, DURATION } from './src/film.js';
+
+  const fonts = {
+    IDBlack: 'InterDisplay-Black.otf', IDBold: 'InterDisplay-Bold.otf', IDMedium: 'InterDisplay-Medium.otf',
+    IDLight: 'InterDisplay-Light.otf', ISerif: 'InstrumentSerif-Regular.ttf', ISerifItalic: 'InstrumentSerif-Italic.ttf',
+    JBMono: 'JetBrainsMono-Regular.ttf', JBMonoBold: 'JetBrainsMono-Bold.ttf', STIX: 'STIXTwoText-Regular.ttf',
+    STIXItalic: 'STIXTwoText-Italic.ttf',
+  };
+  await Promise.all(Object.entries(fonts).map(async ([name, file]) => {
+    const f = new FontFace(name, `url(fonts/${file})`);
+    document.fonts.add(await f.load());
+  }));
+  setCanvasFactory((w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }));
+
+  const ctx = document.getElementById('c').getContext('2d');
+  const scrub = document.getElementById('scrub');
+  const tc = document.getElementById('tc');
+  const fx = document.getElementById('fx');
+  const audio = document.getElementById('score');
+  const btn = document.getElementById('play');
+  let playing = false, start = 0, frame = 0;
+
+  function draw(f) {
+    frame = Math.max(0, Math.min(FPS * DURATION - 1, f));
+    if (fx.checked) renderFrame(ctx, frame, { samples: 1 });
+    else drawWorld(ctx, frame / FPS);
+    scrub.value = frame;
+    tc.textContent = `${String(Math.floor(frame / FPS)).padStart(2, '0')}:${String(frame % FPS).padStart(2, '0')}`;
+  }
+  function tick(now) {
+    if (!playing) return;
+    const f = Math.floor(((now - start) / 1000) * FPS);
+    if (f >= FPS * DURATION) { playing = false; btn.textContent = 'Play'; draw(FPS * DURATION - 1); return; }
+    draw(f);
+    requestAnimationFrame(tick);
+  }
+  btn.onclick = () => {
+    playing = !playing;
+    btn.textContent = playing ? 'Pause' : 'Play';
+    if (playing) {
+      if (frame >= FPS * DURATION - 1) frame = 0;
+      start = performance.now() - (frame / FPS) * 1000;
+      audio.currentTime = frame / FPS;
+      audio.play().catch(() => {});
+      requestAnimationFrame(tick);
+    } else audio.pause();
+  };
+  scrub.oninput = () => { playing = false; btn.textContent = 'Play'; audio.pause(); draw(+scrub.value); };
+  fx.onchange = () => draw(frame);
+  draw(0.25 * FPS * DURATION | 0);
+</script>
+</body>
+</html>
