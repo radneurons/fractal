@@ -80,7 +80,7 @@ class BroadsideEffect implements Effect {
     const { song, settings } = this.ctx; const ly = song.lyrics, a = song.analysis;
     const off = settings.syncOffsetMs / 1000, R = rng(settings.seed * 7 + 3);
     const caseOf = (s: string) => displayText(s, settings.caseMode === 'lower' ? 'lower' : settings.caseMode === 'as-is' ? 'as-is' : 'upper');
-    const portrait = this.ctx.height > this.ctx.width;
+    const portrait = this.ctx.width < this.ctx.height * 1.2;
     const maxBig = portrait ? Math.min(2, Number(this.p.maxBig)) : Number(this.p.maxBig), perBlock = Number(this.p.linesPerBlock), accent = Number(this.p.accent);
     const pictOn = Boolean(this.p.pictograms), compOn = Boolean(this.p.companions), entMode = String(this.p.entrances);
     const worldMode = String(this.p.worlds);

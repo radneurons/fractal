@@ -47,7 +47,7 @@ void main(){
   if (uMode == 0) {        // card face
     vec4 c = texture(uTex, vUv);
     if (c.a < .5) discard;
-    float lam = .62 + .5 * abs(dot(normalize(vN), normalize(uL)));
+    float lam = .82 + .3 * abs(dot(normalize(vN), normalize(uL)));
     o = vec4(c.rgb * lam * uTint.rgb, 1.);
   } else if (uMode == 1) { // shadow
     float a = textureLod(uTex, vUv, uSoft).a;
@@ -186,7 +186,7 @@ class PopupEffect implements Effect {
         return { w, tex, h, wd: h * aspect, hero, color };
       });
       // fit the row across the spread
-      const gap = .04, tot = specs.reduce((s, q) => s + q.wd, 0) + gap * (specs.length - 1), k = Math.min(1, (this.ctx.width < this.ctx.height ? 1.1 : 1.86) / tot);
+      const gap = .04, tot = specs.reduce((s, q) => s + q.wd, 0) + gap * (specs.length - 1), k = Math.min(1, Math.min(1.86, Math.max(1.1, 1.1 * this.ctx.width / this.ctx.height)) / tot);
       let x = -tot * k / 2;
       specs.forEach(q => {
         const w = q.wd * k, h = q.h * k;

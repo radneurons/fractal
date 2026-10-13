@@ -270,7 +270,7 @@ dlgLyrics.addEventListener('close', async () => {
   else if (v === 'tap') {
     if (!state.audio) { toast('Load the audio first.', true); return; }
     const raw = await tapSync($<HTMLDialogElement>('dlgTap'), txt, player);
-    if (raw) { const ly = buildLyrics(raw, state.analysis, 'tap'); ly.words.forEach(w => { w.confidence = 1; }); applyLyrics(txt, ly); toast(`Tap sync: ${ly.words.length} words timed.`); }
+    if (raw) { const ly = buildLyrics(raw, state.analysis, 'tap'); const wordLevel = raw.some(r => r.words?.length); if (wordLevel) ly.words.forEach(w => { w.confidence = 1; }); applyLyrics(txt, ly); toast(wordLevel ? `Tap sync: ${ly.words.length} words timed.` : `Tap sync: ${ly.lines.length} lines timed; words placed by syllables and snapped to onsets.`); }
   }
 });
 

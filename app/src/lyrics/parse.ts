@@ -80,13 +80,15 @@ export function buildLyrics(raw: RawLine[], analysis: Analysis | null, source: L
     const toks = l.text.split(/\s+/).filter(Boolean);
     if (!toks.length) return;
     const li = lines.length;
-    const lineStart = l.start!, lineEnd = Math.min(l.end ?? lineStart + 4, lineStart + Math.max(1.2, toks.length * 0.9));
+    const lineStart = l.start!, lineEnd = Math.min(l.end ?? lineStart + 4, lineStart + Math.max(1.2, toks.length * 1.2));
     const ids: number[] = [];
     if (l.words && l.words.length === toks.length) {
       l.words.forEach((w, k) => { ids.push(words.length); words.push(mkWord(words.length, w.text, li, w.start, l.words![k + 1]?.start ?? Math.min(w.start + 0.6, lineEnd), 1)); });
     } else {
       const syl = toks.map(countSyllables), tot = syl.reduce((a, b) => a + b, 0);
-      const span = Math.max(0.3, lineEnd - lineStart) * 0.92; let acc = 0;
+      // with a known tempo, sing about one syllable per eighth note (quarter below 100 BPM) rather than stretching to the gap
+      let span = Math.max(0.3, lineEnd - lineStart) * 0.92; let acc = 0;
+      if (analysis && analysis.bpm > 0 && analysis.bpmConfidence > 0.1) { const step = (analysis.bpm >= 100 ? 0.5 : 1) * 60 / analysis.bpm; span = Math.min(span, Math.max(0.3, step * tot)); }
       toks.forEach((t, k) => { const s = lineStart + span * acc / tot; acc += syl[k]; const e = lineStart + span * acc / tot; ids.push(words.length); words.push(mkWord(words.length, t, li, s, e, analysis ? 0.5 : 0.3)); });
     }
     lines.push({ idx: li, words: ids, start: words[ids[0]]?.start ?? lineStart, end: words[ids[ids.length - 1]]?.end ?? lineEnd, section: 0, text: toks.join(' ') });
