@@ -1,6 +1,8 @@
 # BUILD PROMPT — "LYRIC ENGINE": an audio-synced kinetic-typography studio
 
-You are a senior graphics and audio engineer working in an empty repository. Build a complete, working, local-first web application.
+You are a senior graphics and audio engineer. Build a complete, working, local-first web application. If the repository already contains code, create the app in a new `lyric-engine/` folder and leave existing code untouched.
+
+Keep this file in the repository as `SPEC.md` and re-read it at the start of every milestone; it is the source of truth.
 
 What the app does:
 1. The user uploads a song or a speech, plus its lyrics or transcript.
@@ -53,7 +55,7 @@ Work in milestones (section 19). Every milestone must end with a runnable app, p
 - Workers: run audio analysis, SDF generation, glyph triangulation, alignment, and export encoding off the main thread. Pass data as transferable ArrayBuffers.
 - Audio: Web Audio API for decode and playback. All analysis runs on decoded PCM in a worker. Write all DSP yourself (FFT, mel filterbank, chroma, beat tracking) so the results are deterministic and reproducible. A small, well-tested FFT package is acceptable.
 - Speech recognition (optional path): `@huggingface/transformers` (transformers.js) with a Whisper model that supports word-level timestamps, in a worker. Use WebGPU when available and fall back to WASM. Download only after the user consents; cache in IndexedDB or the Cache Storage API.
-- Export: WebCodecs (`VideoEncoder`, `AudioEncoder`) plus `mp4-muxer` and `webm-muxer`. Fallback: `MediaRecorder` on `canvas.captureStream()` plus the audio graph, in real time, labelled "lower quality".
+- Export: WebCodecs (`VideoEncoder`, `AudioEncoder`) plus Mediabunny (the maintained successor to `mp4-muxer` and `webm-muxer`; either is acceptable). Check current package names and APIs before installing, and pin exact versions. Fallback: `MediaRecorder` on `canvas.captureStream()` plus the audio graph, in real time, labelled "lower quality".
 - Persistence: IndexedDB (via `idb`) for projects, analysis caches keyed by the audio file's SHA-256, and presets.
 - Testing: Vitest for units, Playwright for end-to-end, and pixel hashing for determinism.
 - No runtime CDN requests. Every asset ships in the build.
@@ -280,8 +282,8 @@ A deterministic module that turns `Analysis` and `Lyrics` into a `ShotPlan` all 
   - Use an exact Euclidean distance transform (Felzenszwalb–Huttenlocher) for SDF, and MSDF for sharp corners in hero sizes.
   - Atlas pages are 4096², single-channel R8 or RGB8 for MSDF.
   - Bake at least 128 px cap height for heroes and 64 px for connectives.
-  - Long strings bake at a lower cap height so they never exceed the page width (a real bug we hit earlier: it clips text silently).
-- **Spatial word tiles.** For full-screen SDF shaders, precompute per-tile candidate word lists: 32×32 world-unit tiles, 8 slots, overflow counted and reported. This was a 6× speed-up in testing and is mandatory for full-screen word loops.
+  - Long strings bake at a lower cap height so they never exceed the page width; otherwise the text is silently clipped.
+- **Spatial word tiles.** For full-screen SDF shaders, precompute per-tile candidate word lists: 32×32 world-unit tiles, 8 slots, overflow counted and reported. In a reference implementation this was about a 6× speed-up; it is mandatory for full-screen word loops.
 - **Camera.**
   - 2D: center, zoom, rotation.
   - 3D: position, target, field of view.
@@ -759,7 +761,7 @@ All effects must:
   3. `VideoEncoder.encode`, with a keyframe every 2 s;
   4. respect `encodeQueueSize` back-pressure.
 - Audio: slice the decoded PCM, encode with `AudioEncoder` (AAC at 192 kbps, or Opus), and align timestamps exactly.
-- Mux with `mp4-muxer` or `webm-muxer`, then offer the download. Files over 2 GB use the File System Access API for streaming output where supported.
+- Mux with Mediabunny (or `mp4-muxer` / `webm-muxer`), then offer the download. Files over 2 GB use the File System Access API for streaming output where supported.
 - Options: resolution, fps, bitrate (auto/custom), range (whole song or loop region), burn-in end card, include audio.
 - UI: a progress bar with ETA, cancel, and a frame-accurate preview thumbnail every 2 s.
 - Fallback: real-time `MediaRecorder`, clearly labelled.
