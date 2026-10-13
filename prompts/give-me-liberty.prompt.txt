@@ -1,0 +1,111 @@
+Create a 30.00-second kinetic-typography speech film titled "GIVE ME LIBERTY."
+Treat this as a single camera flight across one enormous typeset page. A voice is never heard, yet every word lands as if spoken. No word ever appears in empty space: each one fits into the gap the previous words left, as if the page were a printer's chase being locked up live. The camera hunts for that gap, finds it, and the word drops in. The last line, LIBERTY OR DEATH, completes the page and the camera pulls back to show that the whole speech was one justified block from the start.
+
+Deliver one self-contained HTML file, 1920×1080, targeting 60fps, using Canvas 2D (SVG allowed for glyph and pictogram paths). Embed all required assets, fonts included, as base64 or inline paths.
+
+ART DIRECTION
+Two worlds that swap mid-film:
+  NIGHT PAGE  — background #1B1A19 with a soft radial vignette to #070707 at the corners; type in bone #ECE6D8.
+  PARCHMENT PAGE — background #F3EEE3 with a faint laid-paper texture (fine horizontal lines, 4% opacity, procedural); type in ink #141210.
+Two accent colors, used only on the words named below and nowhere else:
+  Liberty red #C8102E. Colonial navy #1F2A5C.
+Three faces, mixed inside the same sentence the way a broadside printer would:
+  1. Heavy condensed italic sans for the load-bearing words (CRY, PEACE, CHAINS, FORBID, GOD, LIBERTY, DEATH).
+  2. Wide geometric sans in caps for the main body of every line.
+  3. Small caps in the same geometric sans, set at about 18% of body size, for connective words (may, but, is, or, so, as, to, be, at, the, of, and, it, not, what, for, me). These are often rotated 90° and tucked vertically into the leftover space at the start or end of a line.
+One period-accurate accent: CHAINS and SLAVERY set in a Caslon-style high-contrast serif, as though torn from a 1775 handbill.
+No eagles, no flags waving, no powdered wigs, no portraits, no quill-and-scroll clip art, no sepia filter. The founding-era mood comes from typography and from the pictograms below, never from illustration.
+
+ORIGINAL SPEECH — EXACT WORDS, EXACT ORDER
+Patrick Henry, Virginia Convention, March 23, 1775 (public domain, as recorded by William Wirt):
+"Gentlemen may cry, Peace, Peace — but there is no peace." / "Is life so dear, or peace so sweet, as to be purchased at the price of chains and slavery?" / "Forbid it, Almighty God!" / "I know not what course others may take; but as for me," / "give me liberty or give me death!"
+Final card, small caps, appears only in the hold: PATRICK HENRY · MARCH 23, 1775.
+No other words. It must read clearly with audio off.
+
+CENTRAL VISUAL RULE
+The page is a lock-up. Every line is set flush to the same measure, so each new word is scaled until it exactly fills whatever width is left on its line. Short connective words are rotated 90° to fill vertical gaps. When a line is full, the camera rotates and slides to begin the next line, sometimes turning 90° so that the finished lines become a vertical column at the edge of frame. Meaning lives in the scale: PEACE, CHAINS, GOD, and LIBERTY are huge; "may", "or", "as to be" are tiny.
+
+PICTOGRAM SUBSTITUTIONS
+Each one replaces a single letter inside a real word. Each one is a clean, flat, single-color silhouette in the word's own color. None of them is ever a standalone illustration.
+  PEACE (first)  — the A is a tall, thin olive sprig that reads as an A.
+  PEACE (third, "no peace") — the A is the same sprig, and a single struck rule cuts across the whole word.
+  PRICE          — the I is a stack of three coins seen edge-on.
+  CHAINS         — the two counters of the A and the I are linked chain loops; the whole word hangs from a top chain that swings once and settles.
+  GOD            — the O is a sunburst ring (24 fine rays) that rotates 15° and stops.
+  COURSE         — the O is a compass rose; its needle swings and settles pointing right, toward ME.
+  LIBERTY        — the I is a slim Liberty Bell in red, with the hairline crack visible on the bell.
+  DEATH          — the A is a plain tolling-bell outline, struck once.
+
+COLOR & POLARITY LOGIC
+"Gentlemen may cry, Peace, Peace — but there is no peace" plays on the NIGHT PAGE.
+"Is life so dear…chains and slavery?" plays on the PARCHMENT PAGE. The camera dives into the bowl of the final "O" of "no peace", and its counter becomes the new white world.
+"Forbid it, Almighty God!" inverts back to the NIGHT PAGE on a single frame-cut on the word FORBID. The cut is the only hard cut in the film.
+"I know not what course…as for me," stays on the NIGHT PAGE.
+"give me liberty or give me death!" plays on PARCHMENT, revealed as the camera dives through the open counter of the final "e" in "me". LIBERTY is in liberty red. DEATH is in colonial navy. Everything else is ink.
+Accent colors appear on no other words.
+
+EFFECTS STACK
+- Virtual 2D camera: position, rotation, and zoom, all keyframed on the speech timeline. The camera is never fully still while words are arriving. Moves use easeInOutCubic with a 6% overshoot on rotation stops.
+- Word entrances, chosen per word for meaning, not at random:
+    SLAM: scale from 140% to 100% in 5 frames, with a 2-frame 1.5% screen shake.
+    SLIDE: arrives from off-line along its own baseline, with directional motion blur from 3 layered offset copies at 30% opacity (never a gaussian filter).
+    DROP-IN: falls from above and lands with a 1-bounce settle.
+    FLIP: 3D Y-axis card flip using a perspective transform on the word plane.
+    TICK: small words snap in unanimated on their exact frame.
+- Echo trail: when CHAINS swings and when LIBERTY lands, show 3 ghost copies at 60/35/15% opacity trailing the motion and fading over 10 frames. This is the house signature for an important arrival.
+- Perspective tilt: the opening line sits on a plane tilted about 25° in X and -18° in Z, so the type recedes like letters stamped into a floor. The tilt resolves to flat by "but there is no peace."
+- Letter shatter: on "no peace", the struck PEACE breaks into its individual glyph paths. They fall off the bottom of the frame with slight rotation, following precomputed trajectories.
+- Counter dive: the camera zooms 30× into a letter's counter, and the counter's fill becomes the next scene's background. Used twice.
+
+SHOWSTOPPER
+On "give me liberty", the camera has been rotated 90° for the whole "I know not what course" passage. It now swings back to upright in one decisive 18-frame move. LIBERTY drops into the only remaining gap on the page, filling it edge to edge. The cracked Liberty Bell I rings: it rocks ±8° twice with echo ghosts. "or give me" ticks in vertically beside it, then DEATH slams into the last line, sized so the lock-up is perfectly justified. Hold 10 frames. The camera then pulls back in one 2.5-second continuous move from 3× to 0.55× while rotating -90° to 0°. Every line of the speech is revealed as a single rectangular block: night lines and parchment lines interlock like a printer's forme, and every edge is flush.
+
+STORYBOARD (all times are in seconds and frame-exact at 60fps)
+0.00–0.60 — Black. A faint vignette breathes in. Nothing else.
+0.60–1.40 — "Gentlemen" (wide sans) slides in on the tilted floor plane. "may" ticks in tiny and rotated beside it.
+1.40–2.30 — CRY slams in heavy italic, three times the body size. The camera jolts forward 4%.
+2.30–3.40 — "Peace, Peace —": two PEACE words with olive-sprig A's drop in side by side, both in bone. The second is 15% larger.
+3.40–4.80 — "but there is no": small words, ticking in on a new line as the plane flattens and the camera rotates -18° to 0°.
+4.80–5.60 — "peace." lands, is struck through with a single rule, and shatters downward.
+5.60–6.20 — Counter dive into the "o" of "no". Its counter floods to PARCHMENT.
+6.20–7.30 — "Is life so dear," with "Is" vertical, LIFE large, "so" tiny, DEAR medium. The camera pans right with the line.
+7.30–8.40 — "or peace so sweet," with PEACE upright and calm, and SWEET in a lighter weight.
+8.40–9.60 — "as to be purchased": a stacked trio of small words, then PURCHASED slides in from the right.
+9.60–10.40 — "at the price of": PRICE has the coin-stack I, with a soft clink-bounce on the coins.
+10.40–11.80 — CHAINS drops in Caslon serif, hangs from its top chain, swings, and leaves an echo trail.
+11.80–12.80 — "and slavery?": "and" is vertical, and SLAVERY is in the Caslon serif, sized to finish the line flush.
+12.80–13.00 — Hold, 12 frames, stillness.
+13.00 — HARD CUT on FORBID to the NIGHT PAGE.
+13.00–14.00 — FORBID fills 80% of the frame width. "it," ticks in vertically.
+14.00–15.80 — "Almighty" slides along the baseline, then GOD slams in. Its sunburst O rotates and stops. The camera drifts upward 3%.
+15.80–16.20 — Hold, 24 frames.
+16.20–17.40 — The camera rotates 90° clockwise. The finished lines become a vertical column at the left edge. "I know not what" sets on a new line.
+17.40–18.60 — "course": the compass-rose O swings and points right.
+18.60–19.80 — "others may take;"
+19.80–21.00 — "but as for me,": small words stack, then ME arrives large. The camera dives into the counter of the "e" in "me". The dive passes through the night and comes out on PARCHMENT.
+21.00–21.60 — "give me" ticks in at body size.
+21.60–23.00 — LIBERTY: SHOWSTOPPER part one, as described above.
+23.00–23.60 — "or give me": vertical small caps.
+23.60–24.60 — DEATH slams into the final gap and the lock-up completes.
+24.60–27.10 — SHOWSTOPPER part two: the pullback to the full justified block.
+27.10–28.40 — Hold on the complete block. PATRICK HENRY · MARCH 23, 1775 fades in beneath it in small caps at 70% opacity.
+28.40–30.00 — Loop return: the camera pushes back in toward the "G" of "Gentlemen". As it passes through the G's counter, the frame occludes to night and the tilted floor plane returns. render(30.00) must be pixel-identical to render(0.00).
+
+CHOREOGRAPHY
+The pacing averages about 2.2 words per second, like a measured orator. Weight goes on stressed syllables: CRY, PEACE, DEAR, SWEET, CHAINS, FORBID, GOD, LIBERTY, DEATH. Connective words land on the off-beats. Every large word has a 6–10 frame settle before the next word begins. Two silences are sacred: before FORBID and after GOD. Fill the frame, then let it breathe.
+
+TYPE IMPLEMENTATION
+Use actual glyph paths from the embedded fonts, measured with real metrics. Justification is computed rather than eyeballed: for each line, solve the scale of the final word so the line meets the measure to within 1px. Rotated small words are sized to the cap-height gap they occupy. Pictogram letters sit on the baseline, match the cap height, and keep the word's advance width, so kerning stays honest. Counters are preserved: the counter dives depend on them.
+
+ENGINEERING
+Use one master timeline of 1800 frames. Expose window.seek(t) for t in seconds: it must render that exact frame deterministically, with no accumulated state. Seed all layout, shatter trajectories, and echo offsets once at init, and keep them fixed forever. Use no CSS transitions, requestAnimationFrame-dependent physics, or live Math.random. Compute frame n as n/60. The page autoplays and loops. Audio is off. Expose window.duration = 30.
+
+QUALITY GATE
+Before returning, check these eight frames: 0.00, 4.90, 10.90, 13.00, 17.50, 22.20, 26.00, 30.00. Confirm that:
+- the speech order is exact
+- every line is flush to the measure
+- the hard cut lands exactly on frame 780
+- LIBERTY is the only red word and DEATH the only navy word
+- the pullback shows a single, gap-free justified block
+- render(0) equals render(30)
+Return the complete HTML implementation.
