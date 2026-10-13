@@ -24,7 +24,7 @@ const PARAMS: ParamSpec[] = [
 ];
 
 const EL: Record<ElementKind, number> = { none: 0, light: 1, fire: 2, water: 3, shock: 4, wind: 5, vortex: 6, quake: 7, ice: 8, smoke: 9 };
-const MAXW = 40;
+const MAXW = 255;   // tiles store word index+1 in a byte
 
 const PALETTES: Record<string, { bg0: number[]; bg1: number[]; paper: number[]; cold: number[]; slate: number[] }> = {
   soot: { bg0: [.043, .039, .035], bg1: [.09, .078, .066], paper: [.937, .902, .824], cold: [.749, .843, .902], slate: [.235, .275, .314] },
@@ -38,11 +38,15 @@ precision highp float;
 uniform sampler2D uA; uniform vec2 uAS;
 uniform sampler2D uT0, uT1; uniform vec2 uTN; uniform vec2 uRes;
 uniform vec4 uCam;                 // cx, cy, zoom, t
-uniform vec4 uR[${MAXW}];          // world rect of the SDF bitmap
-uniform vec4 uU[${MAXW}];          // atlas px rect
-uniform vec4 uS[${MAXW}];          // style(0 conn,1 support,2 hero), reveal, k (world per atlas px), cap
-uniform vec4 uE[${MAXW}];          // element, act, residue, baseline y
-uniform vec4 uX[${MAXW}];          // seed, time since onset, rise(dy), alpha
+// per-word data texture (RGBA32F, MAXW x 5): rows R, U, S, E, X
+//  R world rect of the SDF bitmap · U atlas px rect · S style(0 conn,1 support,2 hero), reveal, k, cap
+//  E element, act, residue, baseline y · X seed, time since onset, rise(dy), alpha
+uniform highp sampler2D uD;
+#define WR(i) texelFetch(uD, ivec2(i, 0), 0)
+#define WU(i) texelFetch(uD, ivec2(i, 1), 0)
+#define WS(i) texelFetch(uD, ivec2(i, 2), 0)
+#define WE(i) texelFetch(uD, ivec2(i, 3), 0)
+#define WX(i) texelFetch(uD, ivec2(i, 4), 0)
 uniform vec4 uAud;                 // bass, mid, high, loud
 uniform vec4 uAud2;                // beat pulse, flux, centroid, reactivity
 uniform vec4 uLight; uniform int uLightW;
@@ -58,11 +62,13 @@ out vec4 o;
 const float SPREAD = 22.0;
 ${GLSL_NOISE}
 float sdW(int i, vec2 p){
-  vec4 r = uR[i];
-  if (p.x < r.x || p.y < r.y || p.x > r.z || p.y > r.w) return SPREAD * uS[i].z;
+  vec4 r = WR(i); float k = WS(i).z;
+  vec2 dq = max(max(r.xy - p, p - r.zw), 0.);
+  if (dq.x > 0. || dq.y > 0.) return SPREAD * k + length(dq);   // outside the bitmap: a true lower bound
+  vec4 u = WU(i);
   vec2 f = (p - r.xy) / (r.zw - r.xy);
-  float v = texture(uA, mix(uU[i].xy, uU[i].zw, f) / uAS).r;
-  return (v - .5) * 2. * SPREAD * uS[i].z;
+  float v = texture(uA, mix(u.xy, u.zw, f) / uAS).r;
+  return (v - .5) * 2. * SPREAD * k;
 }
 vec3 ramp(float h){
   vec3 a=vec3(.227,.039,.016), b=vec3(.62,.165,.043), c=vec3(.91,.38,.10), d=vec3(1.,.757,.37), e=vec3(1.,.957,.84);
@@ -141,13 +147,13 @@ void main(){
     float fi = kk < 4 ? ta[kk] : tb[kk - 4];
     if (fi < .5) break;
     int i = int(fi + .5) - 1;
-    vec4 S = uS[i], E = uE[i], X = uX[i];
+    vec4 S = WS(i), E = WE(i), X = WX(i), Rr = WR(i);
     float rev = S.y; if (rev <= 0.) continue;
     int st = int(S.x + .5), el = int(E.x + .5);
     float cap = S.w, act = E.y, res = E.z * uPersist;
     vec2 q = pw + vec2(0., X.z);
     // a vortex word keeps a little twist
-    if (el == 6) { vec2 cc = vec2((uR[i].x + uR[i].z) * .5, E.w - cap * .5); vec2 d = q - cc; float r = length(d); q = cc + rot((act * .9 + res * .22) * smoothstep(cap * 3., 0., r)) * d; }
+    if (el == 6) { vec2 cc = vec2((Rr.x + Rr.z) * .5, E.w - cap * .5); vec2 d = q - cc; float r = length(d); q = cc + rot((act * .9 + res * .22) * smoothstep(cap * 3., 0., r)) * d; }
     float d = sdW(i, q);
     // wind smears the type downwind
     float streak = 0.;
@@ -160,7 +166,7 @@ void main(){
     d += uMisc.w;
     float cov = max(smoothstep(aa, -aa, d), streak);
     float yN = (E.w - q.y) / cap;
-    vec2 ln = (q - uR[i].xy) / cap;
+    vec2 ln = (q - Rr.xy) / cap;
     float alpha = rev * X.w;
     if (el == 0) {
       vec3 c = st == 0 ? uPaper : uPaper * .93;
@@ -186,7 +192,7 @@ void main(){
       if (fl < .05 && res < .05) col = mix(col, uPaper, cov * alpha);
     } else if (el == 3) {              // WATER → glass
       float fill = clamp(max(act * 1.15, res), 0., 1.);
-      float lvl = clamp(fill * 1.35 - clamp(ln.x / max(1., (uR[i].z - uR[i].x) / cap), 0., 1.) * .35, 0., 1.);
+      float lvl = clamp(fill * 1.35 - clamp(ln.x / max(1., (Rr.z - Rr.x) / cap), 0., 1.) * .35, 0., 1.);
       float filled = step(yN, lvl * 1.08 - .02);
       vec2 e = vec2(2., 0.);
       vec2 g = vec2(sdW(i, q + e.xy) - sdW(i, q - e.xy), sdW(i, q + e.yx) - sdW(i, q - e.yx));
@@ -273,6 +279,7 @@ class ElementsEffect implements Effect {
   private quakes: { t: number; x: number; y: number; R: number; seed: number }[] = [];
   private world = { w: 1, h: 1 };
   private tileBuf0 = new Uint8Array(0); private tileBuf1 = new Uint8Array(0);
+  private dataTex!: WebGLTexture; private dataBuf = new Float32Array(MAXW * 5 * 4);
 
   async prepare(ctx: EffectContext) {
     this.ctx = ctx; this.p = { ...defaults(PARAMS), ...ctx.params };
@@ -286,6 +293,7 @@ class ElementsEffect implements Effect {
       this.spVao = gl.createVertexArray()!; gl.bindVertexArray(this.spVao);
       const b = gl.createBuffer()!; gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(Array.from({ length: 400 }, (_, i) => i)), gl.STATIC_DRAW);
       gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 1, gl.FLOAT, false, 0, 0); gl.bindVertexArray(null);
+      this.dataTex = tex(gl, MAXW, 5, null, gl.RGBA32F, gl.RGBA, gl.FLOAT, gl.NEAREST);
     }
     this.cv.width = ctx.width; this.cv.height = ctx.height;
     this.layout();
@@ -373,7 +381,7 @@ class ElementsEffect implements Effect {
     const { song, settings, width: W, height: H } = this.ctx;
     const off = settings.syncOffsetMs / 1000;
     const keys: CamKey[] = [];
-    const HC = Number(this.p.heroSize), energy = Number(this.p.camEnergy);
+    const HC = Number(this.p.heroSize), energy = Number(this.p.camEnergy) * settings.cameraEnergy / 100;
     const frame = (x0: number, y0: number, x1: number, y1: number, fill = .78): CamKey => {
       const w = Math.max(1, x1 - x0), h = Math.max(1, y1 - y0);
       let z = Math.min(W * fill / w, H * .72 / h);
@@ -427,7 +435,8 @@ class ElementsEffect implements Effect {
     const gl = this.gl, { width: W, height: H, song } = this.ctx, a = song.analysis;
     const cam = camAt(this.keys, t);
     const pal = PALETTES[String(this.p.palette)] ?? PALETTES.soot;
-    const inten = Number(this.p.intensity), react = Number(this.p.reactivity);
+    const gs = this.ctx.settings;
+    const inten = Number(this.p.intensity) * gs.intensity / 100, react = Number(this.p.reactivity) * gs.reactivity / 100;
     const fade = clamp((t - (a.duration - 0.6)) / 0.55);
     // visible items
     const vx0 = cam.cx - W / 2 / cam.z, vx1 = cam.cx + W / 2 / cam.z, vy0 = cam.cy - H / 2 / cam.z, vy1 = cam.cy + H / 2 / cam.z;
@@ -436,7 +445,9 @@ class ElementsEffect implements Effect {
       if (it.wx0 > vx1 + 200 || it.wx0 + it.ww < vx0 - 200 || it.wy0 > vy1 + 200 || it.wy0 + it.wh < vy0 - 200) continue;
       vis.push(it); if (vis.length >= MAXW) break;
     }
-    const R = new Float32Array(MAXW * 4), U = new Float32Array(MAXW * 4), S = new Float32Array(MAXW * 4), E = new Float32Array(MAXW * 4), X = new Float32Array(MAXW * 4);
+    const D = this.dataBuf; D.fill(0);
+    const row = (r: number) => D.subarray(r * MAXW * 4, (r + 1) * MAXW * 4);
+    const R = row(0), U = row(1), S = row(2), E = row(3), X = row(4);
     const off = this.ctx.settings.syncOffsetMs / 1000, ant = this.ctx.settings.anticipationMs / 1000;
     let light: Item | null = null, lightAmt = 0, windAmt = 0, rainAmt = 0; const vorts: number[][] = []; const fires: Item[] = [];
     vis.forEach((it, i) => {
@@ -477,7 +488,7 @@ class ElementsEffect implements Effect {
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.tiles[1]); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, TX, TY, gl.RGBA, gl.UNSIGNED_BYTE, this.tileBuf1); gl.uniform1i(u.uT1, 2);
     gl.uniform2f(u.uTN, TX, TY); gl.uniform2f(u.uRes, W, H); gl.uniform2f(u.uAS, this.atlasW, this.atlasH);
     gl.uniform4f(u.uCam, cam.cx, cam.cy, cam.z, t);
-    gl.uniform4fv(u.uR, R); gl.uniform4fv(u.uU, U); gl.uniform4fv(u.uS, S); gl.uniform4fv(u.uE, E); gl.uniform4fv(u.uX, X);
+    gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.dataTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAXW, 5, gl.RGBA, gl.FLOAT, D); gl.uniform1i(u.uD, 3);
     // audio
     const beatIdx = lastIndexLE(a.beats, t), lastBeat = beatIdx >= 0 ? a.beats[beatIdx] : -9;
     const pulse = Math.exp(-(t - lastBeat) * 7);

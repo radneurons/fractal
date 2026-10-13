@@ -30,11 +30,13 @@ export function direct(ly: Lyrics, a: Analysis | null) {
     const order = raw.map((v, i) => ({ v, i })).sort((x, y) => y.v - x.v);
     order.forEach((o, r) => { ws[o.i].stress = ws.length > 1 ? 1 - r / (ws.length - 1) : 1; });
     const heroCount = ws.length > 8 ? 2 : 1;
+    // words that name an element are always heroes (up to 2 per line, strongest first)
+    const conceptHeroes = new Set(order.filter(o => ws[o.i].concept && !STOPWORDS.has(ws[o.i].text)).slice(0, 2).map(o => o.i));
     ws.forEach((w, i) => {
       if (w.roleLocked) return;
       const stop = STOPWORDS.has(w.text) || w.text.length <= 2;
       const rank = order.findIndex(o => o.i === i);
-      w.role = stop ? 'connective' : rank < heroCount && raw[i] > 0.35 ? 'hero' : 'support';
+      w.role = stop ? 'connective' : conceptHeroes.has(i) || (rank < heroCount && raw[i] > 0.35 && conceptHeroes.size < 2) ? 'hero' : 'support';
     });
     if (!ws.some(w => w.role === 'hero')) { const best = order.find(o => ws[o.i].role !== 'connective') ?? order[0]; if (best) ws[best.i].role = 'hero'; }
   }
@@ -46,6 +48,7 @@ export function assignElements(ly: Lyrics, a: Analysis | null) {
   let lastShock = -99, lastQuake = -99;
   const bar = a && a.bpm > 0 ? 240 / a.bpm : 2;
   for (const w of ly.words) {
+    if (w.elementLocked) continue;
     if (w.role !== 'hero') { w.element = 'none'; continue; }
     const c = conceptOf(w.text);
     let el: ElementKind = (c?.element as ElementKind) ?? 'none';

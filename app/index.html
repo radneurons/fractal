@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lyric Engine</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <header id="top">
+    <div class="brand"><span class="mark">LE</span> Lyric&nbsp;Engine</div>
+    <div class="actions">
+      <label class="btn" title="Load an audio file (mp3, wav, ogg, m4a, flac)">Audio<input id="inAudio" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac" hidden /></label>
+      <label class="btn" title="Load lyrics (.lrc, .srt, .vtt or .txt)">Lyrics<input id="inLyrics" type="file" accept=".lrc,.srt,.vtt,.txt,text/plain" hidden /></label>
+      <button class="btn" id="btnEditLyrics" title="Paste or edit lyrics">Edit lyrics</button>
+      <button class="btn" id="btnDemo" title="Load the built-in demo song">Demo</button>
+      <span class="sep"></span>
+      <button class="btn accent" id="btnExport" title="Export a video with audio">Export video</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section id="center">
+      <div id="stageWrap">
+        <canvas id="stage" width="960" height="540"></canvas>
+        <div id="drop" class="hidden"><div>Drop an audio file and/or a lyrics file</div></div>
+        <div id="empty">
+          <h1>Make the words move with the music.</h1>
+          <p>Load a song (or a speech) and its lyrics. Lyric Engine finds the beat, the sections and the drops, syncs every word, and stages it.</p>
+          <div class="emptyBtns"><button class="btn accent" id="btnDemo2">Try the demo song</button></div>
+          <p class="small">Lyrics: LRC (line or word timed), SRT, VTT, or plain text — plain text can be tap-synced.</p>
+        </div>
+        <div id="busy" class="hidden"><div class="spinner"></div><div id="busyText">Analysing…</div><div class="bar"><i id="busyBar"></i></div><button class="btn" id="busyCancel" hidden>Cancel</button></div>
+      </div>
+      <div id="transport">
+        <button class="btn icon" id="btnPlay" title="Play / pause (Space)">▶</button>
+        <button class="btn icon" id="btnBack" title="Back 5 s (←)">⟲</button>
+        <span id="clock">0:00.00 / 0:00.00</span>
+        <span id="beatLamp" title="Beat"></span>
+        <span id="songInfo"></span>
+        <span class="grow"></span>
+        <label class="mini">Preview <select id="selPreview"><option value="0.5">540p</option><option value="0.6667" selected>720p</option><option value="1">1080p</option></select></label>
+        <label class="mini"><input type="checkbox" id="chkMetro" /> Click track</label>
+      </div>
+      <div id="timelineWrap">
+        <canvas id="overview" height="44"></canvas>
+        <canvas id="timeline" height="150"></canvas>
+        <div id="tlHelp">Click to seek · drag a word to retime it (Shift: whole line) · double-click a word to cycle hero/support/connective · Alt-click to select</div>
+      </div>
+    </section>
+
+    <aside id="panel">
+      <div class="pgroup">
+        <h3>Effect</h3>
+        <div id="effectList"></div>
+        <label class="row"><span>Mode</span>
+          <select id="selMode"><option value="single">Single effect</option><option value="director">Director (switch on sections)</option></select></label>
+        <label class="row"><span>Transition</span>
+          <select id="selTransition"><option value="cut">Hard cut on downbeat</option><option value="flash">White flash</option><option value="wipe">Ink wipe</option><option value="dissolve">Dissolve</option></select></label>
+        <div id="directorPlan" class="hidden"></div>
+      </div>
+      <div class="pgroup" id="globalGroup">
+        <h3>Global</h3>
+        <div id="globalParams"></div>
+      </div>
+      <div class="pgroup" id="effectGroup">
+        <h3 id="effectTitle">Effect settings</h3>
+        <p id="effectDesc" class="small"></p>
+        <div id="effectParams"></div>
+        <button class="btn small" id="btnResetParams">Reset to defaults</button>
+      </div>
+      <div class="pgroup" id="wordGroup">
+        <h3>Selected word</h3>
+        <div id="wordInspector" class="small">Alt-click a word in the timeline.</div>
+      </div>
+      <div class="pgroup">
+        <h3>Analysis</h3>
+        <div id="analysisInfo" class="small">—</div>
+      </div>
+    </aside>
+  </main>
+
+  <dialog id="dlgLyrics">
+    <form method="dialog" class="dlg">
+      <h2>Lyrics</h2>
+      <p class="small">Paste LRC (<code>[mm:ss.xx]</code> lines, optional <code>&lt;mm:ss.xx&gt;</code> word tags), SRT/VTT, or plain text (one line per lyric line). Plain text is auto-placed over the vocal sections; use <b>Tap sync</b> for exact timing.</p>
+      <textarea id="txtLyrics" spellcheck="false"></textarea>
+      <div class="dlgBtns">
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn" id="btnTap" value="tap" title="Play the song and tap Space on every word">Tap sync…</button>
+        <button class="btn" id="btnDownloadLrc" value="lrc" title="Download the current timing as enhanced LRC">Download LRC</button>
+        <button class="btn accent" value="apply">Apply</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgTap">
+    <div class="dlg">
+      <h2>Tap sync</h2>
+      <p class="small"><b>Space</b> = next word starts now · <b>Enter</b> = jump to next line · <b>Backspace</b> = undo · <b>Esc</b> = finish</p>
+      <div id="tapLine"></div>
+      <div id="tapNext"></div>
+      <div class="dlgBtns"><button class="btn" id="tapStart">Start from 0:00</button><button class="btn accent" id="tapDone">Done</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="dlgExport">
+    <form method="dialog" class="dlg">
+      <h2>Export video</h2>
+      <div class="grid2">
+        <label>Resolution <select id="exRes"><option value="720">720p</option><option value="1080" selected>1080p</option></select></label>
+        <label>Frame rate <select id="exFps"><option>24</option><option selected>30</option><option>60</option></select></label>
+        <label>Range <select id="exRange"><option value="full">Whole song</option><option value="sel">From playhead (seconds below)</option></select></label>
+        <label>Length (s) <input id="exLen" type="number" value="25" min="1" max="900" step="1" /></label>
+        <label>Quality <select id="exQ"><option value="6">Standard</option><option value="12" selected>High</option><option value="20">Very high</option></select></label>
+        <label>Format <select id="exFmt"><option value="mp4">MP4 (H.264 / AAC)</option><option value="webm">WebM (VP9 / Opus)</option></select></label>
+      </div>
+      <p id="exNote" class="small"></p>
+      <div class="dlgBtns"><button class="btn" value="cancel">Cancel</button><button class="btn accent" value="go">Render</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="hidden"></div>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

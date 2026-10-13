@@ -76,8 +76,10 @@ export function buildLyrics(raw: RawLine[], analysis: Analysis | null, source: L
     const tot = syl.reduce((a, b) => a + b, 0); let acc = 0;
     raw.forEach((l, i) => { l.start = a0 + (a1 - a0) * acc / tot; acc += syl[i]; l.end = a0 + (a1 - a0) * acc / tot; });
   }
-  raw.forEach((l, li) => {
+  raw.forEach((l) => {
     const toks = l.text.split(/\s+/).filter(Boolean);
+    if (!toks.length) return;
+    const li = lines.length;
     const lineStart = l.start!, lineEnd = Math.min(l.end ?? lineStart + 4, lineStart + Math.max(1.2, toks.length * 0.9));
     const ids: number[] = [];
     if (l.words && l.words.length === toks.length) {
@@ -120,6 +122,15 @@ export function parseAny(txt: string, analysis: Analysis | null): Lyrics {
   if (f === 'lrc') { const r = parseLRC(txt); return buildLyrics(r.lines, analysis, r.wordLevel ? 'enhanced-lrc' : 'lrc'); }
   if (f === 'srt' || f === 'vtt') return buildLyrics(parseSRT(txt), analysis, f);
   return buildLyrics(parsePlain(txt), analysis, 'plain');
+}
+
+/** Recompute line spans and ordering after manual word edits. */
+export function refreshLines(ly: Lyrics) {
+  for (const L of ly.lines) {
+    const ws = L.words.map(id => ly.words[id]);
+    for (let i = 0; i < ws.length; i++) { const nx = ws[i + 1]; if (nx && ws[i].end > nx.start) ws[i].end = Math.max(ws[i].start + 0.06, nx.start - 0.01); if (ws[i].end < ws[i].start + 0.06) ws[i].end = ws[i].start + 0.06; }
+    if (ws.length) { L.start = ws[0].start; L.end = ws[ws.length - 1].end; }
+  }
 }
 
 export function exportLRC(ly: Lyrics): string {

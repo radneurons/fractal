@@ -59,6 +59,7 @@ export interface Word {
   roleLocked?: boolean;  // user override
   concept?: string;
   element?: ElementKind;
+  elementLocked?: boolean; // user override
 }
 
 export interface Line {
@@ -84,7 +85,7 @@ export interface Song {
   lyrics: Lyrics;
 }
 
-export type ParamType = 'range' | 'toggle' | 'select' | 'color';
+export type ParamType = 'range' | 'toggle' | 'select' | 'color' | 'text';
 
 export interface ParamSpec {
   key: string;
@@ -106,9 +107,9 @@ export interface GlobalSettings {
   syncOffsetMs: number;
   anticipationMs: number;
   minReadMs: number;
-  intensity: number;     // 0..100
-  cameraEnergy: number;  // 0..100
-  reactivity: number;    // 0..100
+  intensity: number;     // master %, 100 = as designed
+  cameraEnergy: number;  // master %
+  reactivity: number;    // master %
   caseMode: 'as-is' | 'upper' | 'lower';
   seed: number;
   endCard: boolean;
@@ -118,6 +119,6 @@ export interface GlobalSettings {
 
 export const DEFAULT_SETTINGS: GlobalSettings = {
   aspect: '16:9', syncOffsetMs: 0, anticipationMs: 90, minReadMs: 600,
-  intensity: 70, cameraEnergy: 60, reactivity: 60, caseMode: 'upper', seed: 1776,
+  intensity: 100, cameraEnergy: 100, reactivity: 100, caseMode: 'upper', seed: 1776,
   endCard: true, title: '', artist: ''
 };
