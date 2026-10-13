@@ -94,7 +94,8 @@ export function buildLyrics(raw: RawLine[], analysis: Analysis | null, source: L
   if (analysis) snapToOnsets(words, analysis);
   // section membership and chorus repeats
   lines.forEach(L => {
-    if (analysis) L.section = Math.max(0, analysis.sections.findIndex(s => L.start >= s.start - 0.05 && L.start < s.end));
+    // pickups land just before the downbeat: judge membership a little into the line
+    if (analysis) { const tm = L.start + Math.min(0.3, (L.end - L.start) / 2); L.section = Math.max(0, analysis.sections.findIndex(s => tm >= s.start && tm < s.end)); }
     const key = normalize(L.text.replace(/\s+/g, ''));
     const prev = lines.find(o => o.idx < L.idx && normalize(o.text.replace(/\s+/g, '')) === key);
     if (prev) L.repeatOf = prev.repeatOf ?? prev.idx;

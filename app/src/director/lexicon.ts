@@ -34,6 +34,8 @@ export const CONCEPTS: Concept[] = [
   { id: 'eye', words: ['eye', 'eyes', 'see', 'look', 'watch', 'vision'], icon: 'eye', shape: 'ring' },
   { id: 'music', words: ['song', 'sing', 'music', 'melody', 'voice', 'sound'], icon: 'note', shape: 'stem' },
   { id: 'key', words: ['key', 'lock', 'open', 'chain', 'chains', 'cage'], icon: 'key', shape: 'stem' },
+  { id: 'people', words: ['people', 'crowd', 'everybody', 'everyone', 'together', 'friends', 'family', 'nation', 'children', 'brother', 'brothers', 'sister', 'sisters', 'stranger', 'strangers'], icon: 'people', shape: 'stem' },
+  { id: 'star', words: ['stars', 'starlight', 'galaxy', 'heaven', 'heavens', 'cosmos', 'universe'], element: 'light', icon: 'star', shape: 'ring' },
   { id: 'flower', words: ['flower', 'rose', 'bloom', 'grow', 'seed', 'tree', 'leaf', 'spring'], color: '#D7889B', icon: 'flower', shape: 'ring' }
 ];
 
