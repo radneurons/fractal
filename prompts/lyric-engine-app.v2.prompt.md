@@ -106,17 +106,22 @@ Outputs at 60 fps: percentile-normalise (5th→0, 95th→1) and smooth with atta
 
 **Beats.** Dynamic-programming beat tracker (Ellis 2007): local score = onset envelope, transition penalty `−α·log²(Δ/period)`, backtrack.
 
-**Downbeats.** Pick the phase (mod meter = 4) whose beats have the strongest bass + flux.
+**Downbeats.** Pick the phase (mod meter = 4) that maximises the per-beat score `bass/mean + 0.5·flux/mean + 1.2·harmonicChange/mean`, where harmonic change = 1 − cosine between consecutive beat-synchronous chroma vectors. Chords change on bar lines, and without this cue drumless or backbeat-heavy music lands one beat off.
+
+**Speech detection.**
+- Pulse clarity = mean flux on the beat grid ÷ mean flux. It is about 10–13 for music with a beat and about 3.5 for speech.
+- Silence ratio = share of frames ≥ 30 dB below the 95th-percentile level. It is ≤ 0.03 for music and about 0.34 for speech.
+- If silence > 0.15 **and** (pulse < 6 or confidence < 0.7), cap the tempo confidence at 0.05. That sends section-finding into speech mode, splitting at pauses.
 
 **Sections.** Beat-synchronous vectors (12 chroma + 12 MFCC, each block L2-normalised).
-- Foote novelty with a Gaussian checkerboard kernel (K = clamp(nBeats/12, 4, 16) beats).
+- Foote novelty with a Gaussian checkerboard kernel (K = clamp(nBeats/16, 4, 8) beats, i.e. at most 2 bars, so 4-bar bridges resolve).
 - Peaks ≥ 32 beats apart (16 for short tracks), snapped to the nearest downbeat within 2.5 s.
 - Cluster segments: cosine similarity > 0.975 **and** energy difference < 0.12. Merge adjacent segments in the same cluster.
 - Labels:
   - The most energetic repeated cluster → **chorus**.
   - Energy < 0.6 × mean (not first or last) → **breakdown**.
   - A quiet first section → **intro**; a quiet last section → **outro**.
-  - A one-off section late in the song → **bridge**.
+  - A one-off section in the second half → **bridge**.
   - If too few beats or low confidence: speech mode, splitting at pauses ≥ 1.2 s.
 
 **Drops.** Bar-to-bar rise with bass > 0.28 **and** loudness > 0.18, preceded by a build (rising highs over the previous bars) or a breakdown; drops at least 8 s apart.
@@ -701,6 +706,9 @@ Synthesise a 73 s, 120 BPM WAV:
     - blank-line handling; syllable counts; concept matching;
     - director roles and elements (concept words are heroes, stopwords connective, a hero in every line);
     - `refreshLines`; LRC round-trip.
+  - `test-robustness.ts` synthesises two more recordings in memory:
+    - A 92 BPM ballad (8-bar drumless piano intro, soft verse, full chorus, 4-bar half-time bridge, chorus, pad outro). Expect: tempo ±3 %, beats < 30 ms, verse and chorus boundaries within a bar, the first chorus labelled chorus, ≤ 1 drop.
+    - Formant-synthesised speech in phrases with pauses. Expect: speech mode, and > 80 % of word starts found as onsets within 60 ms.
 - **Playwright e2e** (`scripts/e2e.mjs`):
   - Serve `vite preview`, load the demo through `window.LE.loadDemo()`.
   - For each effect: `setEffect`, wait for `whenReady()`, then `renderAt(t)` at chosen times and save stills.
