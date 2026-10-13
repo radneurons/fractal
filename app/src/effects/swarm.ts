@@ -171,8 +171,10 @@ class SwarmEffect implements Effect {
       if (f.line >= 0) pts = this.sampleText(rc, RW, RH, f.words, aspect, settings.caseMode, R);
       const nText = f.line >= 0 && pts.length ? Math.round(N * (1 - dustFrac)) : 0;
       const targets = new Float32Array(N * 4);
+      // even coverage: draw ink samples without replacement (partial Fisher–Yates); recycle only if the ink runs out
+      for (let k = 0; k < Math.min(nText, pts.length); k++) { const j = k + Math.floor(R() * (pts.length - k)); const tmp = pts[k]; pts[k] = pts[j]; pts[j] = tmp; }
       for (let k = 0; k < N; k++) {
-        if (k < nText) { const q = pts[Math.floor(R() * pts.length)]; targets.set([q.x + (R() - .5) * 2 / RW * aspect, q.y + (R() - .5) * 2 / RW * aspect, q.w, q.role], k * 4); }
+        if (k < nText) { const q = pts[k % Math.max(1, pts.length)]; targets.set([q.x + (R() - .5) * 2 / RW * aspect, q.y + (R() - .5) * 2 / RW * aspect, q.w, q.role], k * 4); }
         else if (f.line >= 0) { // dust: a soft band around the frame edge
           const a = R() * Math.PI * 2, r = .82 + R() * .5; targets.set([Math.cos(a) * r * aspect, Math.sin(a) * r, -1, -1], k * 4);
         } else { // cloud: a slowly spinning galaxy disc
@@ -230,7 +232,6 @@ class SwarmEffect implements Effect {
     const img = c.getImageData(0, 0, RW, RH).data; const pts: { x: number; y: number; w: number; role: number }[] = [];
     for (let py = 0; py < RH; py += 1) for (let px = 0; px < RW; px += 1) {
       if (img[(py * RW + px) * 4 + 3] < 200) continue;
-      if (R() > .6) continue;
       const b = boxes.find(q => px >= q.x0 - 2 && px <= q.x1 + 2 && py >= q.y0 && py <= q.y1) ?? boxes[0];
       pts.push({ x: (px / RW * 2 - 1) * aspect, y: py / RH * 2 - 1, w: b.i, role: roleOf(words[b.i]) });
     }
