@@ -14,6 +14,8 @@ export interface Effect {
   readonly name: string;
   readonly description: string;
   readonly params: ParamSpec[];
+  /** true if the effect draws its own title card (the stage then skips its generic one) */
+  readonly ownsTitle?: boolean;
   prepare(ctx: EffectContext): Promise<void>;
   /** live parameter updates (no re-prepare) */
   setParams(p: Params): void;

@@ -118,6 +118,7 @@ export class Stage {
   /** Title card at the head (when there is room before the first word). */
   private overlays(t: number) {
     const s = this.settings, song = this.song!; if (!s.endCard || !(s.title || s.artist)) return;
+    const seg = this.plan[this.segmentAt(t)]; if (seg && this.instances.get(seg.effect)?.fx.ownsTitle) return;
     const first = song.lyrics.words[0]?.start ?? 4;
     const end = Math.min(4, first - 0.25); if (end < 1.2 || t > end) return;
     const a = clamp(Math.min(t / 0.5, (end - t) / 0.4));

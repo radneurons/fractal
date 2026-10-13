@@ -9,7 +9,7 @@ const browser = await pw.chromium.launch({ executablePath: '/opt/pw-browsers/chr
 const page = await browser.newPage();
 page.on('pageerror', e => console.log('pageerror', e.message));
 page.on('console', m => { if (m.type() === 'error') console.log('console.error', m.text()); });
-await page.goto('http://localhost:4173/'); await page.waitForFunction(() => window.LE);
+await page.goto(process.env.LE_URL ?? 'http://localhost:4173/'); await page.waitForFunction(() => window.LE);
 await page.evaluate(a => { window.LE.state.settings.aspect = a; }, aspect);
 await page.evaluate(() => window.LE.loadDemo());
 await page.evaluate(() => window.LE.setPlan([

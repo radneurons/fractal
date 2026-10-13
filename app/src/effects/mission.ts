@@ -44,6 +44,7 @@ interface Key { t: number; cx: number; cy: number; zoom: number }
 class MissionEffect implements Effect {
   readonly id = 'mission'; readonly name = 'Mission Poster'; readonly description = 'The song is built as an engineering poster: blueprint panels, brass guides, a vertical tower word, a lunar disc, and a vehicle that rides the rails and launches on drops.';
   readonly params = PARAMS;
+  readonly ownsTitle = true;
   private p: Params = defaults(PARAMS);
   private ctx!: EffectContext;
   private mc = document.createElement('canvas').getContext('2d')!;
@@ -387,6 +388,26 @@ class MissionEffect implements Effect {
     c.font = fontCSS('mono', 46); c.fillStyle = P.brass; c.fillText('LYRIC EXCERPT', x, y + 290); c.restore();
   }
 
+  /** Before the first word: the title block and a countdown to the first word, where the first row will be. */
+  private drawCountdown(c: CanvasRenderingContext2D, t: number) {
+    const first = Math.min(...this.nodes.map(n => n.t)); if (!(first > 1.5) || t > first + .3) return;
+    const P = this.pal(), s = this.ctx.settings, z = this.zones[0], r = z.rows[0]; if (!r) return;
+    const a = clamp(Math.min(t / .6, (first + .3 - t) / .5));
+    const x = r.x0, y = r.y - r.cap * .15, cap = r.cap * .9;
+    c.save(); c.globalAlpha = a;
+    c.fillStyle = P.brass; c.font = fontCSS('mono', cap * .28);
+    const left = Math.max(0, first - t), mm = Math.floor(left / 60), ss = left - mm * 60;
+    c.fillText(`T−${String(mm).padStart(2, '0')}:${ss.toFixed(2).padStart(5, '0')}`, x, y - cap * 1.2);
+    c.fillStyle = P.paper; c.font = fontCSS('semi', cap / capRatio('semi'));
+    const title = (s.title || 'Mission').toUpperCase(); c.fillText(title, x, y);
+    const tw = c.measureText(title).width;
+    c.font = fontCSS('barlow5', cap * .32 / capRatio('barlow5')); c.fillText((s.artist || '').toUpperCase(), x, y + cap * .55);
+    // a brass rule that fills as the countdown runs
+    c.strokeStyle = P.brass; c.lineWidth = 3; c.globalAlpha = a * .7;
+    c.beginPath(); c.moveTo(x, y + cap * .2); c.lineTo(x + tw * clamp(t / first), y + cap * .2); c.stroke();
+    c.restore();
+  }
+
   /** Where is the vehicle at time t (world coords) and is it thrusting? */
   private vehicle(t: number) {
     const zs = this.zones; if (!zs.length) return null;
@@ -442,6 +463,7 @@ class MissionEffect implements Effect {
     for (const z of this.zones) if (vis(z)) { this.drawGuides(out, z, t); this.drawAnno(out, z, t); }
     for (const n of this.nodes) { if (!vis(n.zone)) continue; this.drawWord(out, n, t); }
     this.drawTitle(out, t);
+    this.drawCountdown(out, t);
     this.drawVehicle(out, t);
     out.restore();
     const fade = clamp((t - (song.analysis.duration - .6)) / .55);
