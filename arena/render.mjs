@@ -32,7 +32,7 @@ if (mode === 'video') {
     await page.evaluate(n => window.renderFrame(n), n);
     const buf = await page.screenshot({ type: 'jpeg', quality: 94, clip });
     if (!ff.stdin.write(buf)) await new Promise(r => ff.stdin.once('drain', r));
-    if (n % 300 === 0) console.log('frame', n);
+    if (n % 50 === 0) console.log('frame', n, new Date().toISOString());
   }
   ff.stdin.end(); await new Promise(r => ff.on('close', r)); console.log('wrote', out);
 } else if (mode === 'stills') {
