@@ -56,7 +56,15 @@ const timeline = new Timeline($<HTMLCanvasElement>('overview'), $<HTMLCanvasElem
   playing: () => player.playing,
   wordsEdited: () => { if (state.lyrics) { refreshLines(state.lyrics); rebuildSong(false); } },
   roleEdited: () => { if (state.lyrics && state.analysis) { direct(state.lyrics, state.analysis); rebuildSong(false); } },
-  select: w => showWord(w)
+  select: w => showWord(w),
+  planEdited: (plan, cycle) => {
+    const next = plan.map(p => ({ ...p }));
+    if (cycle !== undefined) { const ids = EFFECTS.map(f => f.id); next[cycle].effect = ids[(ids.indexOf(next[cycle].effect) + 1) % ids.length]; }
+    // merge neighbours that now share an effect
+    const merged: PlanSeg[] = []; for (const p of next) { const l = merged[merged.length - 1]; if (l && l.effect === p.effect) l.end = p.end; else merged.push(p); }
+    customPlan = merged; state.mode = 'director'; ($('selMode') as HTMLSelectElement).value = 'director'; replan(); schedulePrepare(0); state.dirty = true;
+    toast('Director plan edited on the timeline (choosing a mode resets it).');
+  }
 });
 
 // ───────────────────────── busy / toast ─────────────────────────
@@ -229,7 +237,7 @@ function buildDirectorPlan() {
   }
 }
 ($('selMode') as HTMLSelectElement).value = state.mode;
-$('selMode').onchange = () => { state.mode = ($('selMode') as HTMLSelectElement).value as 'single' | 'director'; if (state.mode === 'director') autoDirector(); persist(); buildDirectorPlan(); replan(); schedulePrepare(0); };
+$('selMode').onchange = () => { customPlan = null; state.mode = ($('selMode') as HTMLSelectElement).value as 'single' | 'director'; if (state.mode === 'director') autoDirector(); persist(); buildDirectorPlan(); replan(); schedulePrepare(0); };
 ($('selTransition') as HTMLSelectElement).value = state.transition;
 $('selTransition').onchange = () => { state.transition = ($('selTransition') as HTMLSelectElement).value as Transition; stage.transition = state.transition; persist(); state.dirty = true; };
 

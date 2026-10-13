@@ -11,6 +11,7 @@ export interface TimelineHooks {
   wordsEdited(ids: number[]): void;   // timing changed
   roleEdited(w: Word): void;          // role cycled
   select(w: Word | null): void;
+  planEdited?(plan: { start: number; end: number; effect: string }[], cycleIndex?: number): void;
 }
 
 export class Timeline {
@@ -26,7 +27,29 @@ export class Timeline {
 
   constructor(private ov: HTMLCanvasElement, private tl: HTMLCanvasElement, private hooks: TimelineHooks) {
     const seekOv = (e: MouseEvent) => { if (!this.song) return; const r = ov.getBoundingClientRect(); this.hooks.seek((e.clientX - r.left) / r.width * this.song.analysis.duration); };
-    ov.addEventListener('mousedown', e => { seekOv(e); const mv = (ev: MouseEvent) => seekOv(ev); const up = () => { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); }; addEventListener('mousemove', mv); addEventListener('mouseup', up); });
+    ov.addEventListener('dblclick', e => {
+      if (!this.song || this.plan.length < 2 || e.offsetY < 44 - 16) return;
+      const t = e.offsetX / ov.clientWidth * this.song.analysis.duration; const i = this.plan.findIndex(p => t >= p.start && t < p.end);
+      if (i >= 0) this.hooks.planEdited?.(this.plan, i);
+    });
+    ov.addEventListener('mousedown', e => {
+      // drag a Director-plan boundary (bottom strip), snapped to downbeats
+      if (this.song && this.plan.length > 1 && e.offsetY >= 44 - 16) {
+        const D = this.song.analysis.duration, W = ov.clientWidth;
+        const bi = this.plan.findIndex((p, k) => k > 0 && Math.abs(p.start / D * W - e.offsetX) < 6);
+        if (bi > 0) {
+          const r = ov.getBoundingClientRect(), db = this.song.analysis.downbeats;
+          const mv = (ev: MouseEvent) => {
+            let t = (ev.clientX - r.left) / W * D;
+            if (db.length) t = db.reduce((b, d) => Math.abs(d - t) < Math.abs(b - t) ? d : b, db[0]);
+            t = Math.max(this.plan[bi - 1].start + 1, Math.min(this.plan[bi].end - 1, t));
+            this.plan[bi - 1].end = t; this.plan[bi].start = t;
+          };
+          const up = () => { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); this.hooks.planEdited?.(this.plan); };
+          addEventListener('mousemove', mv); addEventListener('mouseup', up); return;
+        }
+      }
+      seekOv(e); const mv = (ev: MouseEvent) => seekOv(ev); const up = () => { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); }; addEventListener('mousemove', mv); addEventListener('mouseup', up); });
     tl.addEventListener('mousedown', e => this.down(e));
     tl.addEventListener('dblclick', e => this.dbl(e));
     tl.addEventListener('wheel', e => { e.preventDefault(); const tm = this.xToT(e.offsetX); this.view = Math.max(2, Math.min(60, this.view * Math.exp(e.deltaY * 0.0015))); this.v0 = tm - (e.offsetX / tl.clientWidth) * this.view; }, { passive: false });
