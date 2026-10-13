@@ -1,4 +1,4 @@
-// Run with: node --experimental-strip-types scripts/test-analysis.ts
+// Run with: npm test (bundled by scripts/test.mjs)
 import { readFileSync } from 'node:fs';
 import { analyze } from '../src/analysis/dsp.ts';
 

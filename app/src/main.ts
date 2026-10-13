@@ -129,8 +129,10 @@ async function loadFile(f: File) {
 }
 
 // ───────────────────────── plan + prepare ─────────────────────────
+let customPlan: PlanSeg[] | null = null;
 function replan() {
   if (!state.song) return;
+  if (customPlan) { stage.plan = customPlan; stage.transition = state.transition; return; }
   const dur = state.song.analysis.duration;
   const plan: PlanSeg[] = state.mode === 'director' ? directorPlan(state.song, state.byLabel, state.effect) : [{ start: 0, end: dur, effect: state.effect }];
   stage.plan = plan; stage.transition = state.transition;
@@ -373,6 +375,8 @@ const LE = {
   setEffect,
   setParam(k: string, v: number | boolean | string) { state.params[state.effect][k] = v; const live = effectById(state.effect)!.params.find(p => p.key === k)?.live; if (live) stage.setLiveParams(state.effect, { [k]: v }); else { stage.params = state.params; schedulePrepare(0); } },
   setSetting(k: string, v: number | boolean | string) { (state.settings as unknown as Params)[k] = v; schedulePrepare(0); },
+  /** Custom plan (e.g. a showcase reel): segments of {start, end, effect}. */
+  setPlan(plan: PlanSeg[], transition?: Transition) { state.mode = 'director'; if (transition) { state.transition = transition; } stage.transition = state.transition; stage.plan = plan; customPlan = plan; schedulePrepare(0); },
   setMode(m: 'single' | 'director') { state.mode = m; if (m === 'director') autoDirector(); replan(); schedulePrepare(0); },
   async whenReady() { for (let i = 0; i < 600 && (!LE.ready || preparing); i++) await new Promise(r => setTimeout(r, 100)); return LE.ready; },
   renderAt(t: number) { stage.render(t); },
