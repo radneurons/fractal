@@ -186,7 +186,7 @@ class PopupEffect implements Effect {
         return { w, tex, h, wd: h * aspect, hero, color };
       });
       // fit the row across the spread
-      const gap = .04, tot = specs.reduce((s, q) => s + q.wd, 0) + gap * (specs.length - 1), k = Math.min(1, 1.86 / tot);
+      const gap = .04, tot = specs.reduce((s, q) => s + q.wd, 0) + gap * (specs.length - 1), k = Math.min(1, (this.ctx.width < this.ctx.height ? 1.1 : 1.86) / tot);
       let x = -tot * k / 2;
       specs.forEach(q => {
         const w = q.wd * k, h = q.h * k;
@@ -209,9 +209,14 @@ class PopupEffect implements Effect {
     let low = Number(this.p.camera); const chorusMix = this.chorusT.reduce((m, [s, e]) => Math.max(m, clamp((t - s + 1) / 1.2) * clamp((e - t + .5) / 1.2)), 0);
     low = lerp(low * .55, Math.min(1, low * .55 + .5), chorusMix);
     const camE = settings.cameraEnergy / 100;
-    const pitch = lerp(.98, .36, low), dist = lerp(2.05, 1.6, low) * (1 - .03 * Math.sin(t * .2) * camE);
+    const pitch = lerp(.98, .36, low), dist = lerp(2.05, 1.6, low) * (W < H ? .92 : 1) * (1 - .03 * Math.sin(t * .2) * camE);
     const yaw = .12 * Math.sin(t * .13) * camE;
-    const tgt = [0, .16 + .08 * low, .02];
+    // aim at the row that is currently standing (eased between rows)
+    let cur: Card | null = null, prev: Card | null = null;
+    let rowStart = 0;
+    for (const c of this.cards) { if (c.word && c.up <= t + .3) { if (!cur || Math.abs(cur.z - c.z) > .05) { prev = cur; rowStart = c.up; } cur = c; } }
+    const zc = cur ? (prev ? lerp(prev.z, cur.z, eIO(clamp((t - rowStart + .6) / .9))) : cur.z) : 0;
+    const tgt = [0, .16 + .08 * low, zc - .12];
     const eye = [tgt[0] + Math.sin(yaw) * Math.cos(pitch) * dist, tgt[1] + Math.sin(pitch) * dist, tgt[2] + Math.cos(yaw) * Math.cos(pitch) * dist];
     const asp = W / H, fov = asp >= 1 ? .62 : 1.0;
     const VP = m4.mul(m4.persp(fov, asp, .05, 30), m4.look(eye, tgt, [0, 1, 0]));

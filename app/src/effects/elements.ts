@@ -305,7 +305,7 @@ class ElementsEffect implements Effect {
   private layout() {
     const { song, settings } = this.ctx;
     const ly = song.lyrics, a = song.analysis;
-    const HC = Number(this.p.heroSize), conn = Number(this.p.connScale), RW = Number(this.p.rowWidth);
+    const HC = Number(this.p.heroSize), conn = Number(this.p.connScale), RW = Number(this.p.rowWidth) * Math.min(1, Math.max(.5, this.ctx.width / this.ctx.height));
     const useLex = Boolean(this.p.useLexicon);
     const items: Item[] = [];
     const sizes = { hero: HC, support: HC * .5, connective: HC * conn };

@@ -145,7 +145,7 @@ class PressEffect implements Effect {
     const { width: W, height: H, song, settings } = this.ctx; const a = song.analysis, ly = song.lyrics;
     const off = settings.syncOffsetMs / 1000, ant = settings.anticipationMs / 1000;
     c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-over'; c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
-    const colW = Math.min(W * .7, H * 1.15), x0 = (W - colW) / 2;
+    const colW = W > H ? Math.min(W * .7, H * 1.15) : W * .84, x0 = (W - colW) / 2;
     const wgt = this.weight(t), widthK = this.p.widthFromCentroid ? .9 + .28 * sample(a.centroid, t) : 1;
     // rows: wrap each lyric line into rows by natural width
     type Tok = { w: Word; s: string; f: FontKey; cap: number; nat: number };
@@ -165,7 +165,7 @@ class PressEffect implements Effect {
     };
     const dcW = (lc: number) => { c.font = fontCSS('serif', lc * 2.6 / capRatio('serif')); return c.measureText(firstLetter).width + lc * .25; };
     const fw = pg.lines[0] ? ly.words[pg.lines[0].words[0]] : null; const firstLetter = fw ? this.txt(fw.display)[0] : 'A';
-    let lineCap = Math.min(H * .075, W * .045), rows = build(lineCap);
+    let lineCap = Math.min(H * .075, W > H ? W * .045 : W * .085), rows = build(lineCap);
     for (let it = 0; it < 12 && rows.length * lineCap * 1.55 > H * .74; it++) { lineCap *= .9; rows = build(lineCap); }
     const lh = lineCap * 1.55, top = Math.max(H * .15, (H - rows.length * lh) / 2 + lineCap * 1.1);
     // running head
