@@ -13,7 +13,6 @@ Run: `cd app && npm install && npm run dev` (or `npm run build && npx vite previ
   - **BROADSIDE** — the “HE HAS” kinetic-type lock-up, generalised.
   - **ELEMENTS** — the Douglass film’s fire / light / water / thunder / wind / vortex / quake / ice / smoke, GPU shader.
   - **MISSION POSTER** — the Moon film’s engineering poster.
-
   - **SWARM** — conserved particle crowd (Hilbert-paired formations, closed-form motion, drop explosions).
   - **LIQUID CHROME** — ferrofluid metal type (SDF melt, bass spikes, kick droplets, studio reflections, iridescence).
   - **DROSTE** — infinite recursion locked to the bar (freeze in breakdowns, reverse on drops, style swap on bridges).
