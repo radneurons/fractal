@@ -86,3 +86,13 @@ export function packAtlas(items: SDFGlyphs[], maxH: number): { data: Uint8Array;
   for (const s of items) for (let r = 0; r < s.h; r++) data.set(s.data.subarray(r * s.w, (r + 1) * s.w), (s.ay + r) * W + s.ax);
   return { data, w: W, h: Math.max(1, H) };
 }
+
+/** SDF of an arbitrary alpha mask (e.g. a whole rendered line). 128 = edge, < 128 inside. */
+export function sdfFromAlpha(alpha: Uint8ClampedArray | Uint8Array, w: number, h: number, spread: number, stride = 4, offset = 3): Uint8Array {
+  const N = w * h, a = new Float64Array(N), b = new Float64Array(N);
+  for (let i = 0; i < N; i++) { const on = alpha[i * stride + offset] > 127; a[i] = on ? 0 : 1e20; b[i] = on ? 1e20 : 0; }
+  edt2(a, w, h); edt2(b, w, h);
+  const out = new Uint8Array(N);
+  for (let i = 0; i < N; i++) { const sd = Math.sqrt(a[i]) - Math.sqrt(b[i]); out[i] = Math.round(Math.min(1, Math.max(0, 0.5 + sd / (2 * spread))) * 255); }
+  return out;
+}
