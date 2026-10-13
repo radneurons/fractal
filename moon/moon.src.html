@@ -1,0 +1,1239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Because They Are Hard</title>
+<style>
+  html,body{margin:0;background:#06090d;color:#c9c2b2;font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+  #stage{position:relative;width:min(100vw,calc((100vh - 58px) * 16 / 9));aspect-ratio:16/9;margin:0 auto;background:#000}
+  #c{display:block;width:100%;height:100%}
+  #bar{display:flex;gap:12px;align-items:center;max-width:1100px;margin:0 auto;padding:12px 16px}
+  #bar button{background:#1a2430;color:#e8e2d4;border:1px solid #2c3a48;border-radius:6px;padding:6px 12px;font:inherit;cursor:pointer}
+  #bar input[type=range]{flex:1}
+  #tc{font-variant-numeric:tabular-nums;min-width:64px;text-align:right}
+  #debug{max-width:1240px;margin:0 auto 32px;padding:0 16px}
+  #debug canvas{width:100%;height:auto;display:block;margin:8px 0;border:1px solid #223}
+  #debug table{border-collapse:collapse;font:12px ui-monospace,monospace}
+  #debug td,#debug th{padding:2px 8px;border-bottom:1px solid #1c2530;text-align:left}
+  body.capture{background:#000}
+  body.capture #bar,body.capture #debug{display:none}
+  body.capture #stage{width:1920px;height:1080px;margin:0}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c" width="1920" height="1080"></canvas></div>
+<div id="bar">
+  <button id="pp" type="button">Pause</button>
+  <input id="scrub" type="range" min="0" max="1799" step="1" value="0" aria-label="Timeline">
+  <span id="tc">0.00 s</span>
+  <button id="dbgBtn" type="button">Debug</button>
+</div>
+<div id="debug" hidden></div>
+<script>/*OPENTYPE*/</script>
+<script>const FONT_DATA = /*FONTDATA*/;</script>
+<script>
+(() => {
+'use strict';
+const SW = 1920, SH = 1080, FPS = 60, DUR = 30, NF = 1800, FR = 1 / FPS;
+const COL = { ink: '#101923', paper: '#F0EBDD', blue: '#23485E', orange: '#D96B35', brass: '#C3A36A', black: '#000000' };
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// ───────────────────────── math ─────────────────────────
+const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, p) => a + (b - a) * p;
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const eIO = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const eOut = p => 1 - Math.pow(1 - p, 3);
+const eOut5 = p => 1 - Math.pow(1 - p, 5);
+const eIn = p => p * p * p;
+const eQ = p => p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+const eBack = (p, s = 1.4) => 1 + (s + 1) * Math.pow(p - 1, 3) + s * Math.pow(p - 1, 2);
+const DEG = Math.PI / 180;
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+// ───────────────────────── fonts & glyphs ─────────────────────────
+const FK = { P: 'barlowsemicond-800', S: 'barlow-700', K: 'barlow-500', M: 'plexmono-500' };
+const fonts = {};
+function b64buf(b64) { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
+function loadFonts() {
+  for (const k in FK) {
+    const f = opentype.parse(b64buf(FONT_DATA[FK[k]]));
+    f.capU = f.charToGlyph('H').getBoundingBox().y2;
+    fonts[k] = f;
+  }
+}
+const GC = new Map();
+function glyphEntry(fk, g) {
+  const key = fk + ':' + g.index;
+  let e = GC.get(key);
+  if (!e) {
+    const p = g.getPath(0, 0, fonts[fk].unitsPerEm);
+    e = { path: new Path2D(p.toPathData(3)), cmds: p.commands, bb: p.getBoundingBox() };
+    GC.set(key, e);
+  }
+  return e;
+}
+// contours of a glyph as separate Path2Ds with bounding boxes (font units, y down)
+function contours(cmds) {
+  const out = []; let cur = null;
+  for (const c of cmds) {
+    if (c.type === 'M') { cur = { d: '', pts: [] }; out.push(cur); }
+    if (!cur) continue;
+    switch (c.type) {
+      case 'M': cur.d += `M${c.x} ${c.y}`; break;
+      case 'L': cur.d += `L${c.x} ${c.y}`; break;
+      case 'C': cur.d += `C${c.x1} ${c.y1} ${c.x2} ${c.y2} ${c.x} ${c.y}`; break;
+      case 'Q': cur.d += `Q${c.x1} ${c.y1} ${c.x} ${c.y}`; break;
+      case 'Z': cur.d += 'Z'; break;
+    }
+    if (c.x !== undefined) cur.pts.push([c.x, c.y]);
+  }
+  return out.map(o => {
+    const xs = o.pts.map(p => p[0]), ys = o.pts.map(p => p[1]);
+    return { path: new Path2D(o.d), x1: Math.min(...xs), x2: Math.max(...xs), y1: Math.min(...ys), y2: Math.max(...ys) };
+  });
+}
+// kerning-aware shaping: per-glyph pen positions in font units
+function shape(fk, text) {
+  const f = fonts[fk];
+  const gs = f.stringToGlyphs(text);
+  const out = []; let x = 0;
+  for (let i = 0; i < gs.length; i++) {
+    out.push({ g: gs[i], x, ch: text[i] || '' });
+    x += gs[i].advanceWidth;
+    if (i < gs.length - 1) x += f.getKerningValue(gs[i], gs[i + 1]);
+  }
+  return { glyphs: out, adv: x };
+}
+const capScale = (fk, cap) => cap / fonts[fk].capU;
+const wordWidth = (fk, cap, text) => shape(fk, text).adv * capScale(fk, cap);
+const spaceW = (fk, cap) => fonts[fk].charToGlyph(' ').advanceWidth * capScale(fk, cap);
+
+// ───────────────────────── world constants ─────────────────────────
+const WORLD = { w: 6560, h: 3690 };
+const RAIL = 3230;            // transfer-guide top line; WIN baseline
+const HV = 360;               // vehicle height == WIN cap height
+const AXIS = {};              // filled from MOON's second O
+const N = {};                 // text nodes by id
+const ORDER = [];             // spoken order
+const STATIC = [];            // non-spoken text (annotations, attribution)
+
+// spoken words: [id, text, font, cap, motion, landing t, readable end, emphasis]
+const SPEECH = [
+  ['we1', 'WE', 'S', 120, 'conn', 0.62, 3.80, 2],
+  ['choose', 'CHOOSE', 'P', 360, 'register', 1.25, 3.80, 3],
+  ['to1', 'TO', 'K', 70, 'conn', 1.78, 3.80, 1],
+  ['go', 'GO', 'S', 150, 'impulse', 2.00, 3.80, 2],
+  ['to2', 'TO', 'K', 70, 'conn', 2.16, 3.80, 1],
+  ['the1', 'THE', 'K', 70, 'conn', 2.28, 3.80, 1],
+  ['moon', 'MOON', 'P', 640, 'compass', 2.95, 5.05, 3],
+  ['in', 'IN', 'K', 80, 'conn', 3.95, 6.30, 1],
+  ['this', 'THIS', 'K', 80, 'conn', 4.08, 6.30, 1],
+  ['decade', 'DECADE', 'K', 80, 'conn', 4.30, 6.30, 1],
+  ['and1', 'AND', 'K', 80, 'conn', 5.18, 6.30, 1],
+  ['do', 'DO', 'K', 80, 'conn', 5.32, 6.30, 1],
+  ['the2', 'THE', 'K', 80, 'conn', 5.50, 6.30, 1],
+  ['other', 'OTHER', 'K', 80, 'conn', 5.68, 6.30, 1],
+  ['things', 'THINGS,', 'K', 80, 'conn', 5.90, 6.30, 1],
+  ['not', 'NOT', 'S', 150, 'hero', 6.50, 9.40, 2],
+  ['because1', 'BECAUSE', 'K', 60, 'conn', 6.64, 9.40, 1],
+  ['they1', 'THEY', 'K', 60, 'conn', 6.76, 9.40, 1],
+  ['are1', 'ARE', 'K', 60, 'conn', 6.86, 9.40, 1],
+  ['easy', 'EASY,', 'P', 270, 'glide', 7.40, 9.40, 3],
+  ['but', 'BUT', 'K', 60, 'conn', 7.96, 9.40, 1],
+  ['because2', 'BECAUSE', 'K', 60, 'conn', 8.08, 9.40, 1],
+  ['they2', 'THEY', 'K', 60, 'conn', 8.18, 9.40, 1],
+  ['are2', 'ARE', 'K', 60, 'conn', 8.28, 9.40, 1],
+  ['hard', 'HARD,', 'P', 270, 'impact', 8.70, 10.75, 3],
+  ['because3', 'BECAUSE', 'K', 60, 'conn', 9.52, 10.75, 1],
+  ['that1', 'THAT', 'K', 60, 'conn', 9.62, 10.75, 1],
+  ['goal', 'GOAL', 'S', 220, 'hero', 9.86, 10.75, 2],
+  ['will', 'WILL', 'K', 60, 'conn', 10.00, 10.75, 1],
+  ['serve', 'SERVE', 'K', 60, 'conn', 10.10, 10.75, 1],
+  ['to3', 'TO', 'K', 60, 'conn', 10.86, 12.20, 1],
+  ['organize', 'ORGANIZE', 'S', 150, 'assemble', 11.25, 12.20, 2],
+  ['and2', 'AND', 'K', 55, 'conn', 12.30, 13.45, 1],
+  ['measure', 'MEASURE', 'S', 140, 'rule', 12.62, 13.45, 2],
+  ['the3', 'THE', 'K', 50, 'conn', 13.56, 14.90, 1],
+  ['best', 'BEST', 'S', 150, 'hero', 13.78, 14.90, 2],
+  ['of', 'OF', 'K', 50, 'conn', 13.88, 14.90, 1],
+  ['our', 'OUR', 'K', 50, 'conn', 13.96, 14.90, 1],
+  ['energies', 'ENERGIES', 'S', 110, 'rise', 14.30, 14.90, 2],
+  ['and3', 'AND', 'K', 50, 'conn', 15.00, 15.80, 1],
+  ['skills', 'SKILLS,', 'S', 110, 'snap', 15.32, 15.80, 2],
+  ['because4', 'BECAUSE', 'K', 55, 'conn', 15.92, 17.35, 1],
+  ['that2', 'THAT', 'K', 55, 'conn', 16.02, 17.35, 1],
+  ['challenge', 'CHALLENGE', 'P', 230, 'tower', 16.70, 17.35, 3],
+  ['is', 'IS', 'K', 55, 'conn', 17.45, 18.75, 1],
+  ['one1', 'ONE', 'K', 55, 'conn', 17.55, 18.75, 1],
+  ['that3', 'THAT', 'K', 55, 'conn', 17.65, 18.75, 1],
+  ['we2', 'WE', 'S', 80, 'conn', 17.82, 18.75, 2],
+  ['are3', 'ARE', 'K', 55, 'conn', 17.95, 18.75, 1],
+  ['willing', 'WILLING', 'S', 110, 'hero', 19.00, 20.25, 2],
+  ['to4', 'TO', 'K', 50, 'conn', 19.12, 20.25, 1],
+  ['accept', 'ACCEPT,', 'S', 140, 'settle', 19.55, 20.25, 2],
+  ['one2', 'ONE', 'K', 50, 'conn', 20.36, 22.60, 1],
+  ['we3', 'WE', 'K', 50, 'conn', 20.46, 22.60, 1],
+  ['are4', 'ARE', 'K', 50, 'conn', 20.56, 22.60, 1],
+  ['unwilling', 'UNWILLING', 'S', 120, 'hero', 20.92, 22.60, 2],
+  ['to5', 'TO', 'K', 42, 'conn', 21.44, 22.60, 1],
+  ['postpone', 'POSTPONE,', 'P', 110, 'stop', 21.78, 22.60, 3],
+  ['and4', 'AND', 'K', 48, 'conn', 22.70, 24.10, 1],
+  ['one3', 'ONE', 'K', 48, 'conn', 22.80, 24.10, 1],
+  ['which', 'WHICH', 'K', 48, 'conn', 22.92, 24.10, 1],
+  ['we4', 'WE', 'K', 48, 'conn', 23.02, 24.10, 1],
+  ['intend', 'INTEND', 'S', 120, 'hero', 23.38, 24.10, 2],
+  ['to6', 'TO', 'K', 50, 'conn', 24.20, 25.25, 1],
+  ['win', 'WIN,', 'P', HV, 'flank', 24.55, 30.0, 3],
+  ['and5', 'AND', 'K', 64, 'conn', 25.36, 26.60, 1],
+  ['the4', 'THE', 'K', 64, 'conn', 25.46, 26.60, 1],
+  ['others', 'OTHERS,', 'K', 64, 'conn', 25.62, 26.60, 1],
+  ['too', 'TOO.', 'K', 64, 'conn', 25.86, 26.60, 1]
+];
+const ENTER = { conn: 7, register: 26, impulse: 14, compass: 26, glide: 28, impact: 16, hero: 22, assemble: 22, rule: 22, rise: 14, snap: 12, tower: 34, settle: 16, stop: 18, flank: 16 };
+
+function mkNode(id, text, fk, cap, x, y, extra = {}) {
+  const sh = shape(fk, text), s = capScale(fk, cap);
+  const n = { id, text, fk, cap, x, y, s, rot: 0, glyphs: sh.glyphs, w: sh.adv * s, ...extra };
+  N[id] = n;
+  return n;
+}
+// lay a run of spoken words left→right on one baseline, kerning inside words, spaces between
+function run(ids, x, y, gapMul = 1) {
+  let cx = x;
+  for (const id of ids) {
+    const rec = SPEECH.find(r => r[0] === id);
+    const n = mkNode(id, rec[1], rec[2], rec[3], cx, y);
+    cx += n.w + spaceW(rec[2], rec[3]) * gapMul;
+  }
+  return cx;
+}
+const R = id => N[id].x + N[id].w;          // right edge
+const top = id => N[id].y - N[id].cap;
+
+// ───────────────────────── layout (completed arrangement first) ─────────────────────────
+function layout() {
+  // A · opening
+  mkNode('we1', 'WE', 'S', 120, 330, 560);
+  mkNode('choose', 'CHOOSE', 'P', 360, R('we1') + 58, 560);
+  const sx = R('choose') + 52;
+  mkNode('to1', 'TO', 'K', 70, sx, 330);
+  mkNode('go', 'GO', 'S', 150, sx, 490);
+  run(['to2', 'the1'], sx, 560);
+  const moonW = wordWidth('P', 640, 'MOON');
+  mkNode('moon', 'MOON', 'P', 640, 3330 - moonW, 1320);
+  // second O counter → lunar disc (actual outline)
+  const m = N.moon, o2 = m.glyphs[2];
+  const ent = glyphEntry('P', o2.g);
+  const cs = contours(ent.cmds).sort((a, b) => (a.x2 - a.x1) * (a.y2 - a.y1) - (b.x2 - b.x1) * (b.y2 - b.y1));
+  const counter = cs[0];
+  const gapU = 24;
+  const disc = {
+    cu: { x: (counter.x1 + counter.x2) / 2, y: (counter.y1 + counter.y2) / 2, r: (counter.x2 - counter.x1) / 2 - gapU },
+    counterPath: counter.path
+  };
+  disc.x = m.x + (o2.x + disc.cu.x) * m.s; disc.y = m.y + disc.cu.y * m.s; disc.r = disc.cu.r * m.s;
+  disc.counterBottom = m.y + counter.y2 * m.s;
+  m.disc = disc;
+  AXIS.x = disc.x;
+  run(['in', 'this', 'decade'], m.x, 1460);
+  mkNode('and1', 'AND', 'K', 80, m.x, 1640); mkNode('do', 'DO', 'K', 80, R('and1') + spaceW('K', 80), 1640);
+  run(['the2', 'other'], m.x, 1740);
+  mkNode('things', 'THINGS,', 'K', 80, m.x, 1840);
+
+  // B · resistance (right of the axis)
+  const bx = AXIS.x + 150;
+  mkNode('not', 'NOT', 'S', 150, bx, 1700);
+  const st = R('not') + 30;
+  mkNode('because1', 'BECAUSE', 'K', 60, st, 1630);
+  run(['they1', 'are1'], st, 1700);
+  mkNode('easy', 'EASY,', 'P', 270, bx, 2030);
+  run(['but', 'because2', 'they2', 'are2'], bx, 2125);
+  mkNode('hard', 'HARD,', 'P', 270, bx, 2460);
+  // GOAL block (left of the axis)
+  const gx = m.x + 40;
+  run(['because3', 'that1'], gx, 2080);
+  mkNode('goal', 'GOAL', 'S', 220, gx, 2330);
+  mkNode('will', 'WILL', 'K', 60, R('goal') + 34, 2260);
+  mkNode('serve', 'SERVE', 'K', 60, R('goal') + 34, 2330);
+
+  // C · construction panel (hinged at HARD's baseline)
+  PANEL.y0 = N.hard.y; PANEL.x0 = m.x - 120; PANEL.x1 = AXIS.x + 1300; PANEL.y1 = 3530;
+  VEH.home = { x: AXIS.x, y: RAIL };
+  mkNode('to3', 'TO', 'K', 60, PANEL.x0 + 110, 2700);
+  mkNode('organize', 'ORGANIZE', 'S', 150, R('to3') + 26, 2700);
+  mkNode('the3', 'THE', 'K', 50, PANEL.x0 + 150, 2940);
+  mkNode('best', 'BEST', 'S', 150, R('the3') + 22, 2940);
+  mkNode('of', 'OF', 'K', 50, R('best') + 20, 2880);
+  mkNode('our', 'OUR', 'K', 50, R('best') + 20, 2940);
+  const ew = wordWidth('S', 110, 'ENERGIES');
+  mkNode('energies', 'ENERGIES', 'S', 110, AXIS.x - ew / 2, 3400);
+  mkNode('and2', 'AND', 'K', 55, AXIS.x + 200, 2760);
+  mkNode('measure', 'MEASURE', 'S', 140, R('and2') + 22, 2760);
+  mkNode('and3', 'AND', 'K', 50, R('energies') + 90, 3400);
+  mkNode('skills', 'SKILLS,', 'S', 110, R('and3') + 20, 3400);
+
+  // D · commitment (right of the panel)
+  const gateR = PANEL.x1 + 230;       // CHALLENGE baseline x (rotated -90°, reads bottom→top)
+  GATE.xr = gateR; GATE.xl = gateR - 230; GATE.y = 2780;
+  const ch = mkNode('challenge', 'CHALLENGE', 'P', 230, gateR, GATE.y, { rot: -Math.PI / 2 });
+  GATE.top = GATE.y - ch.w;
+  mkNode('because4', 'BECAUSE', 'K', 55, GATE.xr + 26, 2706);
+  mkNode('that2', 'THAT', 'K', 55, GATE.xr + 26, 2774);
+  CRADLE.x = gateR + 280;
+  run(['is', 'one1', 'that3', 'we2', 'are3'], GATE.xl - 20, 3340, .9);
+  const rx = CRADLE.x - 150;
+  mkNode('willing', 'WILLING', 'S', 110, rx, 2260);
+  mkNode('to4', 'TO', 'K', 50, R('willing') + 24, 2260);
+  mkNode('accept', 'ACCEPT,', 'S', 140, rx, 2440);
+  mkNode('one2', 'ONE', 'K', 50, rx, 2550);
+  mkNode('we3', 'WE', 'K', 50, R('one2') + spaceW('K', 50), 2550);
+  mkNode('are4', 'ARE', 'K', 50, rx, 2610);
+  mkNode('unwilling', 'UNWILLING', 'S', 120, Math.max(R('we3'), R('are4')) + 26, 2610);
+  HOLD.x = CRADLE.x + 190;
+  mkNode('to5', 'TO', 'K', 42, HOLD.x + 26 + 42, 2770, { rot: -Math.PI / 2 });
+  mkNode('postpone', 'POSTPONE,', 'P', 110, HOLD.x + 26 + 42 + 18, 2770);
+  // WIN on the rail
+  const wx = R('postpone') - 360;
+  mkNode('to6', 'TO', 'K', 50, wx - 22 - wordWidth('K', 50, 'TO'), RAIL - 6);
+  const win = mkNode('win', 'WIN,', 'P', HV, wx, RAIL);
+  const ig = win.glyphs[1], ib = ig.g.getBoundingBox();
+  ISLOT.x = win.x + (ig.x + (ib.x1 + ib.x2) / 2) * win.s;
+  ISLOT.w = (ib.x2 - ib.x1) * win.s;
+  // INTEND to the right of the corridor
+  const ix = ISLOT.x + 205;
+  run(['and4', 'one3'], ix, 2470);
+  run(['which', 'we4'], ix, 2540);
+  mkNode('intend', 'INTEND', 'S', 120, ix, 2720);
+  INT_X = ix;
+  run(['and5', 'the4', 'others', 'too'], wx, 3420);
+
+  // attribution (not spoken)
+  STATIC.push(mkStatic('JOHN F. KENNEDY', 'S', 100, 4560, 330));
+  STATIC.push(mkStatic('RICE UNIVERSITY · 12 SEPTEMBER 1962', 'K', 60, 4560, 450));
+  STATIC.push(mkStatic('SPEECH EXCERPT', 'M', 46, 4560, 545, COL.brass));
+  // construction annotations (monospace, sparse, not data)
+  ANNO.push(mkStatic('ASSEMBLY AXIS', 'M', 30, AXIS.x + 18, PANEL.y0 + 70, COL.paper, .55));
+  ANNO.push(mkStatic('HOLD', 'M', 30, HOLD.x + 24, RAIL - 150, COL.orange, .9));
+  ANNO.push(mkStatic('TRANSFER GUIDE', 'M', 28, CRADLE.x + 260, RAIL + 56, COL.paper, .5));
+
+  // timing records from the spoken table
+  SPEECH.forEach((r, i) => {
+    const n = N[r[0]];
+    n.idx = i + 1; n.motion = r[4]; n.t = r[5]; n.end = r[6]; n.emph = r[7];
+    n.start = n.t - (ENTER[r[4]] || 8) * FR;
+    ORDER.push(n);
+  });
+}
+const ANNO = [];
+let INT_X = 0;
+function mkStatic(text, fk, cap, x, y, color = COL.paper, alpha = 1) {
+  const sh = shape(fk, text), s = capScale(fk, cap);
+  return { text, fk, cap, x, y, s, rot: 0, glyphs: sh.glyphs, w: sh.adv * s, color, alpha };
+}
+
+// ───────────────────────── persistent objects ─────────────────────────
+const PANEL = {};
+const GATE = {};
+const CRADLE = {};
+const HOLD = {};
+const ISLOT = {};
+const VEH = {};
+
+// Vehicle: five permanent components in vehicle-local units (origin = nozzle exit centre, −y = up)
+const BW = 84;
+const COMPONENTS = [
+  { id: 'nozzle',  y0: 0,    y1: -46 },
+  { id: 'lower',   y0: -46,  y1: -172 },
+  { id: 'upper',   y0: -172, y1: -266 },
+  { id: 'capsule', y0: -266, y1: -HV },
+  { id: 'fins',    y0: -40,  y1: -150 }
+];
+COMPONENTS.forEach(c => { c.cy = (c.y0 + c.y1) / 2; });
+const CMP = Object.fromEntries(COMPONENTS.map(c => [c.id, c]));
+function drawComponent(c, id, ink) {
+  const hb = BW / 2;
+  c.fillStyle = COL.paper; c.strokeStyle = ink; c.lineWidth = 2.2; c.lineJoin = 'round';
+  if (id === 'nozzle') {
+    c.beginPath(); c.moveTo(-22, -46); c.lineTo(22, -46); c.quadraticCurveTo(26, -18, 38, 0); c.lineTo(-38, 0); c.quadraticCurveTo(-26, -18, -22, -46); c.closePath(); c.fill();
+    c.globalAlpha *= .55; c.beginPath(); c.moveTo(-28, -16); c.lineTo(28, -16); c.stroke();
+  } else if (id === 'lower') {
+    c.fillRect(-hb, -172, BW, 126);
+    c.globalAlpha *= .5;
+    c.beginPath(); c.moveTo(-hb, -150); c.lineTo(hb, -150); c.moveTo(-hb, -66); c.lineTo(hb, -66); c.stroke();
+    for (let k = 0; k < 4; k++) { c.beginPath(); c.arc(-hb + 12 + k * 20, -158, 2, 0, 7); c.fillStyle = ink; c.fill(); }
+  } else if (id === 'upper') {
+    c.fillRect(-hb, -266, BW, 94);
+    c.globalAlpha *= .5;
+    c.beginPath(); c.moveTo(-hb, -244); c.lineTo(hb, -244); c.moveTo(-hb, -190); c.lineTo(hb, -190); c.stroke();
+    c.beginPath(); c.arc(0, -218, 12, 0, 7); c.stroke();
+  } else if (id === 'capsule') {
+    c.beginPath(); c.moveTo(-hb, -266); c.lineTo(hb, -266); c.lineTo(13, -346); c.quadraticCurveTo(0, -HV - 2, -13, -346); c.closePath(); c.fill();
+    c.globalAlpha *= .5; c.beginPath(); c.moveTo(-hb + 12, -290); c.lineTo(hb - 12, -290); c.stroke();
+  } else if (id === 'fins') {
+    for (const sgn of [-1, 1]) {
+      c.beginPath(); c.moveTo(sgn * hb, -150); c.lineTo(sgn * (hb + 40), -78); c.lineTo(sgn * (hb + 40), -36); c.lineTo(sgn * hb, -58); c.closePath(); c.fill();
+    }
+  }
+}
+// component start slots (world) and authored travel
+function setupComponents() {
+  const hx = VEH.home.x;
+  const slots = {
+    capsule: { x: hx + 640, y: RAIL - 150, r: 0 },
+    upper:   { x: hx + 1000, y: RAIL - 100, r: Math.PI / 2 },
+    lower:   { x: hx - 700, y: RAIL - 100, r: -Math.PI / 2 },
+    nozzle:  { x: N.organize.x + N.organize.w * .72, y: N.organize.y + 42, r: Math.PI },
+    fins:    { x: hx - 420, y: RAIL - 59, r: 0 }
+  };
+  const order = ['nozzle', 'lower', 'upper', 'capsule', 'fins'];
+  order.forEach((id, k) => {
+    const c = CMP[id];
+    c.initial = slots[id];
+    c.assembled = { x: 0, y: 0, r: 0 };      // vehicle-local
+    c.inspected = { x: 0, y: 0, r: 0 };
+    c.t0 = 10.98 + k * .11; c.t1 = c.t0 + .52;
+    c.lift = id === 'nozzle' ? 120 : 260;
+  });
+}
+const SEAM = t => 5 * (1 - eOut(prog(t, 15.16, 15.34)));   // seams close at SKILLS
+function seamOffset(id, t) {
+  const g = SEAM(t);
+  return { nozzle: 2 * g, lower: g, upper: 0, capsule: -g, fins: g }[id];
+}
+
+// vehicle pose (base point, rotation, scale) as a pure function of time
+let ROUTE = null;
+function vehiclePose(t) {
+  const h = VEH.home;
+  if (t < 17.40) return { x: h.x, y: RAIL, r: 0, s: 1 };
+  if (t < 22.90) {
+    const p = eIO(prog(t, 17.40, 18.62));
+    return { x: lerp(h.x, CRADLE.x, p), y: RAIL, r: 0, s: 1 };
+  }
+  if (t < 24.75) {
+    const p = eIO(prog(t, 22.90, 23.92));
+    return { x: lerp(CRADLE.x, ISLOT.x, p), y: RAIL, r: 0, s: 1 };
+  }
+  if (t < 24.95) {
+    const p = eOut(prog(t, 24.75, 24.95));
+    return { x: ISLOT.x, y: RAIL - 30 * p, r: 0, s: 1 };
+  }
+  const g = routeProgress(t);
+  const q = routeAt(g * ROUTE.len);
+  const sc = g < ROUTE.vFrac ? 1 : lerp(1, VEH.sEnd, eIO((g - ROUTE.vFrac) / (1 - ROUTE.vFrac)));
+  return { x: q.x, y: q.y, r: Math.atan2(q.ty, q.tx) + Math.PI / 2, s: sc };
+}
+function routeProgress(t) {
+  const tau = prog(t, 24.95, 28.05), a = .53, v = ROUTE.vFrac;
+  if (tau < a) return v * (tau / a) * (tau / a);
+  const u = (tau - a) / (1 - a), m0 = (2 * v / a) * (1 - a) / (1 - v);
+  const H = (u * u * u - 2 * u * u + u) * m0 + (-2 * u * u * u + 3 * u * u);
+  return v + (1 - v) * H;
+}
+// world transform of a component's centre at time t (one function for every phase)
+function compWorld(id, t) {
+  const c = CMP[id];
+  if (t < c.t1) {
+    const p = eIO(prog(t, c.t0, c.t1));
+    const a = c.initial, bx = VEH.home.x, by = VEH.home.y + c.cy + seamOffset(id, t);
+    const mx = (a.x + bx) / 2, my = Math.min(a.y, by) - c.lift;
+    const x = (1 - p) * (1 - p) * a.x + 2 * (1 - p) * p * mx + p * p * bx;
+    const y = (1 - p) * (1 - p) * a.y + 2 * (1 - p) * p * my + p * p * by;
+    return { x, y, r: lerp(a.r, 0, p), s: 1, nest: lerp(34, 0, p) };
+  }
+  const v = vehiclePose(t);
+  const ly = c.cy + seamOffset(id, t);
+  return { x: v.x - ly * Math.sin(v.r) * v.s, y: v.y + ly * Math.cos(v.r) * v.s, r: v.r, s: v.s, nest: 0 };
+}
+function drawVehicle(c, t, alpha = 1) {
+  if (t < 10.62) return;
+  c.save(); c.globalAlpha *= alpha * eOut(prog(t, 10.62, 10.8));
+  for (const id of ['fins', 'nozzle', 'lower', 'upper', 'capsule']) {
+    const w = compWorld(id, t), cy = CMP[id].cy;
+    c.save();
+    c.translate(w.x, w.y); c.rotate(w.r); c.scale(w.s, w.s); c.translate(0, -cy);
+    if (id === 'fins' && w.nest > 0) {
+      // the stabiliser pair starts nested in two adjacent notches and opens as one group
+      c.save(); c.translate(w.nest, 0); c.beginPath(); c.rect(-400, -400, 400, 500); c.clip(); drawComponent(c, 'fins', COL.ink); c.restore();
+      c.save(); c.translate(-w.nest, 0); c.beginPath(); c.rect(0, -400, 400, 500); c.clip(); drawComponent(c, 'fins', COL.ink); c.restore();
+    } else drawComponent(c, id, COL.ink);
+    c.restore();
+  }
+  c.restore();
+}
+function vehicleBounds(t) {   // world-space bounds of assembled vehicle (upright phases)
+  const v = vehiclePose(t);
+  return { x0: v.x - BW / 2 - 40, x1: v.x + BW / 2 + 40, top: v.y - HV - 2 + seamOffset('capsule', t), bottom: v.y + seamOffset('nozzle', t) };
+}
+
+// ───────────────────────── route (one explicit curve, arc-length parameterised) ─────────────────────────
+function buildRoute() {
+  const d = N.moon.disc;
+  VEH.sEnd = 54 / HV;
+  const P0 = [ISLOT.x, RAIL - 30];
+  const Q1 = [ISLOT.x, 1500];
+  const Q2 = [3600, 610];
+  const E = [d.x, d.y - d.r - 5 - HV * VEH.sEnd];
+  const segs = [
+    [P0, [P0[0], P0[1] - 500], [Q1[0], Q1[1] + 500], Q1],
+    [Q1, [Q1[0], 900], [4500, 610], Q2],
+    [Q2, [3100, 610], [E[0], 590], E]
+  ];
+  const pts = [];
+  segs.forEach((sg, si) => {
+    for (let i = si ? 1 : 0; i <= 600; i++) {
+      const u = i / 600, m = 1 - u;
+      const [a, b, c2, e] = sg;
+      pts.push([m * m * m * a[0] + 3 * m * m * u * b[0] + 3 * m * u * u * c2[0] + u * u * u * e[0],
+                m * m * m * a[1] + 3 * m * m * u * b[1] + 3 * m * u * u * c2[1] + u * u * u * e[1]]);
+    }
+  });
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const vLen = cum[600];
+  ROUTE = { pts, cum, len: cum[cum.length - 1], vFrac: vLen / cum[cum.length - 1], end: E };
+}
+function routeAt(s) {
+  const { pts, cum } = ROUTE;
+  s = clamp(s, 0, ROUTE.len);
+  let lo = 0, hi = cum.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (cum[mid] < s) lo = mid; else hi = mid; }
+  const f = (s - cum[lo]) / Math.max(1e-9, cum[hi] - cum[lo]);
+  const a = pts[lo], b = pts[hi];
+  const tx = b[0] - a[0], ty = b[1] - a[1], tl = Math.hypot(tx, ty) || 1;
+  return { x: lerp(a[0], b[0], f), y: lerp(a[1], b[1], f), tx: tx / tl, ty: ty / tl, i: lo };
+}
+function strokeRoute(c, s0, s1) {
+  const { pts, cum } = ROUTE;
+  c.beginPath();
+  let started = false;
+  for (let i = 0; i < pts.length; i++) {
+    if (cum[i] < s0) continue;
+    if (cum[i] > s1) { const q = routeAt(s1); c.lineTo(q.x, q.y); break; }
+    if (!started) { c.moveTo(pts[i][0], pts[i][1]); started = true; } else c.lineTo(pts[i][0], pts[i][1]);
+  }
+  c.stroke();
+}
+
+// ───────────────────────── text drawing ─────────────────────────
+function drawGlyph(c, fk, gl, s) {
+  const e = glyphEntry(fk, gl.g);
+  c.save(); c.translate(gl.x * s, 0); c.scale(s, s); c.fill(e.path); c.restore();
+}
+function nodeFrame(c, n) { c.translate(n.x, n.y); if (n.rot) c.rotate(n.rot); }
+function drawStaticText(c, n, alpha = 1) {
+  c.save(); nodeFrame(c, n); c.globalAlpha *= alpha * (n.alpha ?? 1); c.fillStyle = n.color || COL.paper;
+  for (const gl of n.glyphs) drawGlyph(c, n.fk, gl, n.s);
+  c.restore();
+}
+const SEED = {};
+function seeded(id, k) { const key = id + ':' + k; if (!SEED[key]) { const r = rng(key.split('').reduce((a, ch) => a * 31 + ch.charCodeAt(0) | 0, 7)); SEED[key] = [r(), r(), r(), r()]; } return SEED[key]; }
+
+function drawWord(c, n, t) {
+  if (t < n.start) return;
+  const p = prog(t, n.start, n.t);
+  const cap = n.cap, s = n.s;
+  let dx = 0, dy = 0, alpha = 1;
+  let per = null, clip = null;
+  const color = n.color || COL.paper;
+  switch (n.motion) {
+    case 'conn': dy = (1 - eOut(p)) * cap * .3; alpha = eOut(p); break;
+    case 'register': {
+      per = (i, gl) => {
+        const st = n.start + i * 2 * FR, q = prog(t, st, st + 14 * FR);
+        if (q <= 0) return null;
+        const conv = eIO(prog(t, st + 4 * FR, st + 14 * FR));
+        return { a: eOut(clamp(q * 2)), echo: (1 - conv) * cap * .1, echoA: .5 * (1 - conv) * (q > 0 ? 1 : 0) };
+      };
+      break;
+    }
+    case 'impulse': dx = -(1 - eBack(p, 2.2)) * cap * .55; alpha = clamp(p * 3); break;
+    case 'compass': break; // handled in drawMoon
+    case 'glide': dx = (1 - eOut5(p)) * n.w * 1.25; alpha = clamp(p * 4); break;
+    case 'impact': {
+      const tc = n.t - 4 * FR;   // contact
+      if (t < tc) { const q = prog(t, n.start, tc); dx = (1 - Math.pow(q, 1.6)) * n.w * 1.05 - HARDC * eIn(q); alpha = clamp(q * 5); }
+      else { const q = prog(t, tc, n.t + 4 * FR); dx = -HARDC * (1 - eOut(q)); }
+      break;
+    }
+    case 'hero': {
+      const a = n.start, b = a + 4 * FR, c2 = b + 10 * FR;
+      const dir = n.dir || 1;
+      if (t < b) { dx = dir * (cap * .5 + cap * .06 * eOut(prog(t, a, b))); alpha = 0; }
+      else if (t < c2) { const q = eOut(prog(t, b, c2)); dx = dir * lerp(cap * .56, -cap * .04, q); alpha = clamp(q * 2); }
+      else dx = dir * -cap * .04 * (1 - eOut(prog(t, c2, n.t)));
+      break;
+    }
+    case 'assemble': {
+      per = (i) => {
+        const st = n.start + i * 2 * FR, q = eOut(prog(t, st, st + 12 * FR));
+        if (q <= 0) return null;
+        const r = seeded(n.id, i);
+        return { a: clamp(q * 2), dx: (r[0] - .5) * cap * 1.2 * (1 - q), dy: (r[1] - .4) * cap * 1.4 * (1 - q), rot: (r[2] - .5) * .5 * (1 - q) };
+      };
+      break;
+    }
+    case 'rule': {
+      const q = eIO(p);
+      clip = c3 => { c3.rect(-cap * .2, -cap * 1.3, (n.w + cap * .4) * q, cap * 1.8); };
+      break;
+    }
+    case 'rise': clip = c3 => c3.rect(-cap, -cap * 1.4, n.w + cap * 2, cap * 1.4); dy = (1 - eOut(p)) * cap * 1.15; break;
+    case 'snap': {
+      const a = n.start, b = n.t - 4 * FR;
+      if (t < b) { dx = cap * .14; dy = -cap * .1; alpha = .55 * eOut(prog(t, a, a + 4 * FR)); }
+      else { const q = prog(t, b, n.t); dx = cap * .14 * (1 - eOut(q)); dy = -cap * .1 * (1 - eOut(q)); alpha = lerp(.55, 1, q); }
+      break;
+    }
+    case 'tower': {
+      per = (i) => {
+        const st = n.start + i * 3 * FR, q = eOut(prog(t, st, st + 10 * FR));
+        if (q <= 0) return null;
+        return { a: q, dx: -(1 - q) * cap * .5 };
+      };
+      break;
+    }
+    case 'settle': dy = -(1 - eOut(p)) * cap * .45; alpha = clamp(p * 2.5); break;
+    case 'stop': dx = (1 - Math.pow(1 - p, 4)) * 0 + (1 - eOut5(p)) * n.w * .9; alpha = clamp(p * 4); break;
+    case 'flank': {
+      per = (i) => {
+        if (i === 1) return { a: 0 };   // the I is held by the vehicle
+        const q = eOut(p);
+        if (i === 0) return { a: clamp(p * 3), dx: -(1 - q) * cap * .7 };
+        if (i === 2) return { a: clamp(p * 3), dx: (1 - q) * cap * .7 };
+        return { a: clamp(prog(t, n.t - 4 * FR, n.t)) };
+      };
+      break;
+    }
+  }
+  c.save();
+  nodeFrame(c, n);
+  c.translate(dx, dy);
+  c.globalAlpha *= alpha;
+  c.fillStyle = color;
+  if (clip) { c.beginPath(); clip(c); c.clip(); }
+  if (!per) { for (const gl of n.glyphs) drawGlyph(c, n.fk, gl, s); }
+  else {
+    n.glyphs.forEach((gl, i) => {
+      const r = per(i, gl);
+      if (!r) return;
+      const e = glyphEntry(n.fk, gl.g);
+      const gcx = (e.bb.x1 + e.bb.x2) / 2 * s + gl.x * s, gcy = (e.bb.y1 + e.bb.y2) / 2 * s;
+      if (r.echo) {
+        c.save(); c.globalAlpha *= r.echoA; c.fillStyle = COL.paper;
+        for (const sg of [-1, 1]) { c.save(); c.translate(sg * r.echo, -sg * r.echo * .35); drawGlyph(c, n.fk, gl, s); c.restore(); }
+        c.restore();
+      }
+      c.save();
+      c.globalAlpha *= r.a ?? 1;
+      c.translate(gcx + (r.dx || 0), gcy + (r.dy || 0)); if (r.rot) c.rotate(r.rot); c.translate(-gcx, -gcy);
+      drawGlyph(c, n.fk, gl, s);
+      c.restore();
+    });
+  }
+  c.restore();
+}
+const HARDC = 26;   // buffer compression travel
+
+// MOON: the two O forms resolve as circular structures; the second carries the lunar disc
+function drawMoon(c, t) {
+  const n = N.moon;
+  if (t < n.start) return;
+  const s = n.s, a = n.start;
+  c.save(); nodeFrame(c, n); c.fillStyle = COL.paper;
+  n.glyphs.forEach((gl, i) => {
+    const e = glyphEntry('P', gl.g);
+    const cx = (gl.x + (e.bb.x1 + e.bb.x2) / 2) * s, cy = (e.bb.y1 + e.bb.y2) / 2 * s;
+    if (gl.ch === 'O') {
+      const st = a + (i === 1 ? 2 : 6) * FR, q = eIO(prog(t, st, st + 16 * FR));
+      if (q <= 0) return;
+      c.save();
+      if (q < 1) {
+        c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, n.cap, -Math.PI / 2, -Math.PI / 2 + q * Math.PI * 2); c.closePath(); c.clip();
+      }
+      drawGlyph(c, 'P', gl, s);
+      c.restore();
+    } else {
+      const st = a + (i === 0 ? 0 : 10) * FR, q = eOut(prog(t, st, st + 14 * FR));
+      if (q <= 0) return;
+      c.save(); c.beginPath(); c.rect(gl.x * s - 40, -n.cap * 1.2, 2000, n.cap * 1.2 + 2); c.clip();
+      c.translate(0, (1 - q) * n.cap * .9); drawGlyph(c, 'P', gl, s); c.restore();
+    }
+  });
+  c.restore();
+  // lunar disc, clipped to the actual counter outline of the second O
+  const d = n.disc, gl = n.glyphs[2];
+  const q = eOut(prog(t, n.t - 8 * FR, n.t + 10 * FR));
+  if (q > 0) {
+    c.save();
+    c.translate(n.x + gl.x * s, n.y); c.scale(s, s);
+    c.clip(d.counterPath);
+    const cu = d.cu;
+    c.beginPath(); c.arc(cu.x, cu.y, cu.r * q, 0, Math.PI * 2); c.fillStyle = '#E6E1D3'; c.fill();
+    const mq = prog(t, n.t + 4 * FR, n.t + 16 * FR);
+    if (mq > 0) {
+      c.globalAlpha *= mq;
+      c.fillStyle = '#C9C3B4';
+      c.beginPath(); c.arc(cu.x - cu.r * .32, cu.y - cu.r * .22, cu.r * .2, 0, 7); c.fill();
+      c.beginPath(); c.arc(cu.x + cu.r * .3, cu.y + cu.r * .28, cu.r * .13, 0, 7); c.fill();
+      c.strokeStyle = '#BDB7A8'; c.lineWidth = 2.2;
+      c.beginPath(); c.arc(cu.x + cu.r * .12, cu.y - cu.r * .45, cu.r * .09, 0, 7); c.stroke();
+    }
+    c.restore();
+  }
+}
+
+// WIN: W and N flank the vehicle; a quiet I outline stays behind it
+function drawWinOutline(c, t) {
+  const n = N.win;
+  const q = prog(t, n.t - 6 * FR, n.t + 6 * FR);
+  if (q <= 0) return;
+  const gl = n.glyphs[1], e = glyphEntry('P', gl.g);
+  c.save(); nodeFrame(c, n); c.translate(gl.x * n.s, 0); c.scale(n.s, n.s);
+  c.globalAlpha *= .55 * q; c.strokeStyle = COL.paper; c.lineWidth = 3 / n.s; c.stroke(e.path);
+  c.restore();
+}
+
+// ───────────────────────── panel hinge (genuine projected plane) ─────────────────────────
+function panelAngle(t) { return (1 - eIO(prog(t, 10.14, 10.66))) * 88 * DEG; }
+function projectPanel(x, y, cam, phi) {
+  const d = y - PANEL.y0;
+  const Y = PANEL.y0 + d * Math.cos(phi), Z = d * Math.sin(phi);
+  const D = 2600, f = D / (D + Z);
+  return [cam.cx + (x - cam.cx) * f, cam.cy + (Y - cam.cy) * f];
+}
+function drawPanel(c, t, cam) {
+  if (t < 10.14) return;
+  const phi = panelAngle(t);
+  const P = (x, y) => projectPanel(x, y, cam, phi);
+  const { x0, x1, y0, y1 } = PANEL;
+  c.save();
+  const poly = [P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)];
+  c.beginPath(); poly.forEach((p, i) => i ? c.lineTo(...p) : c.moveTo(...p)); c.closePath();
+  c.fillStyle = COL.blue; c.fill();
+  c.clip();
+  // engraved rules on the panel surface
+  c.strokeStyle = 'rgba(240,235,221,.10)'; c.lineWidth = 1.6;
+  for (let y = y0 + 120; y < y1; y += 120) { const a = P(x0, y), b = P(x1, y); c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.stroke(); }
+  for (let x = x0 + 120; x < x1; x += 120) { const a = P(x, y0), b = P(x, y1); c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.stroke(); }
+  // surface fibres (fixed to panel coordinates)
+  if (phi < .02) {
+    c.strokeStyle = 'rgba(240,235,221,.05)'; c.lineWidth = 1.2;
+    for (const f of FIBRES) { c.beginPath(); c.moveTo(f[0], f[1]); c.lineTo(f[0] + f[2], f[1] + f[3]); c.stroke(); }
+  }
+  c.restore();
+  // hinge edge
+  c.strokeStyle = COL.paper; c.globalAlpha = .55; c.lineWidth = 3;
+  c.beginPath(); c.moveTo(...P(x0, y0)); c.lineTo(...P(x1, y0)); c.stroke();
+  c.globalAlpha = 1;
+}
+let FIBRES = [], SPECKS = [];
+function buildTexture() {
+  const r = rng(1962);
+  for (let i = 0; i < 1600; i++) SPECKS.push([r() * WORLD.w, r() * WORLD.h, 1 + r() * 3.2, .025 + r() * .05]);
+  for (let i = 0; i < 520; i++) { const a = (r() - .5) * .6; const L = 12 + r() * 36; FIBRES.push([PANEL.x0 + r() * (PANEL.x1 - PANEL.x0), PANEL.y0 + r() * (PANEL.y1 - PANEL.y0), Math.cos(a) * L, Math.sin(a) * L]); }
+}
+function drawSpecks(c, view) {
+  c.fillStyle = COL.paper;
+  for (const s of SPECKS) {
+    if (s[0] < view.x0 || s[0] > view.x1 || s[1] < view.y0 || s[1] > view.y1) continue;
+    c.globalAlpha = s[3]; c.beginPath(); c.arc(s[0], s[1], s[2], 0, 6.283); c.fill();
+  }
+  c.globalAlpha = 1;
+}
+
+// ───────────────────────── mechanisms & guides ─────────────────────────
+function line(c, x0, y0, x1, y1) { c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); }
+function drawOpeningLines(c, t) {
+  // pale baseline under the opening declaration
+  const q = eOut(prog(t, .12, .55));
+  if (q > 0) {
+    const y = N.choose.y + 22, cxm = (N.we1.x + R('choose')) / 2, half = (R('choose') - N.we1.x) / 2 + 20;
+    c.strokeStyle = COL.paper; c.globalAlpha = .55; c.lineWidth = 3;
+    line(c, cxm - half * q, y, cxm + half * q, y); c.globalAlpha = 1;
+  }
+  // GO's baseline extends toward the next word
+  const g = eIO(prog(t, 2.02, 2.45));
+  if (g > 0) {
+    const y = N.go.y + 14, x0 = R('go') + 10, x1 = 3330;
+    c.strokeStyle = COL.paper; c.lineWidth = 3.5; c.globalAlpha = .8;
+    line(c, x0, y, lerp(x0, x1, g), y); c.globalAlpha = 1;
+  }
+  // "this decade" bracket: a committed interval (no countdown)
+  const b = eIO(prog(t, 4.18, 4.62));
+  if (b > 0) {
+    const x0 = N.this.x, x1 = R('decade'), y = N.decade.y + 26, mid = (x0 + x1) / 2;
+    c.strokeStyle = COL.brass; c.lineWidth = 3;
+    c.beginPath(); c.moveTo(lerp(mid, x0, b), y - 18 * b); c.lineTo(lerp(mid, x0, b), y); c.lineTo(lerp(mid, x1, b), y); c.lineTo(lerp(mid, x1, b), y - 18 * b); c.stroke();
+  }
+}
+function drawAxis(c, t) {
+  // fine brass line from beneath the second O, continuing down to the assembly axis
+  const d = N.moon.disc;
+  const y0 = N.moon.y + 34, y1 = RAIL - HV - 30;
+  const q = eIO(prog(t, 3.05, 4.6));
+  if (q <= 0) return;
+  c.strokeStyle = COL.brass; c.lineWidth = 3;
+  line(c, d.x, y0, d.x, lerp(y0, y1, q));
+  // GOAL alignment line joins the axis
+  const g = eIO(prog(t, 9.9, 10.3));
+  if (g > 0) { const y = N.goal.y + 20; line(c, N.goal.x, y, lerp(N.goal.x, d.x, g), y); }
+}
+function drawBuffer(c, t) {
+  // HARD compresses a short buffer at the end of its travel
+  const n = N.hard;
+  const a = prog(t, n.start - 2 * FR, n.start + 4 * FR);
+  if (a <= 0) return;
+  const tc = n.t - 4 * FR;
+  let comp = 0;
+  if (t >= tc) comp = HARDC * (1 - eOut(prog(t, tc, n.t + 4 * FR)));
+  const xr = n.x - 14 - comp * 0 - (t >= tc ? comp : 0);
+  const xl = n.x - 96;
+  const right = n.x - 14 - (t >= tc ? comp : 0);
+  const w = right - xl;
+  const y0 = n.y - n.cap * .82, y1 = n.y;
+  c.save(); c.globalAlpha *= a;
+  c.fillStyle = COL.orange; c.fillRect(xl - 10, y0, 10, y1 - y0);      // fixed stop plate
+  c.strokeStyle = COL.orange; c.lineWidth = 6;
+  const k = 4;
+  for (let i = 0; i < k; i++) { const x = xl + 8 + (w - 16) * (i + .5) / k; line(c, x, y0 + 14, x, y1 - 14); }
+  c.fillRect(right - 8, y0, 8, y1 - y0);                                // contact edge
+  c.restore();
+  void xr;
+}
+function drawEasyGuide(c, t) {
+  const n = N.easy, q = eOut(prog(t, n.start - 10 * FR, n.start + 6 * FR));
+  if (q <= 0) return;
+  c.strokeStyle = COL.paper; c.globalAlpha = .28; c.lineWidth = 2;
+  line(c, n.x - 40, n.y + 16, n.x - 40 + (n.w + 520) * q, n.y + 16); c.globalAlpha = 1;
+}
+function drawRail(c, t) {
+  const on = eOut(prog(t, 10.6, 10.75));
+  if (on <= 0) return;
+  const xa = PANEL.x0 + 60, xb = PANEL.x1;
+  const ext = eIO(prog(t, 15.9, 16.7));
+  const xe = lerp(xb, ISLOT.x + 70, ext);
+  c.strokeStyle = COL.paper; c.lineWidth = 2.4; c.globalAlpha = .6 * on;
+  line(c, xa, RAIL, xe, RAIL); line(c, xa, RAIL + 16, xe, RAIL + 16);
+  // stabiliser notches
+  const hx = VEH.home.x;
+  c.globalAlpha = .6 * on;
+  for (const nx of [hx - 450, hx - 390]) { c.beginPath(); c.moveTo(nx - 16, RAIL); c.lineTo(nx - 10, RAIL + 12); c.lineTo(nx + 10, RAIL + 12); c.lineTo(nx + 16, RAIL); c.stroke(); }
+  c.globalAlpha = 1;
+}
+function drawSlots(c, t) {
+  if (t < 10.62) return;
+  const a = eOut(prog(t, 10.62, 10.8)) * (1 - .55 * prog(t, 12.0, 12.4));
+  c.save(); c.globalAlpha *= a; c.strokeStyle = '#173444'; c.fillStyle = '#1B3B4D'; c.lineWidth = 3;
+  const hx = VEH.home.x;
+  // triangular pocket (capsule)
+  const cp = CMP.capsule.initial;
+  c.beginPath(); c.moveTo(cp.x - 64, cp.y + 60); c.lineTo(cp.x + 64, cp.y + 60); c.lineTo(cp.x, cp.y - 80); c.closePath(); c.fill();
+  // rectangular spaces (body sections)
+  for (const id of ['upper', 'lower']) { const s = CMP[id].initial; const L = CMP[id].y0 - CMP[id].y1; c.fillRect(s.x - L / 2 - 10, s.y - BW / 2 - 10, L + 20, BW + 20); }
+  // nozzle space beneath ORGANIZE's baseline
+  const nz = CMP.nozzle.initial; c.fillRect(nz.x - 50, nz.y - 34, 100, 68);
+  c.restore();
+  void hx;
+}
+function drawMeasure(c, t) {
+  const n = N.measure;
+  const r = eIO(prog(t, n.start, n.t));
+  if (r <= 0) return;
+  const b = vehicleBounds(Math.min(t, 15.0));
+  const bx = b.x1 + 34;
+  const fade = 1 - prog(t, 16.0, 16.5);
+  c.save(); c.globalAlpha *= fade;
+  c.strokeStyle = COL.brass; c.lineWidth = 3;
+  const ry = n.y + 24;
+  line(c, bx, ry, lerp(bx, R('measure') + 20, r), ry);
+  const v = eIO(prog(t, n.t, n.t + 22 * FR));
+  if (v > 0) {
+    const yTop = lerp(ry, b.top, Math.min(1, v * 1.4)), yBot = lerp(ry, b.bottom, v);
+    line(c, bx, Math.min(yTop, ry), bx, yBot);
+    if (v > .5) {
+      const k = prog(v, .5, 1);
+      line(c, bx, b.top, bx - 30 * k, b.top);
+      line(c, bx, b.bottom, bx - 30 * k, b.bottom);
+    }
+  }
+  c.restore();
+}
+function drawEnergy(c, t) {
+  const n = N.energies;
+  const q = eIO(prog(t, n.t, n.t + 30 * FR));
+  const guideOn = eOut(prog(t, 10.62, 10.8));
+  const x0 = n.x - 30, yR = RAIL + 8, yE = n.y - n.cap - 18;
+  const hx = VEH.home.x;
+  const L1 = yE - yR, L2 = hx - x0, L = L1 + L2;
+  // the existing guide: a vertical riser into the rail
+  if (guideOn > 0) { c.strokeStyle = COL.paper; c.globalAlpha = .45 * guideOn; c.lineWidth = 2; line(c, x0 - 8, yE, x0 - 8, RAIL + 16); line(c, x0 + 8, yE, x0 + 8, RAIL + 16); c.globalAlpha = 1; }
+  if (q <= 0) return;
+  const dim = t > 16.2 ? lerp(1, .45, prog(t, 16.2, 17.0)) : 1;
+  const ign = t > 24.6 ? 1 : 0;
+  c.save(); c.strokeStyle = COL.orange; c.lineWidth = 9; c.lineCap = 'butt'; c.globalAlpha = dim * (1 - ign * 0);
+  const s = q * L;
+  c.beginPath(); c.moveTo(x0, yE);
+  if (s <= L1) c.lineTo(x0, yE - s); else { c.lineTo(x0, yR); c.lineTo(x0 + (s - L1), yR); }
+  c.stroke(); c.restore();
+}
+function drawRegistration(c, t) {
+  const n = N.skills;
+  if (t < n.start - 6 * FR) return;
+  const b = vehicleBounds(Math.min(t, 17.39));
+  const q = prog(t, n.t - 5 * FR, n.t);
+  const k = q <= 0 ? 1 : q < 1 ? (1 - eOut(q)) - .12 * Math.sin(q * Math.PI) : 0;
+  const off = 28 * k;
+  const a = eOut(prog(t, n.start - 6 * FR, n.start + 2 * FR)) * (1 - prog(t, 17.3, 17.8) * .5);
+  const hx = VEH.home.x;
+  c.save(); c.globalAlpha *= a; c.strokeStyle = COL.paper; c.lineWidth = 2.6;
+  const top = b.top - 26, bot = b.bottom + 26, L = 34;
+  // guide A (left), guide B (right): corner registers that meet the vehicle silhouette
+  const xl = hx - BW / 2 - 50 - off, xr = hx + BW / 2 + 50 + off, dy = off * .6;
+  c.beginPath(); c.moveTo(xl + L, top - dy); c.lineTo(xl, top - dy); c.lineTo(xl, top - dy + L); c.moveTo(xl, bot - dy - L); c.lineTo(xl, bot - dy); c.lineTo(xl + L, bot - dy); c.stroke();
+  c.beginPath(); c.moveTo(xr - L, top + dy); c.lineTo(xr, top + dy); c.lineTo(xr, top + dy + L); c.moveTo(xr, bot + dy - L); c.lineTo(xr, bot + dy); c.lineTo(xr - L, bot + dy); c.stroke();
+  // register target on the axis
+  c.beginPath(); c.arc(hx + off * .8, top - 40 - dy, 12, 0, 7); c.moveTo(hx + off * .8 - 22, top - 40 - dy); c.lineTo(hx + off * .8 + 22, top - 40 - dy); c.stroke();
+  c.restore();
+}
+function drawGate(c, t) {
+  const n = N.challenge;
+  const q = eIO(prog(t, 16.4, 16.95));
+  if (q <= 0) return;
+  c.save(); c.strokeStyle = COL.paper; c.lineWidth = 4; c.globalAlpha = .8;
+  // legs down to the transfer guide
+  line(c, GATE.xl, GATE.y + 14, GATE.xl, lerp(GATE.y + 14, RAIL, q));
+  line(c, GATE.xr, GATE.y + 14, GATE.xr, lerp(GATE.y + 14, RAIL, q));
+  // lintel and connecting rules (gantry)
+  line(c, GATE.xl - 20, GATE.y + 14, GATE.xr + 20, GATE.y + 14);
+  c.lineWidth = 2.4; c.globalAlpha = .55;
+  const arms = [GATE.y - n.w * .3, GATE.y - n.w * .62, GATE.top + 40];
+  arms.forEach((y, i) => { const a = eIO(prog(t, 16.55 + i * .08, 16.95 + i * .08)); if (a > 0) line(c, GATE.xr + 8, y, GATE.xr + 8 + 150 * a, y); });
+  c.restore();
+}
+function drawCradle(c, t) {
+  const a = eOut(prog(t, 16.3, 16.8));
+  if (a <= 0) return;
+  // the cradle stays connected to the vehicle until the transfer into WIN finishes
+  const v = vehiclePose(Math.min(t, 23.92));
+  const x = t < 18.62 ? CRADLE.x : v.x;
+  c.save(); c.globalAlpha *= a; c.fillStyle = COL.paper; c.strokeStyle = COL.paper; c.lineWidth = 3;
+  c.fillRect(x - 70, RAIL + 2, 140, 12);
+  c.beginPath(); c.moveTo(x - 62, RAIL); c.lineTo(x - 50, RAIL - 26); c.lineTo(x - 40, RAIL); c.closePath(); c.fill();
+  c.beginPath(); c.moveTo(x + 62, RAIL); c.lineTo(x + 50, RAIL - 26); c.lineTo(x + 40, RAIL); c.closePath(); c.fill();
+  c.restore();
+}
+function latchAngle(t) {
+  // up (open) = -90°, closed = 180° (arm pointing at the vehicle)
+  const close = eIO(prog(t, 19.30, 19.55));
+  const open = eIO(prog(t, 22.00, 22.30));
+  return lerp(-90, -180, close * (1 - open)) * DEG;
+}
+function drawLatch(c, t) {
+  const a = eOut(prog(t, 16.3, 16.8));
+  if (a <= 0) return;
+  const px = CRADLE.x + 120, py = RAIL - 180;
+  c.save(); c.globalAlpha *= a;
+  c.fillStyle = COL.orange; c.strokeStyle = COL.orange;
+  c.fillRect(px - 9, py, 18, RAIL - py);                     // post
+  const ang = latchAngle(t);
+  c.save(); c.translate(px, py); c.rotate(ang);
+  c.fillRect(0, -8, 74, 16);                                  // arm (reaches the body wall)
+  c.fillRect(66, -8, 10, 30);                                 // contact lip
+  c.restore();
+  c.beginPath(); c.arc(px, py, 15, 0, 7); c.fill();           // hinge
+  c.fillStyle = COL.ink; c.beginPath(); c.arc(px, py, 5, 0, 7); c.fill();
+  c.restore();
+}
+function drawHoldBar(c, t) {
+  const up = eOut(prog(t, 20.25, 20.55));
+  if (up <= 0) return;
+  const down = eIO(prog(t, 21.92, 22.22));
+  const h = (RAIL + 14) - (N.postpone.y - N.postpone.cap - 26);
+  const vis = h * up * (1 - down);
+  c.save();
+  c.beginPath(); c.rect(HOLD.x - 40, RAIL + 14 - h - 10, 80, h + 10); c.clip();
+  c.fillStyle = COL.orange;
+  c.fillRect(HOLD.x - 13, RAIL + 14 - vis, 26, vis);
+  c.restore();
+  // slot in the guide
+  c.fillStyle = COL.orange; c.globalAlpha = .7; c.fillRect(HOLD.x - 20, RAIL + 14, 40, 5); c.globalAlpha = 1;
+}
+function drawIgnition(c, t) {
+  if (t < 24.62 || t > 25.6) return;
+  const g = eOut(prog(t, 24.62, 24.78)) * (1 - eIO(prog(t, 25.15, 25.55)));
+  if (g <= 0) return;
+  const v = vehiclePose(t);
+  c.save(); c.translate(v.x, v.y); c.rotate(v.r); c.scale(v.s, v.s);
+  c.fillStyle = COL.orange;
+  c.beginPath(); c.moveTo(-30, 4); c.lineTo(30, 4); c.lineTo(0, 4 + 92 * g); c.closePath(); c.fill();
+  c.restore();
+}
+function drawRoute(c, t) {
+  if (t < 24.95) return;
+  const v = routeProgress(t) * ROUTE.len;
+  c.save(); c.strokeStyle = COL.brass; c.lineWidth = 3.4; c.lineCap = 'round';
+  strokeRoute(c, 0, v);
+  c.restore();
+}
+function drawArrival(c, t) {
+  const q = eOut(prog(t, 27.95, 28.3));
+  if (q <= 0) return;
+  const d = N.moon.disc;
+  c.save(); c.strokeStyle = COL.brass; c.lineWidth = 3; c.globalAlpha = q;
+  c.beginPath(); c.arc(d.x, d.y, d.r + 9, -Math.PI * .5 - .5 * q, -Math.PI * .5 + .5 * q); c.stroke();
+  c.restore();
+}
+
+// ───────────────────────── camera ─────────────────────────
+let KEYS = [];
+function fit(ids, pad = .12, extra = {}) {
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const id of ids) {
+    const n = N[id];
+    if (n.rot) { x0 = Math.min(x0, n.x - n.cap); x1 = Math.max(x1, n.x); y0 = Math.min(y0, n.y - n.w); y1 = Math.max(y1, n.y); }
+    else { x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x + n.w); y0 = Math.min(y0, n.y - n.cap); y1 = Math.max(y1, n.y + n.cap * .06); }
+  }
+  if (extra.box) { x0 = Math.min(x0, extra.box[0]); y0 = Math.min(y0, extra.box[1]); x1 = Math.max(x1, extra.box[2]); y1 = Math.max(y1, extra.box[3]); }
+  const w = (x1 - x0) * (1 + pad * 2), h = (y1 - y0) * (1 + pad * 2);
+  const z = Math.min(SW / w, SH / h) * (extra.zm || 1);
+  return { cx: (x0 + x1) / 2 + (extra.dx || 0), cy: (y0 + y1) / 2 + (extra.dy || 0), z, r: extra.r || 0 };
+}
+function buildCamera() {
+  const K = (t, st, ease = 'io') => KEYS.push({ t, ...st, ease });
+  const hard = N.hard, vh = VEH.home;
+  K(0.00, fit(['we1', 'choose'], .14, { zm: 1.0 }));
+  K(1.40, fit(['we1', 'choose'], .12, { zm: 1.02 }));
+  K(2.05, fit(['choose', 'to1', 'go', 'the1'], .1, { dx: 260 }));
+  K(2.62, fit(['moon'], .1, { dy: -60 }));
+  K(3.70, fit(['moon'], .1, { dy: -40, zm: 1.02 }));
+  K(4.55, fit(['moon', 'decade'], .06, { dy: 260, zm: 1.1 }));
+  K(6.10, fit(['in', 'things'], .25, { dx: 260, dy: -30, zm: 1.0 }));
+  K(6.55, fit(['not', 'easy', 'they1'], .14));
+  K(7.70, fit(['not', 'easy'], .12, { zm: 1.0 }));
+  K(8.40, fit(['easy', 'hard', 'because2'], .1));
+  K(9.40, fit(['easy', 'hard'], .1, { zm: 1.01 }));
+  K(9.75, fit(['because3', 'goal', 'serve'], .2));
+  K(10.12, fit(['because3', 'goal', 'serve'], .2, { zm: 1.02 }));
+  K(10.42, { cx: hard.x + 260, cy: hard.y + 60, z: .92, r: -6 * DEG });
+  const con = fit(['to3', 'organize', 'best'], .08, { box: [vh.x - 760, RAIL - HV - 80, vh.x + 1150, RAIL + 60] });
+  K(10.78, { ...con, r: 0 });
+  K(12.10, { ...con, z: con.z * 1.02 });
+  K(12.45, fit(['measure'], .06, { box: [vh.x - 160, RAIL - HV - 60, vh.x + 200, RAIL + 40], zm: .96 }));
+  K(13.40, fit(['measure'], .06, { box: [vh.x - 160, RAIL - HV - 60, vh.x + 200, RAIL + 40], zm: .98 }));
+  K(13.70, fit(['best', 'energies'], .08, { box: [vh.x - 100, RAIL - HV - 60, vh.x + 150, RAIL] }));
+  K(14.95, fit(['energies', 'skills'], .1, { box: [vh.x - 200, RAIL - HV - 80, vh.x + 200, RAIL] }));
+  K(15.80, fit(['energies', 'skills'], .1, { box: [vh.x - 200, RAIL - HV - 80, vh.x + 200, RAIL], zm: 1.01 }));
+  K(16.65, fit(['challenge', 'because4'], .06, { box: [GATE.xl - 200, GATE.top - 40, CRADLE.x + 200, RAIL + 40] }));
+  K(17.35, fit(['challenge'], .05, { box: [GATE.xl - 300, GATE.top - 40, CRADLE.x + 260, RAIL + 140], zm: 1.0 }));
+  K(18.62, fit(['is', 'are3', 'accept'], .1, { box: [CRADLE.x - 150, RAIL - HV - 60, CRADLE.x + 200, RAIL + 30] }));
+  K(19.60, fit(['willing', 'accept'], .1, { box: [CRADLE.x - 150, RAIL - HV - 30, CRADLE.x + 200, RAIL + 30] }));
+  K(20.40, fit(['willing', 'unwilling'], .1, { box: [CRADLE.x - 150, RAIL - HV - 30, HOLD.x + 60, RAIL + 30] }));
+  K(21.40, fit(['unwilling', 'postpone'], .1, { box: [CRADLE.x - 150, RAIL - HV - 30, HOLD.x + 60, RAIL + 30] }));
+  K(22.55, fit(['unwilling', 'postpone'], .1, { box: [CRADLE.x - 150, RAIL - HV - 30, HOLD.x + 60, RAIL + 30], zm: 1.01 }));
+  K(23.30, fit(['postpone', 'intend', 'and4'], .08, { box: [N.win.x - 80, RAIL - HV, R('win'), RAIL + 30] }));
+  K(23.95, fit(['postpone', 'intend', 'and4'], .08, { box: [N.win.x - 80, RAIL - HV, R('win'), RAIL + 30], zm: 1.01 }));
+  K(24.55, fit(['win', 'intend', 'to6'], .14, { box: [N.win.x - 80, RAIL - HV - 40, R('win'), RAIL + 220] }));
+  K(25.30, fit(['win', 'others', 'too'], .16, { box: [N.win.x - 80, RAIL - HV - 60, R('intend'), RAIL + 220] }));
+  K(26.30, fit(['win', 'others', 'too'], .2, { box: [N.win.x - 80, RAIL - HV - 260, R('intend'), RAIL + 220], zm: .92 }));
+  K(27.20, { cx: 4400, cy: 1500, z: .5, r: 0 });
+  K(28.15, { cx: WORLD.w / 2, cy: WORLD.h / 2, z: SW / WORLD.w, r: 0 });
+  K(29.25, { cx: WORLD.w / 2, cy: WORLD.h / 2 - 8, z: SW / WORLD.w * 1.008, r: 0 });
+  K(30.00, { cx: WORLD.w / 2, cy: WORLD.h / 2 - 10, z: SW / WORLD.w * 1.012, r: 0 });
+  KEYS.sort((a, b) => a.t - b.t);
+}
+function camAt(t) {
+  let a = KEYS[0], b = KEYS[KEYS.length - 1];
+  if (t <= a.t) return { ...a };
+  for (let i = 1; i < KEYS.length; i++) if (t <= KEYS[i].t) { a = KEYS[i - 1]; b = KEYS[i]; break; }
+  if (t >= b.t) return { ...b };
+  const p = (t - a.t) / (b.t - a.t);
+  const q = eIO(p), qr = q;
+  const cam = {
+    cx: lerp(a.cx, b.cx, q), cy: lerp(a.cy, b.cy, q),
+    z: Math.exp(lerp(Math.log(a.z), Math.log(b.z), q)), r: lerp(a.r, b.r, qr)
+  };
+  // follow the persistent vehicle through the ascent
+  const fw = eIO(prog(t, 26.1, 26.62)) * (1 - eIO(prog(t, 27.2, 28.1)));
+  if (fw > 0) {
+    const v = vehiclePose(t);
+    const vc = { x: v.x + Math.sin(v.r) * HV * .5 * v.s, y: v.y - Math.cos(v.r) * HV * .5 * v.s };
+    cam.cx = lerp(cam.cx, vc.x, fw * .95); cam.cy = lerp(cam.cy, vc.y, fw * .95);
+  }
+  return cam;
+}
+function applyCam(c, cam) {
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.translate(SW / 2, SH / 2); c.rotate(cam.r); c.scale(cam.z, cam.z); c.translate(-cam.cx, -cam.cy);
+}
+function viewBox(cam) {
+  const hw = SW / 2 / cam.z * 1.5, hh = SH / 2 / cam.z * 1.5;
+  return { x0: cam.cx - hw, x1: cam.cx + hw, y0: cam.cy - hh, y1: cam.cy + hh };
+}
+function worldToScreen(cam, x, y) {
+  const dx = (x - cam.cx) * cam.z, dy = (y - cam.cy) * cam.z;
+  const cr = Math.cos(cam.r), sr = Math.sin(cam.r);
+  return [SW / 2 + dx * cr - dy * sr, SH / 2 + dx * sr + dy * cr];
+}
+
+// ───────────────────────── frame ─────────────────────────
+const PANEL_WORDS = new Set(['to3', 'organize', 'and2', 'measure', 'the3', 'best', 'of', 'our', 'energies', 'and3', 'skills']);
+function render(t) {
+  if (t >= DUR - 1e-9) t = 0;
+  const c = ctx;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.globalAlpha = 1;
+  c.fillStyle = COL.black; c.fillRect(0, 0, SW, SH);
+  if (t < .05) return;
+  const cam = camAt(t);
+  // the ink surface is discovered through a narrow opening
+  const open = t < .9 ? eIO(prog(t, .05, .35)) * .06 + eIO(prog(t, .35, .85)) * .94 : 1;
+  const sy = worldToScreen(cam, 0, N.choose.y + 22)[1];
+  c.save();
+  if (open < 1) { const hh = open * SH; c.beginPath(); c.rect(0, sy - hh / 2 - 30 * (1 - open), SW, hh + 60 * (1 - open)); c.clip(); }
+  c.fillStyle = COL.ink; c.fillRect(0, 0, SW, SH);
+  applyCam(c, cam);
+  drawSpecks(c, viewBox(cam));
+  drawPanel(c, t, cam);
+  drawAxis(c, t);
+  drawSlots(c, t);
+  drawRail(c, t);
+  drawEnergy(c, t);
+  drawOpeningLines(c, t);
+  drawEasyGuide(c, t);
+  drawBuffer(c, t);
+  // text
+  for (const n of ORDER) {
+    if (n.id === 'moon') continue;
+    if (PANEL_WORDS.has(n.id) && t < 10.62) continue;
+    drawWord(c, n, t);
+  }
+  drawMoon(c, t);
+  drawWinOutline(c, t);
+  // mechanisms
+  drawMeasure(c, t);
+  drawRegistration(c, t);
+  drawGate(c, t);
+  drawCradle(c, t);
+  drawLatch(c, t);
+  drawHoldBar(c, t);
+  for (const a of ANNO) {
+    const al = a.text === 'HOLD' ? eOut(prog(t, 20.3, 20.6)) * (1 - prog(t, 21.95, 22.2))
+      : a.text === 'ASSEMBLY AXIS' ? eOut(prog(t, 10.7, 11.0))
+      : eOut(prog(t, 16.6, 17.0));
+    if (al > 0) drawStaticText(c, a, al);
+  }
+  drawRoute(c, t);
+  drawArrival(c, t);
+  // vehicle: selective deterministic motion blur on the ascent only
+  if (t > 25.0 && t < 28.0) {
+    for (const [k, al] of [[3, .07], [2, .12], [1, .2]]) drawVehicle(c, t - k * FR, al);
+  }
+  drawIgnition(c, t);
+  drawVehicle(c, t);
+  // attribution in reserved negative space
+  const at = eOut(prog(t, 28.25, 28.75));
+  if (at > 0) STATIC.forEach((n, i) => drawStaticText(c, n, eOut(prog(t, 28.25 + i * .1, 28.75 + i * .1))));
+  c.restore();
+  // graphic closure: a dark circular mask expanding from the lunar disc
+  if (t >= 29.25) {
+    const d = N.moon.disc;
+    const [mx, my] = worldToScreen(cam, d.x, d.y);
+    const far = Math.max(Math.hypot(mx, my), Math.hypot(SW - mx, my), Math.hypot(mx, SH - my), Math.hypot(SW - mx, SH - my));
+    const r = far * eIn(prog(t, 29.25, 29.9));
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.fillStyle = COL.black;
+    if (t >= 29.9) c.fillRect(0, 0, SW, SH);
+    else { c.beginPath(); c.arc(mx, my, r, 0, Math.PI * 2); c.fill(); }
+  }
+}
+
+// ───────────────────────── public API, playback, debug ─────────────────────────
+let playing = true, t0 = null, tPaused = 0, isReady = false;
+const params = new URLSearchParams(location.search);
+const capture = params.has('capture');
+if (capture) document.body.classList.add('capture');
+const ppBtn = document.getElementById('pp'), scrub = document.getElementById('scrub'), tc = document.getElementById('tc');
+function show(t) { scrub.value = String(Math.round(t * FPS) % NF); tc.textContent = t.toFixed(2) + ' s'; }
+function seek(t) {
+  if (!isReady) return;
+  playing = false; ppBtn.textContent = 'Play';
+  t = clamp(t, 0, DUR); tPaused = t;
+  render(t); show(t);
+}
+function renderFrame(n) { seek(clamp(Math.round(n), 0, NF) / FPS); }
+function tick(now) {
+  if (playing && isReady) {
+    if (t0 === null) t0 = now - tPaused * 1000;
+    const t = ((now - t0) / 1000) % DUR;
+    render(t); show(t); tPaused = t;
+  }
+  requestAnimationFrame(tick);
+}
+ppBtn.onclick = () => { if (playing) { playing = false; ppBtn.textContent = 'Play'; } else { playing = true; t0 = null; ppBtn.textContent = 'Pause'; } };
+scrub.oninput = () => seek(+scrub.value / FPS);
+
+const DEBUG_TIMES = [0.00, 1.35, 3.35, 7.40, 9.05, 11.90, 13.10, 15.50, 19.90, 22.35, 24.80, 26.20, 27.80, 28.75];
+function contactSheet(times = DEBUG_TIMES, cols = 4, tw = 480) {
+  const th = tw * 9 / 16, rows = Math.ceil(times.length / cols);
+  const out = document.createElement('canvas'); out.width = cols * tw; out.height = rows * (th + 26);
+  const o = out.getContext('2d'); o.fillStyle = '#0b0f14'; o.fillRect(0, 0, out.width, out.height);
+  const keep = tPaused, wasPlaying = playing;
+  times.forEach((t, i) => {
+    render(t);
+    const x = (i % cols) * tw, y = Math.floor(i / cols) * (th + 26);
+    o.drawImage(cv, x, y, tw, th);
+    o.fillStyle = '#c9c2b2'; o.font = '14px ui-monospace,monospace'; o.fillText(t.toFixed(2) + ' s', x + 8, y + th + 18);
+  });
+  render(keep); playing = wasPlaying;
+  return out;
+}
+function cueTable() {
+  return '<table><tr><th>#</th><th>id</th><th>word</th><th>start</th><th>t</th><th>end</th><th>motion</th></tr>' +
+    window.cues.map((q, i) => `<tr><td>${i + 1}</td><td>${q.id}</td><td>${q.word}</td><td>${q.start.toFixed(3)}</td><td>${q.t.toFixed(3)}</td><td>${q.end.toFixed(3)}</td><td>${N[q.id].motion}</td></tr>`).join('') + '</table>';
+}
+document.getElementById('dbgBtn').onclick = () => {
+  const dbg = document.getElementById('debug');
+  dbg.hidden = !dbg.hidden;
+  if (!dbg.hidden) {
+    dbg.innerHTML = '<p>Contact sheet (rendered with seek; outside the captured frame)</p>';
+    dbg.appendChild(contactSheet());
+    dbg.insertAdjacentHTML('beforeend', '<p>Spoken cues (authored 30-second interpretation; not synchronised to the 1962 recording)</p>' + cueTable());
+  }
+};
+
+window.duration = DUR;
+window.fps = FPS;
+window.seek = seek;
+window.renderFrame = renderFrame;
+window.cues = [];
+window.ready = new Promise(resolve => {
+  setTimeout(() => {
+    loadFonts();
+    layout();
+    setupComponents();
+    buildRoute();
+    buildTexture();
+    buildCamera();
+    window.cues = ORDER.map(n => ({ id: n.id, word: n.text.replace(/[,.]$/, '').toLowerCase(), start: +n.start.toFixed(4), t: n.t, end: n.end }));
+    window.debug = {
+      contactSheet, times: DEBUG_TIMES, nodes: N, route: () => ROUTE, vehiclePose, components: COMPONENTS.map(c => ({ id: c.id, initial: c.initial, assembled: c.assembled, inspected: c.inspected, launch: 'route' })),
+      hashFrame: t => { render(t); const d = ctx.getImageData(0, 0, SW, SH).data; let h = 2166136261; for (let i = 0; i < d.length; i += 7) { h ^= d[i]; h = Math.imul(h, 16777619); } return h >>> 0; },
+      isBlack: t => { render(t); const d = ctx.getImageData(0, 0, SW, SH).data; for (let i = 0; i < d.length; i += 4) if (d[i] | d[i + 1] | d[i + 2]) return false; return true; }
+    };
+    isReady = true;
+    window.__ready = true;
+    if (capture) { playing = false; render(0); } else requestAnimationFrame(tick);
+    resolve(true);
+  }, 0);
+});
+})();
+</script>
+</body>
+</html>
