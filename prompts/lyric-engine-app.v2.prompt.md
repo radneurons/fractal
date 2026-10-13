@@ -138,6 +138,7 @@ Outputs at 60 fps: percentile-normalise (5th→0, 95th→1) and smooth with atta
   - SRT and VTT.
   - Plain text, one lyric line per line.
 - **Plain text** is spread over the first-to-last onset span, weighted by syllables (+2 per line). Inside a line, words are distributed by syllable count (heuristic counter with an exception table).
+- **Tempo-aware spreading.** When a line has a start but no word times and the tempo is known (confidence > 0.1), sing about one syllable per eighth note (one per quarter below 100 BPM) instead of stretching to the next line. Compress only if the line is shorter than that, then snap to onsets.
 - **Snapping.** Words with confidence < 0.95 snap to the nearest onset within ±80 ms. End times are clipped so words in a line don't overlap; minimum duration 60 ms.
 - **Line section.** A line belongs to the section containing `start + min(0.3 s, half the line)`. Pickups land just before the downbeat.
 - **Repeats.** `repeatOf` marks lines whose normalised text repeats an earlier one.
@@ -146,6 +147,7 @@ Outputs at 60 fps: percentile-normalise (5th→0, 95th→1) and smooth with atta
   - Enter spreads the rest of the line evenly up to now.
   - Backspace undoes; Esc or Done finishes.
   - The result is word-level timing with confidence 1.
+  - **Line mode** ("Tap lines only"): one tap per line. Each line runs until the next tap; words are placed by tempo-aware spreading and snapped to onsets.
 - **LRC export.** Download the current timing as enhanced LRC.
 
 ---
@@ -602,6 +604,11 @@ The panel contains itself; the camera falls one level per bar, forever.
   - ink wipe (a ragged diagonal edge over 0.55 s);
   - dissolve (0.8 s).
   - Wipes and dissolves render both effects into offscreen layers.
+- **Editing the plan on the timeline.** The overview shows a coloured plan strip with effect names.
+  - Drag a boundary to move it, snapped to the nearest downbeat and kept ≥ 1 s from its neighbours.
+  - Double-click a segment to cycle its effect; neighbours that end up sharing an effect merge.
+  - The edited plan becomes a custom plan until a mode is chosen again.
+  - Automation can set any plan with `setPlan(plan, transition)`; the showcase reel uses all eight effects.
 - **Title card.** If title or artist is set and there is ≥ 1.2 s before the first word: Oswald title plus letter-spaced Montserrat 300 artist over a 35 % dim.
 
 ---
@@ -644,7 +651,12 @@ Dark UI: #0D0D0F background, orange #FF5A1F accent, system font.
   - **Word inspector:** text, start, end, role, element, with stress, syllable and confidence info.
   - **Analysis readout:** tempo and confidence, beats, bars, onsets, sections with times, drops, lyric stats.
 - **Lyrics dialog:** paste or edit; Apply; Tap sync…; Download LRC.
-- **Persistence:** settings, per-effect params, current effect, mode, transition, director map and preview resolution in `localStorage`, each access wrapped in try/catch.
+- **Persistence:**
+  - `localStorage` (each access wrapped in try/catch): settings, per-effect params, current effect, mode, transition, director map, preview resolution.
+  - **IndexedDB:**
+    - The analysis is cached by the audio's SHA-256, with a version number so stale caches are ignored. The same song loads instantly.
+    - The last session (audio bytes, lyrics text, the edited `Lyrics` with locked roles and moved words, title, artist) is saved 1.5 s after any change.
+    - The start screen offers **Restore last session — {name}**.
 - **Responsive:** below 900 px the panel stacks under the stage.
 
 ---
@@ -679,7 +691,13 @@ Synthesise a 73 s, 120 BPM WAV:
 
 ## 13. TESTING
 
-- **Analysis unit test** against the fixture (§4).
+- **`npm test`**: `scripts/test.mjs` bundles every `scripts/test-*.ts` with esbuild and runs it with Node.
+  - `test-analysis.ts`: the fixture checks in §4.
+  - `test-lyrics.ts`:
+    - format detection; enhanced-LRC word times; no overlaps; line-timed spreading; SRT;
+    - blank-line handling; syllable counts; concept matching;
+    - director roles and elements (concept words are heroes, stopwords connective, a hero in every line);
+    - `refreshLines`; LRC round-trip.
 - **Playwright e2e** (`scripts/e2e.mjs`):
   - Serve `vite preview`, load the demo through `window.LE.loadDemo()`.
   - For each effect: `setEffect`, wait for `whenReady()`, then `renderAt(t)` at chosen times and save stills.
@@ -687,7 +705,8 @@ Synthesise a 73 s, 120 BPM WAV:
   - Run in 16:9 and 9:16.
 - **Export e2e** (`e2e-export.mjs`): export a 2 s clip and verify it with `ffprobe` (video and audio streams, duration, frame rate).
 - **Director e2e:** render around the section boundaries and take a UI screenshot.
-- **Automation hooks** on `window.LE`: `ready`, `state`, `stage`, `player`, `loadDemo`, `setEffect`, `setParam`, `setSetting`, `setMode`, `whenReady`, `renderAt`, `exportClip`, `applyLyrics`.
+- **Automation hooks** on `window.LE`: `ready`, `state`, `stage`, `player`, `loadDemo`, `setEffect`, `setParam`, `setSetting`, `setMode`, `setPlan`, `whenReady`, `renderAt`, `exportClip`, `applyLyrics`.
+- **Showcase reel** (`scripts/showcase.mjs`): the demo song through all eight effects with flash transitions, exported via the app's own exporter.
 
 ---
 
