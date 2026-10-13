@@ -424,6 +424,9 @@ Navy ink #101923, paper #F0EBDD, blueprint blue #23485E, orange #D96B35, brass #
   - It flies a quadratic arc to the next zone during the last ~1.2 s, with orange exhaust while transferring.
   - It **launches 520 units** on drops.
   - After the last word it departs up and out along an arc.
+- **Opening.** Before the first word, the title (Barlow Semi Condensed) and artist sit where the first row will land.
+  - Above them, a brass monospace countdown `T−00:06.40` runs to the first word, with a brass rule under the title that fills as it counts.
+  - It fades out as the first word lands. The effect sets `ownsTitle`, so the stage skips its generic title card.
 - **Camera.**
   - Frame each row (minimum width 1500), arriving 0.35 s before the row's first word.
   - Drift push along the row.
@@ -609,7 +612,7 @@ The panel contains itself; the camera falls one level per bar, forever.
   - Double-click a segment to cycle its effect; neighbours that end up sharing an effect merge.
   - The edited plan becomes a custom plan until a mode is chosen again.
   - Automation can set any plan with `setPlan(plan, transition)`; the showcase reel uses all eight effects.
-- **Title card.** If title or artist is set and there is ≥ 1.2 s before the first word: Oswald title plus letter-spaced Montserrat 300 artist over a 35 % dim.
+- **Title card.** If title or artist is set and there is ≥ 1.2 s before the first word: Oswald title plus letter-spaced Montserrat 300 artist over a 35 % dim. Skipped when the current effect declares `ownsTitle`.
 
 ---
 
