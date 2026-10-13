@@ -1,0 +1,394 @@
+{
+ "bpm": 120,
+ "downbeats": [
+  0,
+  2,
+  4,
+  6,
+  8,
+  10,
+  12,
+  14,
+  16,
+  18,
+  20,
+  22,
+  24,
+  26,
+  28,
+  30,
+  32,
+  34,
+  36,
+  38,
+  40,
+  42,
+  44,
+  46,
+  48,
+  50,
+  52,
+  54,
+  56,
+  58,
+  60,
+  62,
+  64,
+  66,
+  68,
+  70
+ ],
+ "sections": [
+  {
+   "label": "intro",
+   "start": 0
+  },
+  {
+   "label": "verse",
+   "start": 8
+  },
+  {
+   "label": "chorus",
+   "start": 24
+  },
+  {
+   "label": "breakdown",
+   "start": 40
+  },
+  {
+   "label": "chorus",
+   "start": 48
+  },
+  {
+   "label": "outro",
+   "start": 64
+  }
+ ],
+ "drop": 48,
+ "words": [
+  {
+   "text": "we",
+   "start": 8
+  },
+  {
+   "text": "were",
+   "start": 8.25
+  },
+  {
+   "text": "waiting",
+   "start": 8.5
+  },
+  {
+   "text": "in",
+   "start": 8.75
+  },
+  {
+   "text": "the",
+   "start": 9
+  },
+  {
+   "text": "quiet",
+   "start": 9.25
+  },
+  {
+   "text": "light",
+   "start": 9.5
+  },
+  {
+   "text": "counting",
+   "start": 12
+  },
+  {
+   "text": "every",
+   "start": 12.25
+  },
+  {
+   "text": "ember",
+   "start": 12.5
+  },
+  {
+   "text": "in",
+   "start": 12.75
+  },
+  {
+   "text": "the",
+   "start": 13
+  },
+  {
+   "text": "night",
+   "start": 13.25
+  },
+  {
+   "text": "the",
+   "start": 16
+  },
+  {
+   "text": "river",
+   "start": 16.25
+  },
+  {
+   "text": "told",
+   "start": 16.5
+  },
+  {
+   "text": "us",
+   "start": 16.75
+  },
+  {
+   "text": "we",
+   "start": 17
+  },
+  {
+   "text": "could",
+   "start": 17.25
+  },
+  {
+   "text": "wait",
+   "start": 17.5
+  },
+  {
+   "text": "but",
+   "start": 20
+  },
+  {
+   "text": "morning",
+   "start": 20.25
+  },
+  {
+   "text": "broke",
+   "start": 20.5
+  },
+  {
+   "text": "the",
+   "start": 20.75
+  },
+  {
+   "text": "garden",
+   "start": 21
+  },
+  {
+   "text": "gate",
+   "start": 21.25
+  },
+  {
+   "text": "set",
+   "start": 24
+  },
+  {
+   "text": "the",
+   "start": 24.25
+  },
+  {
+   "text": "fire",
+   "start": 24.5
+  },
+  {
+   "text": "burn",
+   "start": 24.75
+  },
+  {
+   "text": "it",
+   "start": 25
+  },
+  {
+   "text": "bright",
+   "start": 25.25
+  },
+  {
+   "text": "let",
+   "start": 28
+  },
+  {
+   "text": "the",
+   "start": 28.25
+  },
+  {
+   "text": "thunder",
+   "start": 28.5
+  },
+  {
+   "text": "shake",
+   "start": 28.75
+  },
+  {
+   "text": "the",
+   "start": 29
+  },
+  {
+   "text": "sky",
+   "start": 29.25
+  },
+  {
+   "text": "hold",
+   "start": 32
+  },
+  {
+   "text": "the",
+   "start": 32.25
+  },
+  {
+   "text": "storm",
+   "start": 32.5
+  },
+  {
+   "text": "and",
+   "start": 32.75
+  },
+  {
+   "text": "hold",
+   "start": 33
+  },
+  {
+   "text": "the",
+   "start": 33.25
+  },
+  {
+   "text": "rain",
+   "start": 33.5
+  },
+  {
+   "text": "we",
+   "start": 36
+  },
+  {
+   "text": "will",
+   "start": 36.25
+  },
+  {
+   "text": "rise",
+   "start": 36.5
+  },
+  {
+   "text": "and",
+   "start": 36.75
+  },
+  {
+   "text": "turn",
+   "start": 37
+  },
+  {
+   "text": "again",
+   "start": 37.25
+  },
+  {
+   "text": "every",
+   "start": 41
+  },
+  {
+   "text": "whisper",
+   "start": 41.25
+  },
+  {
+   "text": "turns",
+   "start": 41.5
+  },
+  {
+   "text": "to",
+   "start": 41.75
+  },
+  {
+   "text": "smoke",
+   "start": 42
+  },
+  {
+   "text": "set",
+   "start": 48
+  },
+  {
+   "text": "the",
+   "start": 48.25
+  },
+  {
+   "text": "fire",
+   "start": 48.5
+  },
+  {
+   "text": "burn",
+   "start": 48.75
+  },
+  {
+   "text": "it",
+   "start": 49
+  },
+  {
+   "text": "bright",
+   "start": 49.25
+  },
+  {
+   "text": "let",
+   "start": 52
+  },
+  {
+   "text": "the",
+   "start": 52.25
+  },
+  {
+   "text": "thunder",
+   "start": 52.5
+  },
+  {
+   "text": "shake",
+   "start": 52.75
+  },
+  {
+   "text": "the",
+   "start": 53
+  },
+  {
+   "text": "sky",
+   "start": 53.25
+  },
+  {
+   "text": "hold",
+   "start": 56
+  },
+  {
+   "text": "the",
+   "start": 56.25
+  },
+  {
+   "text": "storm",
+   "start": 56.5
+  },
+  {
+   "text": "and",
+   "start": 56.75
+  },
+  {
+   "text": "hold",
+   "start": 57
+  },
+  {
+   "text": "the",
+   "start": 57.25
+  },
+  {
+   "text": "rain",
+   "start": 57.5
+  },
+  {
+   "text": "we",
+   "start": 60
+  },
+  {
+   "text": "will",
+   "start": 60.25
+  },
+  {
+   "text": "rise",
+   "start": 60.5
+  },
+  {
+   "text": "and",
+   "start": 60.75
+  },
+  {
+   "text": "turn",
+   "start": 61
+  },
+  {
+   "text": "again",
+   "start": 61.25
+  }
+ ]
+}
