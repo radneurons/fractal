@@ -1,0 +1,132 @@
+Create a 30.00-second kinetic-typography film titled "HE HAS."
+This is a full clone of a classic 2010s kinetic-type political ad, applied to an original subject. One voice drives everything. A refrain word returns like a drumbeat. Words lock together into justified blocks. The camera never stops hunting for the next gap. Single letters turn into pictograms. Flat silhouettes march, sail, and burn across the page. Accent color is spent only where it means something. Scenes change by diving through a letter. Here the voice is the Declaration of Independence read aloud, and the refrain is "HE HAS."
+
+Deliver one self-contained HTML file, 1920×1080, targeting 60fps, using Canvas 2D. Inline SVG path data is allowed for pictograms and silhouettes. Load fonts from Google Fonts via <link>, and wait for document.fonts.ready before the first render. Draw every pictogram and silhouette yourself as flat vector paths. Do not use external images.
+
+ART DIRECTION
+Two worlds:
+  NIGHT PAGE — background #1A1918, with a strong radial vignette to #050505 at the corners. Type in bone #EDE7DA, with a soft 3px drop shadow at 35% black.
+  PARCHMENT PAGE — background #F2ECDF, with a faint procedural laid-paper texture (horizontal hairlines at 4% opacity). Type in ink #15130F, with no shadow.
+Accent colors are allowed only on the words and shapes named below:
+  British red #B3202A: ARMIES, BURNT, the redcoat silhouettes, the flames.
+  Continental navy #1C2C5B: UNITED, INDEPENDENT, the swash under HONOR.
+  Echo gray #77736B: used only for ghost and echo copies.
+Five faces, mixed within the same sentence:
+  1. REFRAIN: heavy condensed bold italic (Barlow Condensed 800 Italic). Use it only for HE HAS.
+  2. BODY: wide geometric sans in caps (Montserrat 700/800).
+  3. CONNECTIVES: Montserrat 600 small caps at about 18% of body size. Use it for: among, in, of, the, our, and, to, be, these, are, ought, each, other, mutually, without. Rotate these 90° and tuck them vertically into leftover space wherever that space exists.
+  4. MILITARY: Allerta Stencil. Use it only for STANDING ARMIES.
+  5. DOCUMENT: Libre Caslon Text Bold. Use it only for CONSENT, RIGHT, and HONOR.
+Do not use eagles, waving flags, portraits, wigs, quills, scrolls, sepia, or clip-art shading. Silhouettes are flat, single-color, and graphic, with the clarity of a road sign.
+
+TEXT — EXACT WORDS, EXACT ORDER
+These are excerpts from the Declaration of Independence, 1776 (public domain), quoted in document order:
+  A: "He has kept among us, in times of peace, Standing Armies without the Consent of our legislatures."
+  B: "He has plundered our seas, ravaged our Coasts, burnt our towns, and destroyed the lives of our people."
+  C: "these United Colonies are, and of Right ought to be Free and Independent States;"
+  D: "we mutually pledge to each other our Lives, our Fortunes and our sacred Honor."
+The final caption appears only in the hold: THE DECLARATION OF INDEPENDENCE · 1776.
+Add no other words. The film must be fully understandable with audio off.
+
+CENTRAL VISUAL RULE — THE LOCK-UP
+Every line is set flush to a fixed measure. For each line, compute the scale of its last-arriving word so that the line meets the measure to within 1px. Size connective words to fill the cap-height gaps they occupy. Scale carries meaning: HE HAS, ARMIES, COASTS, PEOPLE, FREE, and HONOR are huge, while "in times of peace" is deliberately tiny. When a line fills, the camera rotates or pans to start the next one. Sometimes it turns 90°, so the finished lines become a sideways column at the frame edge, still partly visible as context.
+
+LETTER PICTOGRAMS
+Each pictogram replaces a single letter. It sits on the baseline, matches the cap height, keeps the letter's advance width, and is drawn in the word's own color.
+  ARMIES — the A is a musket with a fixed bayonet, standing upright.
+  CONSENT — the O is a round wax seal; tiny "of our" sits inside its ring.
+  SEAS — the letters ride a wave baseline.
+  COLONIES — the O becomes a ring of 13 five-point stars.
+  INDEPENDENT — the first I is the Independence Hall tower: brick base, clock face, steeple.
+  FORTUNES — the O is a silver dollar.
+
+STANDALONE SILHOUETTES AND MOVING SHAPES
+These live behind or beside the type. Each one moves through the scene on its own path.
+  REDCOATS — a file of 5 soldiers in British red, muskets shouldered, with a 2-pose stepping cycle at 6 frames per pose. They march right-to-left along the lower third. Each soldier trails 3 echo-gray offset copies.
+  SHIP — a three-masted square-rigger in bone. It sails left-to-right behind SEAS with a gentle 2° roll, trailing 3 echoes.
+  COASTLINE — a large silhouette of the Atlantic seaboard of the thirteen colonies, Maine to Georgia, about 70% of frame height. It swings in and settles, then pulses 3 echo-gray outlines outward at 8-frame intervals.
+  TOWNS — a skyline of colonial gable roofs, chimneys, and one church steeple, forming the baseline under TOWNS.
+  FLAMES — flat British-red flame tongues rise from the tops of the letters in BURNT. They flicker through a precomputed 3-shape cycle, 4 frames per shape.
+  PEOPLE — a row of tiny civilian silhouettes stands along the baseline of PEOPLE: tricorn hat, bonnet, a child, a farmer with a hoe.
+  STARS — 13 stars start scattered across the frame and fly in curved, staggered paths to lock into the O of COLONIES.
+  SHACKLE — an iron shackle locked around the F of FREE snaps open. Its two halves fly off-frame with echoes.
+  SEAL — a circular seal-impression ring blooms behind PLEDGE and fades.
+  SWASH — a navy calligraphic flourish draws itself beneath HONOR. It is a generic ornament, never anyone's signature.
+
+WORD ENTRANCES
+Choose each word's entrance for its meaning. Never pick at random.
+  SLAM — scale 140%→100% over 5 frames, with a 2-frame screen shake of 1.5%.
+  SLIDE — the word slides along its own baseline with motion blur built from 3 layered offset copies at 30% opacity. Never use filter blur.
+  DROP — the word falls from above and settles with 1 bounce.
+  GHOST-IN — the word appears 3× size at 15% opacity, then shrinks into place solid over 14 frames.
+  STAND-UP — each letter starts lying flat, rotated 90° on X so it is invisible edge-on, and stands upright. Letters are staggered by 3 frames: soldiers coming to attention.
+  KNOCKED — the word lands, then each letter jolts to a precomputed small offset and rotation (±2–5°, ±4px), and stays there: a vandalized line.
+  TICK — the word appears on its exact frame with no animation. Used for connectives.
+
+CAMERA
+Use one virtual 2D camera with position, rotation, and zoom, all keyframed. While words arrive, the camera is never fully still. Moves use easeInOutCubic with a 6% overshoot on rotation stops. Whip-pans run 12–14 frames with 3-copy motion blur. The opening sits on a 3D-tilted plane (22° on X, -15° on Z) that flattens by the end of "in times of peace."
+COUNTER DIVE: the camera zooms through the inside of a letter until that letter's interior fills the frame and becomes the next world.
+
+STORYBOARD (seconds; frames = t×60)
+— A · NIGHT PAGE —
+0.00–0.40  Black. The vignette breathes in.
+0.40–1.40  HE HAS. Its letters fly in from scattered 3D positions on the tilted plane and lock together.
+1.40–2.20  "kept among us,": KEPT medium, "among" vertical, US large.
+2.20–3.00  "in times of peace,": tiny stacked small caps. The plane flattens.
+3.00–4.60  STANDING (STAND-UP entrance) and ARMIES (SLAM, red stencil, musket A). The REDCOATS march in along the lower third. The camera tracks left and rotates -10°.
+4.60–5.40  "without the" ticks in. The camera rotates 90° clockwise, and the finished lines become a column at the left edge.
+5.40–6.40  CONSENT (Caslon) with its wax-seal O. A prohibition slash strokes across the seal over 8 frames. "of our" sits inside the ring.
+6.40–7.10  LEGISLATURES slides in, sized to finish the line flush.
+7.10–7.30  Hold, 12 frames.
+— B · NIGHT PAGE —
+7.30–8.10  Whip-pan back to upright. HE HAS slams in again on a new line, same face and same size. This is the refrain.
+8.10–9.30  PLUNDERED slides in, then "our" SEAS rides its wave baseline. The SHIP sails behind it.
+9.30–10.70 RAVAGED, "our", COASTS. The COASTLINE swings in behind and pulses its echoes 3 times.
+10.70–12.00 BURNT (red), with FLAMES flickering from the letter tops. Then "our" and TOWNS, standing on the rooftop skyline.
+12.00–13.60 "and destroyed the lives of our": DESTROYED lands KNOCKED, LIVES is medium, and the connectives stack.
+13.60–14.40 PEOPLE drops in. The civilian silhouettes stand along its baseline.
+14.40–15.00 Counter dive into the O of PEOPLE. Its interior floods to PARCHMENT.
+— C · PARCHMENT PAGE (inside the O) —
+15.00–15.60 "these" ticks in.
+15.60–16.40 UNITED (navy) slams in, and the 13 STARS lift off scattered positions.
+16.40–17.60 COLONIES slides in, and the stars lock into its O as a ring. "are," ticks in vertically.
+17.60–18.40 "and of" stacks, then RIGHT (Caslon) slams in.
+18.40–19.00 "ought to be" stacks.
+19.00–19.80 FREE slams in. The SHACKLE snaps open and its halves fly away.
+19.80–20.80 "and", then INDEPENDENT (navy) GHOST-INs, with the Independence Hall I.
+20.80–21.40 STATES slides in, finishing the line flush.
+— D · PARCHMENT PAGE —
+21.40–22.20 WE large, with "mutually" vertical beside it.
+22.20–23.00 PLEDGE slams in and the SEAL ring blooms.
+23.00–23.60 "to each other our" ticks in.
+23.60–24.20 LIVES drops in.
+24.20–25.00 "our" FORTUNES. The silver-dollar O spins once on its Y axis.
+25.00–25.60 "and our sacred" stacks.
+25.60–26.60 HONOR (Caslon), the largest word on the page, reveals with a left-to-right ink wipe. The navy SWASH draws beneath it over 36 frames.
+— FINALE —
+26.60–28.20 SHOWSTOPPER: one continuous pullback while the camera rotates to 0°. The parchment lock-up shrinks until we see that it sits inside the bone ring of PEOPLE's O on the NIGHT PAGE. The ring frames the final text like a seal, and fragments of "PE" and "PLE" sit at the frame edges.
+28.20–29.20 Hold. THE DECLARATION OF INDEPENDENCE · 1776 fades in below the ring in small caps at 70% opacity.
+29.20–30.00 The O ring irises closed to black, matching frame 0 exactly.
+
+CHOREOGRAPHY
+The pace is about 2.3 words per second: a firm, unhurried reader. Stressed words land on beats: HAS, ARMIES, CONSENT, PLUNDERED, COASTS, BURNT, PEOPLE, UNITED, RIGHT, FREE, PLEDGE, HONOR. Every large word gets a 6–10 frame settle before the next word starts. Two silences are sacred: the 12-frame hold before the second HE HAS, and the hold before the finale. Fill the frame, then let it breathe.
+
+TYPE IMPLEMENTATION
+Render type with canvas fillText, drawing letter by letter with measured advances (measureText) so that individual letters can animate and be replaced by pictograms. Counter dives use each glyph's measured bounding box. Justification is computed, never eyeballed.
+
+AUDIO SYNC
+Render with audio off, but export window.cues = [{word, t}] for every word, using its landing time. This lets a voiceover be recorded to the cues, or the cues be retimed to match an existing voiceover.
+
+ENGINEERING
+Use one master timeline of 1800 frames. window.seek(t) renders the exact frame for time t deterministically, with no accumulated state. Seed every layout, echo, flicker, and knock offset once at init, and keep them fixed forever. Do not use CSS transitions, live physics, or live Math.random. The page autoplays and loops. Expose window.duration = 30. render(0) must equal render(30).
+
+QUALITY GATE
+Before returning, check these frames: 0.00, 3.80, 9.90, 11.30, 14.70, 16.90, 26.10, 27.80. Confirm all of the following:
+- the word order is exact
+- every line is flush to its measure
+- each pictogram reads as its letter
+- the REDCOATS, SHIP, and COASTLINE move with echo trails
+- red and navy appear only where specified
+- the dive lands inside PEOPLE's O, and the finale pullback reveals the same O
+- the loop is seamless
+Return the complete HTML implementation.
