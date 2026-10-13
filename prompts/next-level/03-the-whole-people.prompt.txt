@@ -1,0 +1,171 @@
+Create a 25.00-second particle typography film titled "THE WHOLE PEOPLE."
+
+Susan B. Anthony's argument is about who counts as "we." Make the audience the medium: a crowd of exactly 24,000 small human marks that becomes every word in the film.
+- Each qualifier in her sentence ("white male citizens," "male citizens") acts as a stencil that excludes most of the crowd from the word.
+- "The whole people" restores every single mark.
+No mark is ever created or destroyed. The count is conserved for all 25 seconds. That conservation is the film's argument.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. DELIVERABLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+One complete, self-contained HTML file.
+1920 × 1080. Exactly 25.00 seconds. Deterministic at 60fps: 1500 export frames.
+Rendering: WebGL2 instanced rendering. Run all particle motion in the vertex shader as closed-form functions of t.
+Embed fonts and everything else. Make no network requests.
+Silent autoplay preview, play/pause, and a scrubber, all outside the captured frame.
+Return a working implementation.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. LOCKED TEXT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use these words exactly and in this order, as two excerpts separated by a visible ellipsis mark (…):
+"It was we, the people; not we, the white male citizens; nor yet we, the male citizens; but we, the whole people, who formed the Union." … "not to the half of ourselves and the half of our posterity, but to the whole people—women as well as men."
+Capitalization may change. Show the "…" as a small typographic mark on screen during the transition, so the elision is honest.
+
+Final attribution (not spoken):
+SUSAN B. ANTHONY
+"IS IT A CRIME FOR A CITIZEN OF THE UNITED STATES TO VOTE?" · 1873
+
+The timing is authored. Do not claim synchronization with any recording.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. THE CROWD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+24,000 marks. Each one is a tiny, flat, standing human pictogram (head plus body), drawn from 10 neutral silhouette variants:
+- different heights and builds
+- coats, skirts, hats
+- children
+- a person with a cane
+Each mark gets a seeded variant, a scale of 0.8–1.2, and one of five warm paper tones.
+Do NOT encode race or sex by color or by any attribute the stencils select on. The exclusions are performed by the words, not by sorting people. That keeps the film about the language of exclusion, not a census.
+
+At wide shots the marks read as texture. At close shots they read as individual people. Render each one as an instanced quad that samples a 10-cell silhouette atlas generated procedurally at init.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. LAYOUT TARGETS (THE CORE TECHNIQUE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+At init, rasterize each layout to an offscreen canvas and sample target positions from its pixels:
+- the phrase "WE, THE PEOPLE"
+- the word WE alone
+- the stencil states
+- UNION
+- the two halves
+- the final composition
+Use blue-noise (Poisson-disk) sampling, weighted so the strokes are evenly filled.
+Each layout must supply exactly 24,000 targets. Pad with "margin" positions where needed: the dim edges and floor of the frame, where people stand and watch.
+
+Assign marks to targets so that each mark travels a short path:
+- Sort both sets along a Hilbert curve and pair them in order.
+- Then refine with a few rounds of local swaps.
+
+Motion between layouts:
+- Each mark follows a seeded curved path (quadratic, with a lateral offset proportional to travel distance), plus a closed-form curl-noise wobble that fades out on arrival.
+- Each mark's departure is staggered by its x-position, so formations sweep across the frame like a crowd responding to a call.
+- Arrival includes a tiny settle: 2–3 px, damped, closed form.
+
+Never integrate velocity. Never accumulate state.
+
+Readability: the text built from people must read at 960 × 540. Size each layout so the strokes are at least 9 marks thick.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. TYPOGRAPHY AND PALETTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Background: deep civic green-black #0E1512.
+Marks: warm paper tones from #E9DFC8 to #C9B48E.
+Stencil type: thin printer's ink lines #8C2F2B. These are the only red in the film, because they are the instruments of exclusion.
+Supporting words are set as conventional type in a refined serif (an OFL face such as Libre Caslon Text), paper-colored, used sparingly.
+Excluded marks wait in the dark margins at 35% brightness, still visible and still people.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. STORYBOARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+0.00–0.40
+Black.
+
+0.40–2.40 "It was we, the people;"
+The crowd is already standing: a dense, uneven field filling the lower two-thirds, seen from above at an angle.
+"It was" appears as small serif type. The crowd surges and forms WE, THE PEOPLE: every one of the 24,000 marks is inside the letters.
+Hold 20 frames.
+
+2.40–5.60 "not we, the white male citizens;"
+"not we, the" appears in serif.
+WHITE MALE CITIZENS appears as a red ink stencil laid over the crowd-built WE: a thin-lined rectangle with the words cut out of it.
+Only the marks that fall within the stencil's cutout letterforms remain. That is roughly one in six.
+Every other mark is pushed out of the word into the dim margins. They walk, they do not vanish.
+The remaining WE is sparse, thin, and barely legible. That is the point.
+
+5.60–8.60 "nor yet we, the male citizens;"
+The stencil is re-cut as MALE CITIZENS, a slightly wider cutout, with "nor yet we, the" in serif.
+More marks are admitted, roughly half. WE is still visibly incomplete: half its strokes are missing.
+
+8.60–12.20 "but we, the whole people, who formed the Union."
+"but we, the" appears.
+The stencil tears away: red lines split along the letterforms and fall off the bottom of the frame in pieces.
+THE WHOLE PEOPLE: every mark from the margins walks back in. The returning motion is the most fluid in the film, a full sweep from both edges.
+WE is complete and dense.
+Then "who formed the" appears in serif. The entire crowd re-forms as UNION:
+- one continuous formation
+- staggered from left to right
+- every mark accounted for
+At the frame edge, a small counter in a fixed tabular face reads 24,000. It stays constant throughout. Show it only here, as quiet proof.
+
+12.20–13.20 Transition
+The ellipsis "…" appears as three single marks stepping forward from the crowd. The camera eases closer.
+
+13.20–17.60 "not to the half of ourselves and the half of our posterity,"
+The crowd splits down the vertical center of the frame.
+- Left half: OURSELVES, built by 12,000 marks in full light.
+- Right half: POSTERITY, built by the other 12,000 marks rendered smaller, as children-scale variants.
+On "the half," each side dims to 35% in turn, showing each half alone.
+
+17.60–21.40 "but to the whole people—women as well as men."
+"but to the" appears.
+The halves rejoin. The center seam closes in a zipper motion from top to bottom.
+THE WHOLE PEOPLE re-forms at full brightness.
+On "women as well as men," the crowd forms WOMEN and MEN side by side at identical size and density. "as well as" sits between them in serif, at equal weight with the words around it.
+Hold.
+
+21.40–23.80 Final composition
+The camera pulls back. The crowd forms one final broad, low WE across the full frame width, with the earlier words shown as faint serif type above it.
+The red stencil fragments lie scattered on the floor at the bottom edge.
+The attribution appears top left.
+
+23.80–25.00 Closure
+Night falls across the crowd from left to right: each mark's brightness ramps to zero, staggered by x. Reach pure black by 24.90.
+Frame 25.00 must equal frame 0.00.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. ENGINEERING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Precompute all layouts and the pairings between consecutive layouts at init, and store them in float textures or vertex buffers.
+The vertex shader computes each mark's position from t, its layout pair, its seed, and its departure delay.
+Report the init time in the debug panel.
+
+Expose:
+- window.duration = 25
+- window.fps = 60
+- window.ready
+- window.seek(t)
+- window.renderFrame(n)
+- window.cues: [{ id, word, start, t, end }], with a separate id for every repeated word ("we" ×4, "the" ×8, and so on)
+- window.debug.markCount() must return 24000 at every timestamp: the conservation invariant
+
+preserveDrawingBuffer: true. Seeded hashes only.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. AUDIO-READY STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Layout transitions are the beats.
+Store them as a JSON list of { layoutId, start, duration, stagger }, so a future version can quantize every formation change to a music grid. The crowd can then "dance" between words on the downbeats.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+9. QUALITY GATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Check these frames: 1.80, 4.60, 7.40, 10.00, 11.80, 15.00, 16.80, 20.40, 22.80, 24.95.
+- The text order is exact, and the ellipsis is visible.
+- The excluded marks remain visible in the margins.
+- WE, THE PEOPLE, UNION, OURSELVES, POSTERITY, WOMEN, and MEN all read at half resolution.
+- The mark count is constant.
+- Ascending and shuffled seeks match.
+- 0.00 and 25.00 are black.
+Return the complete HTML.

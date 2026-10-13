@@ -1,0 +1,170 @@
+Create a 25.00-second architectural typography film titled "IN THE ARENA."
+
+Theodore Roosevelt separates the people who watch from the people who act. Build that separation as real 3D space: an amphitheater made of language.
+- The critics' words are carved into the stands, light and distant.
+- The doer's words are cut deep into the arena floor, heavy and close.
+The camera begins among the spectators and descends, tier by tier, until it stands on the sand with the man in the arena.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. DELIVERABLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+One complete, self-contained HTML file.
+1920 × 1080. Exactly 25.00 seconds. Deterministic at 60fps: 1500 export frames.
+Rendering: real-time 3D in WebGL2.
+Write your own small matrix and shader code, or inline a minified copy of three.js r160 or later. Do not load anything from a CDN at runtime.
+Embed fonts, geometry generators, and textures (all procedural). Make no network requests.
+Silent autoplay preview, play/pause, and a scrubber, all outside the captured frame.
+Return a working implementation, not a storyboard mockup.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. LOCKED TEXT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use exactly these words, in this order:
+"It is not the critic who counts; not the man who points out how the strong man stumbles, or where the doer of deeds could have done them better. The credit belongs to the man who is actually in the arena, whose face is marred by dust and sweat and blood; who strives valiantly;"
+Capitalization may change. No added words.
+
+Final attribution (not spoken):
+THEODORE ROOSEVELT
+"CITIZENSHIP IN A REPUBLIC" · SORBONNE, PARIS · 23 APRIL 1910
+
+The timing is an authored interpretation.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. THE WORLD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+An elliptical amphitheater: 7 tiers of stone seating rising around a sand floor.
+
+The critics' clauses ("It is not the critic who counts…could have done them better.") are engraved into the riser faces of the tiers:
+- The text runs along the curved risers, one clause per tier, starting at the top tier.
+- It is cut shallow in a thin, wide sans, the color of weathered limestone.
+- It reads as commentary from above.
+
+The doer's clauses ("The credit belongs…who strives valiantly;") are on the arena floor:
+- They are cut deep into the sand and stone in a heavy condensed grotesque.
+- Each letter is a real recessed volume with walls, floor, and cast shadow. Build them by extruding glyph outlines downward into the floor mesh; triangulate the outlines with an ear-clipping or earcut routine embedded in the file.
+- ARENA is the largest word in the film.
+
+Lighting:
+- One low, late-afternoon sun with real shadow mapping.
+- Tier edges cast long shadow bands across the stands, and the sun rakes across the recessed floor letters.
+- Add a soft hemisphere fill.
+- Add atmospheric dust: a height-limited fog raymarched in a screen pass, its density shaped by seeded 3D noise, glowing where it crosses the sun. It must be a function of t, never accumulated.
+
+Palette:
+- Limestone #CBBFA8
+- Shadow umber #2E241C
+- Sand #B98F5E
+- Sky haze #E7D3B0
+- Blood #6E0F12
+- Sweat sheen: specular only, no hue
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. MATERIAL STORY: DUST, SWEAT, BLOOD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+On "whose face is marred by dust and sweat and blood," three material passes act on the deep-cut floor lettering of FACE, which sits beside ARENA. Each completes before the next begins:
+- DUST: grit accumulates on the letters' upper faces. Drive it with a noise-thresholded mask whose coverage rises with progress. The roughness rises too. Faint motes lift from the edges.
+- SWEAT: a wet clearcoat sweeps across the letters, catching the low sun as a moving specular streak. Darken the albedo slightly where it is wet.
+- BLOOD: dark red seeps into the recessed letter floors and pools along the inner walls, flowing to the lowest points first. The fill level is driven by the letter's depth and its distance to the walls. It reads as color filling engraving, not as gore.
+All three remain visible to the end.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. STORYBOARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+0.00–0.40
+Black. Then sun haze opens onto the top tier.
+
+0.40–3.60 "It is not the critic who counts;"
+The camera sits high in the uppermost tier, looking across the bowl.
+- The clause is engraved along the riser at eye level, revealing letter by letter as a raking light passes over it.
+- Its letters are shallow and pale.
+- CRITIC is slightly larger, but still the voice of the stands.
+
+3.60–8.20 "not the man who points out how the strong man stumbles,"
+The camera begins a slow descending spiral: down one tier per clause, always keeping the active line on screen and front-readable.
+- POINTS OUT: a thin engraved leader line extends from the word toward the floor below.
+- STUMBLES: the word's baseline breaks. The last three letters sit one step lower on the next tier's tread, as if it missed a step. The stone stays clean; only the word is broken.
+
+8.20–11.40 "or where the doer of deeds could have done them better."
+Next tier down.
+- DOER is the first word in the stands that is cut deep. It hints at what is below.
+- "could have done them better" is engraved in the lightest weight of the whole film, nearly erased by wind.
+- The camera reaches the lowest tier. The sand floor fills the lower frame.
+
+11.40–14.40 "The credit belongs to the man who is actually in the arena,"
+THE DESCENT ENDS. The camera steps off the last tier and lowers to about 1.7 m above the sand: the eye height of the man in the arena.
+- The floor lettering is revealed by the sun as the camera turns toward it. A cloud-shadow edge slides off it, deterministically.
+- ACTUALLY gets a slight emphasis.
+- ARENA is enormous, cut into the floor. The camera sweeps low across its letters so the walls and shadows of the recesses read in true 3D.
+- Dust fog thickens at ground level.
+
+14.40–20.20 "whose face is marred by dust and sweat and blood;"
+FACE is cut into the floor beside ARENA. The camera settles over it at a three-quarter angle.
+- The three material passes run in spoken order on DUST, SWEAT, and BLOOD.
+- "and" and "by" are small, set flat on the sand.
+- Hold still after BLOOD for at least 15 frames.
+
+20.20–22.60 "who strives valiantly;"
+The camera tilts up from the floor as STRIVES VALIANTLY rises vertically:
+- A monolithic slab of stone extrudes up from the sand, with the words cut through it.
+- Sunlight passes through the cut letters and projects them onto the dust as volumetric light beams.
+- This is the one heroic camera move: a low-angle rise past the slab.
+
+22.60–24.20 FINAL REVEAL
+One continuous crane up and out, high above the bowl.
+- The whole amphitheater resolves as a single composition.
+- The critics' text rings the tiers like a faint inscription.
+- The floor lettering is bold, sunlit, and marked by dust, sweat, and blood.
+- The slab stands in the center, casting a long shadow that crosses CRITIC on its tier.
+- The attribution sits in the sky haze above the rim.
+
+24.20–25.00 Closure
+The sun sets across the bowl in 40 frames: the shadow band sweeps up the tiers and covers everything. Reach pure black by 24.90.
+Frame 25.00 must equal frame 0.00.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. CAMERA RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use a single physical camera with a fixed 35 mm-equivalent field of view, except one gentle widening during the final crane.
+The path is a single Catmull–Rom spline with authored keys, parameterized by arc length.
+- Speed changes only through explicit easing.
+- Look-at targets are the active word's center.
+- The camera is always level, except the low-angle rise at 20.20.
+Active text must face the camera within 25° during its reading hold.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. ENGINEERING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Build the full amphitheater and all lettering geometry once at init. Nothing is created per frame.
+Every uniform, transform, material mask, fog density, and cloud shadow is a pure function of t, using seeded noise only.
+No accumulation buffers.
+Shadow-map resolution must be at least 2048. Use PCF filtering.
+preserveDrawingBuffer: true.
+
+Expose:
+- window.duration = 25
+- window.fps = 60
+- window.ready
+- window.seek(t)
+- window.renderFrame(n)
+- window.cues: [{ id, word, start, t, end }]
+Give repeated words separate ids (for example "the" ×7, "man" ×3, "who" ×4).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. AUDIO-READY STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Store the camera spline keys and word cues in one JSON timeline.
+The descent is tempo-flexible: the number of tiers equals the number of clauses, so retiming to narration or to music bars only moves keys.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+9. QUALITY GATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Check these frames: 1.80, 5.60, 9.80, 13.00, 15.80, 17.60, 19.60, 21.40, 23.40, 24.95.
+- The text order is exact.
+- Every active line is readable and front-facing.
+- Recessed letters show real walls and shadows.
+- The material passes occur in order.
+- The slab's light beams carry readable letterforms.
+- The final crane shows the whole bowl.
+- Ascending and shuffled seeks match.
+- 0.00 and 25.00 are black.
+Return the complete HTML.

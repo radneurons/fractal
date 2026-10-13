@@ -1,0 +1,206 @@
+Create a 25.00-second elemental typography film titled "NOT LIGHT, BUT FIRE."
+
+Frederick Douglass is asking for force, not illumination. In this film each word arrives as the physical medium it names, and each new medium consumes the one before it:
+- Light is beautiful and passive.
+- Fire burns light away.
+- Rain is gentle; thunder breaks it.
+- Storm, whirlwind, and earthquake escalate from atmosphere, to rotation, to the ground itself splitting.
+
+The typography is the material being acted on. It is never a label placed over an effect.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. DELIVERABLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+One complete, self-contained HTML file.
+1920 × 1080. Exactly 25.00 seconds. Deterministic at 60fps: 1500 export frames.
+Rendering: WebGL2 fragment shaders, with Canvas 2D used only to rasterize glyphs at init.
+Embed fonts and every dependency. Make no runtime network requests.
+Silent autoplay preview, play/pause, and a scrubber, all outside the captured frame.
+Return a working implementation, not a mockup.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. LOCKED TEXT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use exactly these words, in this order:
+"For it is not light that is needed, but fire; it is not the gentle shower, but thunder. We need the storm, the whirlwind, and the earthquake."
+Capitalization may change. No other spoken words.
+
+Final attribution (not spoken):
+FREDERICK DOUGLASS
+ROCHESTER, NEW YORK · 5 JULY 1852
+FROM "WHAT TO THE SLAVE IS THE FOURTH OF JULY?"
+
+The timing is an authored interpretation. It does not claim synchronization with any recording.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. THE CORE TECHNIQUE: GLYPHS AS SIGNED DISTANCE FIELDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+At init, rasterize every word at high resolution and convert each one into a signed distance field texture. Use an exact Euclidean distance transform (for example Felzenszwalb–Huttenlocher) or a jump-flood pass on the GPU. Pack the fields into one atlas.
+
+Every visual effect reads these distance fields:
+- Light shafts escape through letter counters.
+- Fire burns along an expanding distance band.
+- Rain collects where the distance is negative.
+- Shockwaves displace the field.
+- Earthquake fault lines cut it.
+
+Because each effect samples distance, never a bitmap edge, the letters stay razor-sharp at any zoom. They can also thicken, erode, glow, char, or crack continuously.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. VISUAL IDENTITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Palette:
+- Soot black #0B0A09
+- Ash #2A2622
+- Paper bone #EFE6D2
+- Cold light #BFD7E6
+- Flame ramp #3A0A04 → #9E2A0B → #E8611A → #FFC15E → #FFF4D6
+- Storm slate #3C4650
+
+Typography:
+- One high-contrast serif for the full sentence. Use Playfair Display Black or an equivalent OFL face, embedded.
+- One condensed grotesque for the five elements: LIGHT, FIRE, SHOWER, THUNDER, EARTHQUAKE.
+- The elements are monumental, filling 60–90% of the frame width at their moment. Connectives sit at one quarter to one third of hero cap height and are always readable.
+
+Excluded:
+- lightning-bolt icons
+- stock fire footage
+- lens flares
+- emoji weather
+- generic particle fountains
+- camera shake on every word
+
+Every effect must be procedural and art-directed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. STORYBOARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+0.00–0.40
+Pure black.
+
+0.40–3.20 "For it is not light"
+"For it is not" appears in small paper-bone serif. "not" gets a hairline underline that stays.
+LIGHT forms in cold light. A soft source sits behind the word, and volumetric shafts pour through the counters and gaps of the letters toward the viewer. Do this with a screen-space radial light-scattering pass that is masked by the distance field.
+It is quiet and beautiful, and that is the point: this is what is being refused.
+
+3.20–5.40 "that is needed, but fire;"
+"that is needed, but" builds beneath.
+Ignition begins at LIGHT's baseline. A burn front climbs the letters, defined by the field threshold plus domain-warped fbm noise. Behind the front, the letters char to ash with an ember rim (a thin orange band at the threshold). The light shafts die as their source is consumed.
+FIRE does not fade in: it is the flame.
+- Domain-warped, rising fbm turbulence is clipped to FIRE's distance field, dilated by a breathing amount.
+- The tongues of flame are shaped by the letterforms.
+- The counters of FIRE stay dark and readable.
+Ember sparks:
+- 160 deterministic sparks, each on a closed-form path: seeded rise, sway, and lifetime, all derived from t.
+- No accumulated particle state.
+
+5.40–8.60 "it is not the gentle shower,"
+The fire gutters down to embers along FIRE's outline and holds as a dim glowing scar.
+Fine vertical rain streaks begin. Draw them in the shader from hashed columns: thin, cold, slow.
+GENTLE SHOWER is never drawn as solid text. It appears where the rain gathers:
+- Inside its distance field, streaks slow, bead, and pool.
+- The pooled water renders as a refractive surface that bends the ember scar behind it.
+The words read through water.
+
+8.60–11.00 "but thunder."
+Build "but" small. Then hold six frames of near-silence: the rain freezes in place.
+THUNDER is a pressure event, not lightning:
+- One four-frame white-out.
+- Then a single expanding shockwave ring travels from the center. It carries radial refraction displacement of everything on screen, a compression band followed by a rarefaction band.
+- THUNDER's letters are stretched radially by the passing wave and snap back to rigid form behind it.
+- The frozen rain shatters into short dashes that follow the wave outward.
+This is the one moment of full-frame impact in the film. Do not shake the camera anywhere else.
+
+11.00–13.00 "We need"
+Aftershock. The field rings and decays like a struck bell: two small echo rings at decreasing amplitude.
+WE NEED settles in heavy serif, low in the frame. It holds firm while everything around it still trembles.
+
+13.00–15.60 "the storm,"
+Wind arrives as a global flow field, a deterministic curl-noise advection evaluated in closed form.
+- All previous words drift into horizontal streaks: their distance fields are sampled with a wind-skew offset.
+- Wind-driven rain cuts across them at 30°.
+- STORM forms out of the slate clouds: a cloud-noise volume whose density is thresholded by STORM's distance field.
+
+15.60–18.40 "the whirlwind,"
+The wind closes into a vortex centered on the frame.
+- Apply a polar swirl distortion, with angle offset proportional to 1/r, to the entire type field.
+- Everything spirals inward.
+- WHIRLWIND is set on a logarithmic spiral path, one letter per arm position. It reads clockwise and unrolls as the vortex peaks.
+- At the peak the vortex inverts and releases.
+
+18.40–21.60 "and the earthquake."
+The ground breaks.
+- Generate a seeded Voronoi tectonic map: 7–9 plates with fault lines.
+- EARTHQUAKE spans the full width across three plates.
+- Each plate translates and rotates independently on authored, eased paths, a few percent of frame size.
+- The word splits cleanly along the fault lines, offset like rock strata.
+- The fault edges glow with residual fire: ember color appears where field depth meets the crack.
+- The camera holds still. The ground moves, the viewer does not.
+Then the plates lock into a new, slightly misregistered arrangement. The world has been changed.
+
+21.60–23.60 Final composition
+Pull back slightly to reveal the full sentence as the record of what happened. Each word stays in the state its element left it:
+- LIGHT: charred ash
+- FIRE: ember outline
+- GENTLE SHOWER: wet glass
+- THUNDER: its post-shock form
+- STORM: wind-streaked
+- WHIRLWIND: spiral
+- EARTHQUAKE: split across plates
+The attribution appears in reserved space, small, in paper bone.
+
+23.60–25.00 Closure
+All embers cool to black at once, along each word's distance-field gradient, from the edges inward. Reach pure black by 24.90.
+Frame 25.00 must exactly match frame 0.00.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. MOTION PRINCIPLES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+One principal action at a time. Each element consumes the previous one; nothing simply crossfades.
+Connective words enter as compact, quiet groups, in spoken order.
+Every hero word gets a clear readable hold: at least 18 frames fully legible before it is transformed.
+Readability beats spectacle: during a hero's hold, no effect may push the field contrast of its letters below 4.5:1.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. ENGINEERING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+One declarative timeline. Every spoken word gets: id, text, order index, entrance start, landing time (fully readable), readable end, element, and emphasis. Repeated words get separate ids ("it" ×2, "is" ×3, "not" ×2, "the" ×4, "but" ×2).
+
+Expose:
+- window.duration = 25
+- window.fps = 60
+- window.ready, a Promise that resolves after fonts load, the distance fields are built, and the shaders compile
+- window.seek(t)
+- window.renderFrame(n)
+- window.cues: [{ id, word, start, t, end }]
+
+Every shader uniform derives directly from t:
+- No feedback buffers.
+- No ping-pong accumulation.
+- No live randomness.
+- No requestAnimationFrame-dependent state.
+Use seeded hashes only.
+render(t) must be identical whether frames are visited in order or shuffled.
+Use preserveDrawingBuffer: true so frames can be captured.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. AUDIO-READY STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Treat the five elements as five "drops."
+Keep every effect parameterized by normalized local progress, so the same film can later be retimed to:
+(a) word timestamps from a narration, or
+(b) a music beat grid, where the drops land on downbeats.
+Store the timeline as JSON at the top of the file.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+9. QUALITY GATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Check these frames: 0.00, 2.40, 4.80, 7.40, 9.50, 12.00, 14.80, 17.40, 20.40, 22.80, 24.95.
+- Every word appears once, in order.
+- Each element word is readable during its hold.
+- FIRE's counters stay dark.
+- The THUNDER wave crosses the full frame.
+- EARTHQUAKE's split letters still read.
+- Ascending and shuffled renders match.
+- 0.00 and 25.00 are pure black.
+Return the complete HTML.

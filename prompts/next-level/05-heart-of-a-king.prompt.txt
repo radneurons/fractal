@@ -1,0 +1,185 @@
+Create a 25.00-second cartographic typography film titled "THE HEART OF A KING."
+
+Elizabeth I tells her army that her body may be weak but her resolve is not. Make that change of strength happen inside the letters themselves. Every word uses one variable font, and its weight axis carries the story:
+- hairline for "weak and feeble"
+- black for "the heart and stomach of a king"
+The same glyphs thicken continuously. They are never swapped for a bolder copy.
+
+The world is a hand-engraved 16th-century sea chart:
+- The coastline of England is typeset from the speech itself.
+- The enemy fleet is made of words.
+- The border of the realm is a line of type that holds.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. DELIVERABLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+One complete, self-contained HTML file.
+1920 × 1080. Exactly 25.00 seconds. Deterministic at 60fps: 1500 export frames.
+
+Rendering: Canvas 2D, plus SVG or WebGL2 if useful.
+
+Variable font: embed an OFL variable font with at least weight and optical-size axes, such as Fraunces (wght 100–900, opsz 9–144, SOFT, WONK) or Newsreader.
+Produce real interpolated outlines. Either:
+- use an embedded font engine that supports variation instances, such as fontkit, getting glyph paths at arbitrary axis values; or
+- render through SVG text with font-variation-settings, if capture remains deterministic.
+
+Embed every dependency. Make no network requests.
+Silent autoplay preview, play/pause, and a scrubber, all outside the captured frame.
+Return a working implementation.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. LOCKED TEXT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use exactly these words, in this order:
+"I know I have the body of a weak and feeble woman; but I have the heart and stomach of a king, and of a king of England too, and think foul scorn that Parma or Spain, or any prince of Europe, should dare to invade the borders of my realm;"
+Capitalization may change. No added words.
+
+Final attribution (not spoken):
+ELIZABETH I
+SPEECH TO THE TROOPS AT TILBURY · AUGUST 1588
+TEXT AS RECORDED BY LEONEL SHARP
+
+The text survives through a later written account. The attribution must say so, as above. The timing is authored.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. VISUAL IDENTITY: ENGRAVED SEA CHART
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Paper: laid vellum #EDE3CC with stationary chain lines and fibers attached to world coordinates.
+Ink: iron-gall #23201B.
+One accent: vermilion #B23A26, used only for the borders of the realm and for KING.
+Washes: a pale sea wash (#C9D3CB) under the hatching.
+
+Every tone is made with engraving hatch, never flat fills. Implement hatching as a shader or a procedural line generator:
+- Draw parallel lines whose spacing and thickness encode tone, following a direction field.
+- The sea is hatched horizontally, with fine wave ripples, a closed-form sine field drifting slowly.
+- Land is cross-hatched.
+- Shadows of ships and letters are denser hatch, not darker fills.
+Add compass roses and rhumb lines: thin ink lines radiating from two windroses, as on a portolan chart.
+
+Excluded:
+- photographic textures
+- sepia filters
+- drop shadows
+- 3D ships
+- cannon fire
+- explosions
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. SIGNATURE TECHNIQUES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A. WEIGHT AS RESOLVE. One continuous axis animation drives the central transformation. Make wght and opsz functions of t, applied per glyph with a stagger.
+
+B. TYPE-ON-PATH COASTLINE. England's southern and eastern coast is drawn as a smooth Bézier path. The words "and of a king of England too" are typeset along it:
+- Each glyph is placed by arc length and rotated to the tangent.
+- Keep kerning-aware spacing along the curve.
+- The coastline line itself is the baseline.
+
+C. WORD-SHIPS. PARMA, SPAIN, and PRINCE OF EUROPE are each set as the hull of a ship:
+- The word is the hull, in solid ink.
+- Above it rise engraved masts and hatched sails, generated procedurally from the word's width so the sails scale to the hull.
+- Each ship rides the hatched sea with a gentle closed-form pitch and roll.
+
+D. THE BORDER HOLDS. "the borders of my realm" is a vermilion line of type that runs along the coast, parallel to and just offshore of the coastline type. When the fleet reaches it, the border does not move. Instead its weight axis rises from 300 to 900 in place, and the ships stop against it, turn about, and recede.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. STORYBOARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+0.00–0.40
+Black.
+
+0.40–2.40 "I know I have the body"
+The camera holds close on blank vellum in raking light. Ink lines draw themselves: the words appear as if engraved in real time. A burin stroke reveals each glyph along its outline: stroke-reveal of the outline, then hatch fill.
+
+2.40–5.40 "of a weak and feeble woman;"
+WEAK AND FEEBLE WOMAN appears at wght 100, opsz 9: the hairline extreme.
+- The letters tremble slightly: per-glyph sub-pixel offsets from a closed-form noise.
+- The ink looks thin, almost dry.
+- It is large but fragile, occupying 70% of the frame width.
+
+5.40–9.40 "but I have the heart and stomach of a king,"
+"but I have the" appears at normal weight.
+HEART AND STOMACH OF A KING: the camera stays fixed while the SAME glyphs of the previous line (WEAK AND FEEBLE WOMAN) gain weight from 100 to 900 over 2.4 s, letter by letter from left to right. Simultaneously the line is re-set:
+- The old words fade out word by word.
+- The new words grow from those exact positions at the same, rising weight.
+Then KING locks at wght 900, opsz 144, in vermilion, and the trembling stops dead.
+This is the showstopper. Readability holds throughout.
+
+9.40–12.60 "and of a king of England too,"
+The camera pulls back and rotates 6° to reveal that KING sits at the southeast corner of an engraved chart.
+- The coastline of England draws itself from KING outward along its path, typeset with "and of a king of England too."
+- Cross-hatched land fills in behind the coast.
+- The windroses and rhumb lines fade up.
+
+12.60–15.40 "and think foul scorn"
+FOUL SCORN is printed with a bitten-ink texture: rough edges, as if the plate were over-etched. Make the edges with outline displacement driven by seeded noise.
+A single ink spatter blooms beside it: a seeded, branching, procedural blot.
+
+15.40–19.20 "that Parma or Spain, or any prince of Europe,"
+Three word-ships enter from the right edge across the hatched sea, one per name, staggered.
+- PARMA and SPAIN are full ships.
+- "or any prince of Europe" is a smaller ship with a longer hull.
+- Connectives ("that," "or") are set as small sea-chart labels in italic, floating on the water.
+- The ships cast hatched reflections in the sea.
+
+19.20–22.20 "should dare to invade the borders of my realm;"
+"should dare to invade" sits on the open sea in italic.
+- The fleet advances toward the coast.
+- THE BORDERS OF MY REALM writes itself in vermilion as a type-on-path line just offshore.
+- The ships reach it and stop. The border thickens from wght 300 to 900. The ships come about, turning 180° on authored arcs, and recede toward the right edge, growing smaller.
+
+22.20–23.80 Final composition
+The full chart is visible:
+- the coast of type
+- the vermilion border
+- the receding fleet
+- KING at the corner
+- the windroses
+- the earlier hairline line, still faintly visible as an ink ghost on the paper
+The attribution appears in a hatched cartouche with a strapwork border, lower left.
+
+23.80–25.00 Closure
+Ink darkness floods in as a crosshatch that densifies everywhere until it reaches solid black by 24.90.
+Frame 25.00 must equal frame 0.00.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. CAMERA AND MOTION RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use a single 2D camera with gentle, deliberate moves. Most motion is in the type and the hatching, not the camera.
+Each hero word reaches readability and holds for at least 18 frames.
+Sea ripple and ship pitch are subtle and continuous, but never cross active text.
+One principal action at a time.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. ENGINEERING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use one declarative timeline with id, text, order index, start, landing time, readable end, axis values over time (wght, opsz), and placement (block, path, or ship). Give "I" ×3, "of" ×6, "a" ×3, "king" ×2, "and" ×4, "the" ×3, "or" ×2, and so on separate ids.
+
+Cache glyph outlines for axis instances, quantized to steps of 10 wght units, and interpolate between cached steps. Every frame must still be a pure function of t.
+
+Expose:
+- window.duration = 25
+- window.fps = 60
+- window.ready
+- window.seek(t)
+- window.renderFrame(n)
+- window.cues: [{ id, word, start, t, end }]
+Seeded randomness only. Hatch lines are attached to world coordinates; they do not crawl.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. AUDIO-READY STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The weight axis is the film's dynamics. Expose a single "intensity" curve, mapped to wght, that a future version could drive from the loudness envelope of a music track. Quiet passages go hairline; loud passages go black.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+9. QUALITY GATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Check these frames: 1.60, 4.20, 6.60, 7.80, 9.00, 11.40, 14.00, 17.40, 20.40, 21.60, 23.00, 24.95.
+- The text order is exact.
+- The weight change is continuous, with no glyph swap: check intermediate frames at wght 300, 500, and 700.
+- The coast text follows its path with correct tangents.
+- The ships read as both ships and words.
+- The fleet never crosses the border.
+- Hatching stays fixed to the paper.
+- Ascending and shuffled seeks match.
+- 0.00 and 25.00 are black.
+Return the complete HTML.
