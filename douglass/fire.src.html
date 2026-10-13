@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Not Light, But Fire</title>
+<style>
+  html,body{margin:0;background:#050403;color:#cfc6b4;font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+  #stage{position:relative;width:min(100vw,calc((100vh - 58px) * 16 / 9));aspect-ratio:16/9;margin:0 auto;background:#000}
+  #c{display:block;width:100%;height:100%}
+  #bar{display:flex;gap:12px;align-items:center;max-width:1100px;margin:0 auto;padding:12px 16px}
+  #bar button{background:#1d1915;color:#efe6d2;border:1px solid #3a322a;border-radius:6px;padding:6px 12px;font:inherit;cursor:pointer}
+  #bar input[type=range]{flex:1}
+  #tc{font-variant-numeric:tabular-nums;min-width:64px;text-align:right}
+  body.capture #bar{display:none}
+  body.capture #stage{width:1920px;height:1080px;margin:0}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c" width="1920" height="1080"></canvas></div>
+<div id="bar">
+  <button id="pp" type="button">Pause</button>
+  <input id="scrub" type="range" min="0" max="1499" step="1" value="0" aria-label="Timeline">
+  <span id="tc">0.00 s</span>
+</div>
+<script>const FONT_DATA = /*FONTDATA*/;</script>
+<script>
+(() => {
+'use strict';
+const SW = 1920, SH = 1080, FPS = 60, DUR = 25, NF = 1500, FR = 1 / FPS;
+const WORLD = { w: 3840, h: 2160 };
+const ACAP = 150;      // atlas cap height (px)
+const SPREAD = 22;     // SDF half-range (atlas px)
+
+// ── math ──
+const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, p) => a + (b - a) * p;
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const eIO = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const eOut = p => 1 - Math.pow(1 - p, 3);
+const eIn = p => p * p * p;
+
+// ── the locked text, one record per spoken word ──
+// [id, text, style, landing t, readable end]
+// styles: 0 serif connective, 1 LIGHT, 2 FIRE, 3 SHOWER-glass, 4 THUNDER, 5 STORM, 7 EARTHQUAKE, 8 WE NEED (heavy, fixed)
+const SPEECH = [
+  ['for', 'For', 0, 0.70, 5.4], ['it1', 'it', 0, 0.82, 5.4], ['is1', 'is', 0, 0.94, 5.4], ['not1', 'not', 0, 1.10, 5.4],
+  ['light', 'LIGHT', 1, 2.00, 4.9],
+  ['that', 'that', 0, 3.30, 5.4], ['is2', 'is', 0, 3.42, 5.4], ['needed', 'needed,', 0, 3.60, 5.4], ['but1', 'but', 0, 3.85, 5.4],
+  ['fire', 'FIRE;', 2, 5.10, 6.4],
+  ['it2', 'it', 0, 5.65, 8.6], ['is3', 'is', 0, 5.75, 8.6], ['not2', 'not', 0, 5.85, 8.6], ['the1', 'the', 0, 5.97, 8.6],
+  ['gentle', 'GENTLE', 3, 7.00, 8.6], ['shower', 'SHOWER,', 3, 7.90, 8.6],
+  ['but2', 'but', 0, 8.75, 11.0], ['thunder', 'THUNDER.', 4, 9.30, 11.0],
+  ['we', 'We', 8, 11.20, 13.0], ['need', 'need', 8, 11.45, 13.0],
+  ['the2', 'the', 0, 13.15, 15.6], ['storm', 'STORM,', 5, 14.30, 15.6],
+  ['the3', 'the', 0, 15.75, 18.4], ['whirlwind', 'WHIRLWIND,', 6, 17.60, 18.4],
+  ['and', 'and', 0, 18.55, 21.6], ['the4', 'the', 0, 18.70, 21.6], ['earthquake', 'EARTHQUAKE.', 7, 19.30, 21.6]
+];
+const ATTR = ['FREDERICK DOUGLASS', 'ROCHESTER, NEW YORK · 5 JULY 1852', 'FROM “WHAT TO THE SLAVE IS THE FOURTH OF JULY?”'];
+
+// ── fonts (Canvas 2D is used only to rasterise glyphs at init) ──
+const FAM = { serif: 'PlayfairD', cond: 'OswaldB' };
+async function loadFonts() {
+  const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0)).buffer;
+  const a = new FontFace(FAM.serif, b64(FONT_DATA['playfair-900']), { weight: '900' });
+  const b = new FontFace(FAM.cond, b64(FONT_DATA['oswald-700']), { weight: '700' });
+  await Promise.all([a.load(), b.load()]);
+  document.fonts.add(a); document.fonts.add(b);
+}
+const mc = document.createElement('canvas').getContext('2d');
+function fontCSS(fam, px) { return `${fam === FAM.serif ? 900 : 700} ${px}px "${fam}"`; }
+function capRatio(fam) { mc.font = fontCSS(fam, 200); return mc.measureText('H').actualBoundingBoxAscent / 200; }
+
+// exact Euclidean distance transform (Felzenszwalb & Huttenlocher)
+function edt1(f, n, d, v, z) {
+  let k = 0; v[0] = 0; z[0] = -1e20; z[1] = 1e20;
+  for (let q = 1; q < n; q++) {
+    let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+    while (s <= z[k]) { k--; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); }
+    k++; v[k] = q; z[k] = s; z[k + 1] = 1e20;
+  }
+  k = 0;
+  for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; d[q] = (q - v[k]) * (q - v[k]) + f[v[k]]; }
+}
+function edt2(grid, w, h) {
+  const n = Math.max(w, h), f = new Float64Array(n), d = new Float64Array(n), v = new Int32Array(n), z = new Float64Array(n + 1);
+  for (let x = 0; x < w; x++) { for (let y = 0; y < h; y++) f[y] = grid[y * w + x]; edt1(f, h, d, v, z); for (let y = 0; y < h; y++) grid[y * w + x] = d[y]; }
+  for (let y = 0; y < h; y++) { for (let x = 0; x < w; x++) f[x] = grid[y * w + x]; edt1(f, w, d, v, z); for (let x = 0; x < w; x++) grid[y * w + x] = d[x]; }
+}
+// rasterise a string and return its signed distance field (Uint8, 128 = edge, lower = inside)
+function makeSDF(text, fam, acap = ACAP) {
+  const cr = capRatio(fam), px = acap / cr;
+  mc.font = fontCSS(fam, px);
+  const m = mc.measureText(text);
+  const pad = SPREAD + 4;
+  const asc = Math.ceil(Math.max(m.actualBoundingBoxAscent, acap)), desc = Math.ceil(Math.max(m.actualBoundingBoxDescent, acap * .28));
+  const left = Math.ceil(m.actualBoundingBoxLeft);
+  const w = Math.ceil(m.actualBoundingBoxRight + left) + pad * 2, h = asc + desc + pad * 2;
+  const cv2 = document.createElement('canvas'); cv2.width = w; cv2.height = h;
+  const c = cv2.getContext('2d');
+  c.font = fontCSS(fam, px); c.fillStyle = '#fff'; c.fontKerning = 'normal';
+  c.fillText(text, pad + left, pad + asc);
+  const img = c.getImageData(0, 0, w, h).data;
+  const N = w * h, inF = new Float64Array(N), outF = new Float64Array(N);
+  for (let i = 0; i < N; i++) { const a = img[i * 4 + 3] / 255; inF[i] = a > .5 ? 0 : 1e20; outF[i] = a > .5 ? 1e20 : 0; }
+  edt2(inF, w, h); edt2(outF, w, h);
+  const out = new Uint8Array(N);
+  for (let i = 0; i < N; i++) {
+    const sd = Math.sqrt(inF[i]) - Math.sqrt(outF[i]);   // >0 outside, <0 inside
+    out[i] = Math.round(clamp(.5 + sd / (2 * SPREAD)) * 255);
+  }
+  return { w, h, data: out, base: pad + asc, x0: pad + left, adv: m.width, acap };
+}
+
+// ── layout in world units ──
+const WORDS = [];   // render records
+let ATLAS = null, ATW = 4096, ATH = 0;
+const WL = [];      // whirlwind letters
+function build() {
+  const crS = capRatio(FAM.serif), crC = capRatio(FAM.cond);
+  const items = [];
+  const add = (rec, x, y, cap) => {
+    const fam = (rec.style === 0 || rec.style === 8 || rec.style === 9) ? FAM.serif : FAM.cond;
+    const s = makeSDF(rec.text, fam, rec.style === 9 ? 60 : ACAP);
+    const k = cap / s.acap;
+    const it = { ...rec, sdf: s, k, cap, x, y, wx0: x - s.x0 * k, wy0: y - s.base * k, ww: s.w * k, wh: s.h * k, adv: s.adv * k };
+    items.push(it);
+    return it;
+  };
+  const R = {}; SPEECH.forEach((r, i) => { R[r[0]] = { id: r[0], text: r[1], style: r[2], t: r[3], end: r[4], idx: i + 1 }; });
+  const sp = (cap) => cap * .3;
+  const row = (ids, x, y, cap) => { let cx = x; const out = []; for (const id of ids) { const it = add(R[id], cx, y, cap); out.push(it); cx += it.adv + sp(cap); } return out; };
+  // Band A
+  const CAPL = 400, CAPS = 66;
+  row(['for', 'it1', 'is1', 'not1'], 300, 300, CAPS);
+  const L = add(R.light, 300, 800, CAPL);
+  const fx = L.x + L.adv + 260;
+  row(['that', 'is2', 'needed', 'but1'], fx, 300, CAPS);
+  const F = add(R.fire, fx, 800, CAPL);
+  // Band B
+  row(['it2', 'is3', 'not2', 'the1'], 300, 1000, CAPS);
+  const G = row(['gentle', 'shower'], 300, 1340, 250);
+  const tx = G[1].x + G[1].adv + 200;
+  add(R.but2, tx, 1000, CAPS);
+  add(R.thunder, tx, 1340, 250);
+  // Band C
+  const we = add(R.we, 300, 1640, 120); add(R.need, 300 + we.adv + sp(120), 1640, 120);
+  const t2 = add(R.the2, 1050, 1490 + CAPS, CAPS);
+  add(R.storm, t2.x + t2.adv + sp(CAPS), 1700, 230);
+  // whirlwind spiral centre
+  WHIRL.cx = 2930; WHIRL.cy = 1770; WHIRL.R = 290;
+  add(R.the3, WHIRL.cx - WHIRL.R - 250, WHIRL.cy - WHIRL.R * .45, CAPS);
+  // Band D
+  row(['and', 'the4'], 300, 1775, CAPS);
+  add(R.earthquake, 300, 2055, 250);
+  // attribution (not spoken)
+  ATTR.forEach((s, i) => add({ id: 'attr' + i, text: s, style: 9, t: 22.4 + i * .12, end: 30 }, 2760, 400 + i * 50, i ? 24 : 40));
+  // WHIRLWIND letters, one SDF each, set on a logarithmic spiral (clockwise, outer → inner)
+  const letters = 'WHIRLWIND,'.split('');
+  letters.forEach((ch, i) => { const s = makeSDF(ch, FAM.cond); WL.push({ ch, sdf: s, k: 112 / ACAP, cap: 112 }); });
+  // pack atlas
+  let x = 0, y = 0, rowH = 0;
+  const all = [...items.map(i => i.sdf), ...WL.map(l => l.sdf)];
+  for (const s of all) {
+    if (x + s.w > ATW) { x = 0; y += rowH + 2; rowH = 0; }
+    s.ax = x; s.ay = y; x += s.w + 2; rowH = Math.max(rowH, s.h);
+  }
+  ATH = y + rowH;
+  ATLAS = new Uint8Array(ATW * ATH).fill(255);
+  for (const s of all) for (let r = 0; r < s.h; r++) ATLAS.set(s.data.subarray(r * s.w, (r + 1) * s.w), (s.ay + r) * ATW + s.ax);
+  for (const it of items) WORDS.push(it);
+  // lookups
+  WORDS.forEach(w => { BY[w.id] = w; });
+  window.cues = SPEECH.map(r => ({ id: r[0], word: r[1].replace(/[.,;]/g, '').toLowerCase(), start: +(r[3] - ENTER({ style: r[2] })).toFixed(3), t: r[3], end: r[4] }));
+}
+const BY = {};
+const WHIRL = {};
+const ENTER = w => ({ 0: .12, 1: .7, 2: .7, 3: .9, 4: .02, 5: .9, 6: 1.4, 7: .2, 8: .3, 9: .4 })[w.style];
+
+// ── GL ──
+const gl = document.getElementById('c').getContext('webgl2', { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false });
+const VS = `#version 300 es
+in vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }`;
+const FS = `#version 300 es
+precision highp float;
+uniform sampler2D uA;
+uniform vec2 uAS;
+uniform vec4 uCam;          // cx, cy, zoom, t
+uniform int uN;
+uniform vec4 uR[40];        // world rect x0,y0,x1,y1
+uniform vec4 uU[40];        // atlas px rect x0,y0,x1,y1
+uniform vec4 uS[40];        // style, reveal, k (world per atlas px), cap
+uniform vec4 uB[40];        // baseline y, x0 (pen), extra, extra
+uniform vec4 uWL[10];       // whirl letters: cx, cy, angle, alpha
+uniform vec4 uWU[10];       // whirl letter atlas rect
+uniform vec4 uLight;        // cx, cy, radius, amount
+uniform vec4 uBurn;         // front, flameAmt, ashAmt, _
+uniform vec4 uFire;         // form, gutter, scar, _
+uniform vec4 uRain;         // amount, time, angleRad, freezeT
+uniform vec4 uFill;         // gentle, shower, _, _
+uniform vec4 uWave;         // cx, cy, radius, amp
+uniform vec4 uWave2;        // echo radius1, amp1, radius2, amp2
+uniform vec4 uWind;         // amount, stormForm, residual, _
+uniform vec4 uVort;         // cx, cy, R, strength
+uniform vec4 uQuake;        // progress(0..1 shake), lock(0..1), glow, _
+uniform vec4 uPlates[8];    // seed x, seed y, final dx, final dy
+uniform vec4 uPlateR[8];    // final rot, phase, _, _
+uniform vec4 uEnd;          // erode, fade, white, _
+uniform vec4 uUnder;        // underline rect x0,y,x1, alpha
+uniform sampler2D uTile0, uTile1;   // up to 8 candidate words per 32×32 world tile
+uniform vec2 uTileN;
+uniform ivec4 uIdx;         // LIGHT, FIRE, GENTLE, SHOWER
+out vec4 o;
+
+const float SPREAD = ${SPREAD}.0;
+float h11(float n){ return fract(sin(n*127.1)*43758.5453); }
+float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
+  return mix(mix(h21(i),h21(i+vec2(1,0)),f.x), mix(h21(i+vec2(0,1)),h21(i+1.),f.x), f.y); }
+float fbm(vec2 p){ float a=.5, s=0.; for(int i=0;i<5;i++){ s+=a*vnoise(p); p=p*2.03+vec2(17.,9.); a*=.5; } return s; }
+float fbm3(vec2 p){ float a=.5, s=0.; for(int i=0;i<3;i++){ s+=a*vnoise(p); p=p*2.03+vec2(17.,9.); a*=.5; } return s; }
+mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
+
+float sdW(int i, vec2 p){
+  vec4 r = uR[i];
+  if (p.x < r.x || p.y < r.y || p.x > r.z || p.y > r.w) return SPREAD * uS[i].z;
+  vec2 f = (p - r.xy) / (r.zw - r.xy);
+  vec2 ap = mix(uU[i].xy, uU[i].zw, f);
+  float v = texture(uA, ap / uAS).r;
+  return (v - .5) * 2. * SPREAD * uS[i].z;
+}
+float sdL(int i, vec2 p){   // whirlwind letter
+  vec4 L = uWL[i];
+  vec2 q = rot(L.z) * (p - L.xy);
+  vec4 u = uWU[i];
+  float k = 112. / 150.;
+  vec2 sz = (u.zw - u.xy) * k;
+  vec2 f = q / sz + .5;
+  if (f.x < 0. || f.y < 0. || f.x > 1. || f.y > 1.) return SPREAD * k;
+  float v = texture(uA, mix(u.xy, u.zw, f) / uAS).r;
+  return (v - .5) * 2. * SPREAD * k;
+}
+vec3 ramp(float h){
+  vec3 a=vec3(.227,.039,.016), b=vec3(.62,.165,.043), c=vec3(.91,.38,.10), d=vec3(1.,.757,.37), e=vec3(1.,.957,.84);
+  h = clamp(h,0.,1.);
+  if (h < .25) return mix(vec3(0.), a, h/.25);
+  if (h < .45) return mix(a, b, (h-.25)/.2);
+  if (h < .65) return mix(b, c, (h-.45)/.2);
+  if (h < .85) return mix(c, d, (h-.65)/.2);
+  return mix(d, e, (h-.85)/.15);
+}
+float rainField(vec2 p, float tt, float ang, float density){
+  vec2 r = rot(ang) * p;
+  float colW = 11.;
+  float ci = floor(r.x / colW);
+  if (h11(ci) > density) return 0.;
+  float speed = 1300. + 700.*h11(ci+3.1);
+  float len = 70. + 90.*h11(ci+7.3);
+  float period = 420. + 380.*h11(ci+5.7);
+  float y = r.y - tt*speed - h11(ci+11.9)*4000.;
+  float seg = mod(y, period);
+  float streak = smoothstep(len, len*.2, seg) * smoothstep(0., 6., seg);
+  float x = fract(r.x / colW) - .5 - (h11(ci+13.)-.5)*.5;
+  return streak * smoothstep(.16, .0, abs(x));
+}
+
+void main(){
+  vec2 s = vec2(gl_FragCoord.x, ${SH}.0 - gl_FragCoord.y);
+  float z = uCam.z, t = uCam.w;
+  vec2 p0 = uCam.xy + (s - vec2(${SW / 2}.0, ${SH / 2}.0)) / z;
+  float aa = 1.0 / z;
+  // ── domain warps (in order of the events) ──
+  vec2 p = p0;
+  // earthquake plates
+  float faultGlow = 0.;
+  if (uQuake.x > 0.) {
+    float d1 = 1e9, d2 = 1e9; int id = 0;
+    for (int i = 0; i < 8; i++) { float d = distance(p0, uPlates[i].xy); if (d < d1) { d2 = d1; d1 = d; id = i; } else if (d < d2) d2 = d; }
+    vec4 P = uPlates[id]; vec4 PR = uPlateR[id];
+    float sh = uQuake.x * (1. - uQuake.y);
+    float wob = sin(t * 23. + PR.y) * 14. * sh + sin(t * 37. + PR.y * 2.) * 7. * sh;
+    vec2 off = P.zw * uQuake.y + vec2(wob, wob * .6) * uQuake.x;
+    float ang = PR.x * uQuake.y + sin(t * 19. + PR.y) * .004 * sh;
+    p = P.xy + rot(-ang) * (p0 - P.xy) - off;
+    faultGlow = smoothstep(9., 0., d2 - d1) * uQuake.z;
+  }
+  vec2 pq = p;   // after the plates, before the vortex (the spiral letters ride the vortex, they are not smeared by it)
+  // whirlwind vortex
+  if (uVort.w != 0.) {
+    vec2 d = p - uVort.xy; float r = length(d);
+    float a = uVort.w * (uVort.z * .4) / (r + uVort.z * .18) * smoothstep(uVort.z * 1.25, uVort.z * .1, r);
+    p = uVort.xy + rot(a) * d;
+  }
+  // thunder: pressure wave and its echoes
+  vec2 pw = p; float waveBright = 0.;
+  {
+    vec2 d = p - uWave.xy; float r = length(d) + 1e-3; vec2 n = d / r;
+    for (int k = 0; k < 3; k++) {
+      float R = k == 0 ? uWave.z : (k == 1 ? uWave2.x : uWave2.z);
+      float A = k == 0 ? uWave.w : (k == 1 ? uWave2.y : uWave2.w);
+      if (A <= 0.) continue;
+      float x = (r - R) / 90.;
+      float prof = x * exp(-x * x);
+      pw -= n * A * prof;
+      waveBright += A / 60. * exp(-x * x) * step(0., -x + 1.2);
+    }
+  }
+  // ── background: soot with stationary ash variation ──
+  vec3 col = mix(vec3(.043,.039,.035), vec3(.09,.078,.066), vnoise(p0 / 340.) * .7 + vnoise(p0 / 70.) * .25);
+
+  // ── light shafts behind LIGHT ──
+  int iL = uIdx.x, iG = uIdx.z;
+  if (uLight.w > 0.) {
+    vec2 c = uLight.xy; float R = uLight.z;
+    float dist = length(pw - c);
+    if (dist < R * 2.2) {
+      float acc = 0.;
+      float jit = h21(gl_FragCoord.xy) / 30.;   // deterministic per-pixel dither against banding
+      for (int k = 0; k < 30; k++) {
+        float f = float(k) / 30. + jit;
+        vec2 q = mix(pw, c, f);
+        vec2 dq = (q - c) / vec2(R * .8, R * .3);
+        float src = exp(-dot(dq, dq));
+        float cov = smoothstep(-2., 2., sdW(iL, q));   // 1 where open (not blocked by a letter)
+        acc += src * cov * (1. - f * .5);
+      }
+      acc /= 30.;
+      acc *= smoothstep(R * 2.2, R * 1.4, dist);
+      col += vec3(.75,.84,.9) * acc * 1.6 * uLight.w;
+      vec2 dg = (pw - c) / vec2(R * 1.3, R * .7);
+      col += vec3(.75,.84,.9) * exp(-dot(dg, dg)) * .035 * uLight.w;
+    }
+  }
+
+  // ── rain ──
+  float rain = 0.;
+  if (uRain.x > 0.) {
+    vec2 pr = pw;
+    if (uRain.w > 0.) { vec2 d = pr - uWave.xy; pr -= normalize(d + 1e-3) * uRain.w * 900.; }
+    rain = rainField(pr, uRain.y, uRain.z, .55) * uRain.x;
+    if (uRain.w > 0.) rain *= step(.5, fract(pr.y / 22.)) * (1. - clamp(uRain.w * 1.6, 0., 1.));
+  }
+
+  // ── words ──
+  float wind = uWind.x;
+  ivec2 tc = ivec2(clamp(floor(pw / 32.), vec2(0.), uTileN - 1.));
+  vec4 ta = texelFetch(uTile0, tc, 0) * 255., tb = texelFetch(uTile1, tc, 0) * 255.;
+  for (int kk = 0; kk < 8; kk++) {
+    float fi = kk < 4 ? ta[kk] : tb[kk - 4];
+    if (fi < .5) break;
+    int i = int(fi + .5) - 1;
+    vec4 S = uS[i]; int st = int(S.x); float rev = S.y; if (rev <= 0.) continue;
+    if (st == 6) continue;
+    vec4 R = uR[i]; float cap = S.w;
+    vec2 q = (st == 8) ? p0 : pw;
+    float m = cap * 1.2;
+    if (q.x < R.x - m || q.y < R.y - m || q.x > R.z + m || q.y > R.w + m) continue;
+    float d = sdW(i, q);
+    // wind streaks (storm): ink smears downwind
+    float wAmt = wind * (st == 5 ? 0. : .6) + (st == 5 ? uWind.z : 0.);
+    float streak = 0.;
+    if (wAmt > 0.) {
+      float wsum = 0.;
+      for (int k = 1; k < 9; k++) {
+        float fk = float(k);
+        float dk = sdW(i, q - vec2(fk * 11. * wAmt, sin(q.x * .013 + fk * .7) * 3. * wAmt));
+        float wk = (1. - fk / 9.);
+        streak += smoothstep(aa * 2., -aa * 2., dk) * wk; wsum += wk;
+      }
+      streak = streak / wsum * min(wAmt * 1.6, 1.) * .75;
+    }
+    d += uEnd.x;
+    float cov = max(smoothstep(aa, -aa, d), streak * (1. - uEnd.y));
+    float yN = (uB[i].x - q.y) / cap;   // 0 at baseline, 1 at cap height
+    if (st == 0 || st == 8 || st == 9) {
+      float a = cov * rev * (st == 9 ? .8 : .92);
+      col = mix(col, vec3(.937,.902,.824), a);
+    } else if (st == 1) {   // LIGHT → ash
+      vec2 ln = (q - R.xy) / cap;
+      float nb = fbm(ln * 3.2) - .5;
+      float burnV = uBurn.x * 1.45 - .2 - yN + nb * .35;           // > 0 burnt
+      vec3 cold = vec3(.749,.843,.902) * (.8 + .2 * clamp(yN, 0., 1.)) * (.85 + .15 * rev);
+      col += vec3(.6,.75,.85) * exp(-max(d, 0.) / (.05 * cap)) * .22 * uLight.w * step(0., d);
+      vec3 ash = mix(vec3(.21,.19,.17), vec3(.30,.27,.24), fbm(ln * 9.));
+      ash += vec3(.9,.3,.05) * smoothstep(.82, .95, fbm(ln * 14. + 3.)) * .25 * uBurn.z;
+      vec3 c = burnV > 0. ? ash : cold;
+      float rim = exp(-abs(burnV) * 28.) * uBurn.y;
+      c = mix(c, ramp(.8 + .2 * rim), clamp(rim * 1.3, 0., 1.));
+      col = mix(col, c, cov * rev);
+      // flames licking above the front, inside the letter's dilated shape
+      if (uBurn.y > 0.) {
+        float above = -burnV;
+        float fl = fbm(vec2(ln.x * 5., ln.y * 3. + t * 2.6)) ;
+        float heat = exp(-max(above, 0.) * 6.) * smoothstep(.06 * cap, -.02 * cap, d - fl * .05 * cap) * step(0., above) * uBurn.y;
+        col += ramp(heat * (.6 + fl * .6)) * heat;
+      }
+    } else if (st == 2) {   // FIRE: the flame is the word
+      vec2 ln = (q - R.xy) / cap;
+      vec2 w = vec2(fbm3(ln * 2.2 + vec2(0., t * 1.3)), fbm3(ln * 2.2 + vec2(5.2, t * 1.1)));
+      float n = fbm(vec2(ln.x * 3.4, ln.y * 2.6 + t * 2.4) + w * 1.3);
+      float form = uFire.x, gut = uFire.y;
+      float dUp = sdW(i, q + vec2(0., n * cap * .30 * form * (1. - gut)));
+      float heatOut = smoothstep(.10 * cap, -.05 * cap, dUp - (n - .45) * .2 * cap) * form;
+      float core = smoothstep(.0, -.06 * cap, d) * form;
+      float heat = max(heatOut * (.55 + .5 * n), core * (.78 + .22 * n));
+      heat *= 1. - gut * .92;
+      col += ramp(heat) * heat * 1.25;
+      // ember scar after the fire gutters
+      float rimE = smoothstep(.022 * cap, 0., abs(d + .012 * cap)) * uFire.z;
+      float flick = .65 + .35 * fbm(vec2(ln.x * 9., t * 1.7));
+      col = mix(col, vec3(.16,.05,.03), smoothstep(aa, -aa, d) * uFire.z * .8);
+      col += ramp(.62 + .2 * flick) * rimE * flick * 1.1;
+    } else if (st == 3) {   // SHOWER: words exist only where water collects
+      vec2 ln = (q - R.xy) / (R.zw - R.xy);
+      float fill = (i == iG) ? uFill.x : uFill.y;
+      float lvl = clamp(fill * 1.35 - ln.x * .35, 0., 1.);
+      float filled = step(yN, lvl * 1.08 - .02);
+      vec2 e = vec2(2., 0.);
+      vec2 g = vec2(sdW(i, q + e.xy) - sdW(i, q - e.xy), sdW(i, q + e.yx) - sdW(i, q - e.yx));
+      float bev = smoothstep(-.09 * cap, 0., d);
+      vec3 nrm = normalize(vec3(-g * 1.6 * bev, 1.));
+      vec3 L = normalize(vec3(-.5, -.7, .6));
+      float spec = pow(max(dot(reflect(-L, nrm), vec3(0,0,1)), 0.), 36.);
+      vec2 rq = q + nrm.xy * 40.;
+      vec3 behind = mix(vec3(.043,.039,.035), vec3(.09,.078,.066), vnoise(rq / 340.) * .7 + vnoise(rq / 70.) * .25);
+      vec3 glass = behind * .7 + vec3(.58,.71,.81) * (.34 + .3 * bev) + spec * vec3(.95,.97,1.) * .9;
+      float bead = smoothstep(.55, .9, vnoise(q / 7.)) * smoothstep(-.05 * cap, -.01 * cap, d) * .6;
+      glass += bead * vec3(.8,.9,1.);
+      col = mix(col, glass, cov * filled * rev);
+      // wet trace of the unfilled part: rain slows and beads along the letter
+      col += vec3(.6,.72,.82) * cov * (1. - filled) * rev * .12;
+    } else if (st == 4) {   // THUNDER
+      vec3 c = vec3(.97,.94,.88);
+      col = mix(col, c, cov * rev);
+    } else if (st == 5) {   // STORM forms out of cloud
+      vec2 ln = (q - R.xy) / cap;
+      float cl = fbm(ln * 1.9 + vec2(t * .35, 0.));
+      float th = mix(-.32 * cap, .015 * cap, uWind.y) + (cl - .5) * .14 * cap;
+      float c2 = smoothstep(aa, -aa, d - th - uEnd.x * 0.);
+      vec3 sc = mix(vec3(.235,.275,.314), vec3(.70,.75,.79), .55 + cl * .5);
+      float edge = min(min(q.x - (R.x - m), (R.z + m) - q.x), min(q.y - (R.y - m), (R.w + m) - q.y));
+      float fog = smoothstep(.45, .8, cl) * smoothstep(0., .9 * cap, edge) * exp(-max(d, 0.) / (.35 * cap)) * .45 * uWind.y * (1. - uEnd.y);
+      col = mix(col, vec3(.235,.275,.314), fog);
+      col = mix(col, sc, c2 * rev);
+    } else if (st == 7) {   // EARTHQUAKE
+      col = mix(col, vec3(.95,.92,.86), cov * rev);
+    }
+  }
+  // underline under the first "not"
+  if (uUnder.w > 0.) {
+    float u = step(uUnder.x, pw.x) * step(pw.x, mix(uUnder.x, uUnder.z, uUnder.w)) * smoothstep(1.8 + aa, aa, abs(pw.y - uUnder.y));
+    col = mix(col, vec3(.937,.902,.824), u * .9);
+  }
+  // ── WHIRLWIND letters on the spiral ──
+  if (distance(pq, uVort.xy) < uVort.z * 1.7) for (int i = 0; i < 10; i++) {
+    vec4 L = uWL[i]; if (L.w <= 0.) continue;
+    if (distance(pq, L.xy) > 160.) continue;
+    float d = sdL(i, pq) + uEnd.x;
+    float cov = smoothstep(aa, -aa, d);
+    col = mix(col, vec3(.93,.91,.86), cov * L.w);
+  }
+  // vortex dust: faint spiral streaks
+  if (uVort.w != 0.) {
+    vec2 d = p0 - uVort.xy; float r = length(d), a = atan(d.y, d.x);
+    float sp = sin(a * 3. + log(r + 1.) * 9. - t * 6.);
+    col += vec3(.24,.27,.30) * smoothstep(.75, 1., sp) * smoothstep(uVort.z * 1.8, uVort.z * .3, r) * min(abs(uVort.w), 1.) * .35;
+  }
+  // rain on top (it sits in front of the type)
+  col += vec3(.62,.72,.80) * rain * .55;
+  // fault lines glow with residual fire
+  col += ramp(.7) * faultGlow * .9;
+  col = mix(col, ramp(.55), faultGlow * .35);
+  // wave front shimmer
+  col += vec3(.95,.93,.88) * clamp(waveBright, 0., 1.) * .08;
+  // white-out, fade
+  col = mix(col, vec3(1.,.975,.93), uEnd.z);
+  col *= 1. - uEnd.y;
+  o = vec4(col, 1.);
+}`;
+// sparks: closed-form point sprites
+const VS_SP = `#version 300 es
+precision highp float;
+in float aId;
+uniform vec4 uCam; uniform vec4 uBox; uniform float uAmt;
+out float vA;
+float h11(float n){ return fract(sin(n*127.1)*43758.5453); }
+void main(){
+  float id = aId, t = uCam.w;
+  float life = .9 + .8 * h11(id + 1.);
+  float ph = h11(id + 2.) * life;
+  float age = mod(t + ph, life) / life;
+  float x0 = mix(uBox.x, uBox.z, h11(id + 3.));
+  float y0 = mix(uBox.y, uBox.w, .55 + .45 * h11(id + 4.));
+  float rise = 420. + 380. * h11(id + 5.);
+  vec2 w = vec2(x0 + sin(t * (1.2 + h11(id + 6.) * 2.) + id) * 40. * age, y0 - rise * age);
+  vec2 s = (w - uCam.xy) * uCam.z;
+  gl_Position = vec4(s.x / ${SW / 2}.0, -s.y / ${SH / 2}.0, 0., 1.);
+  gl_PointSize = (2. + 3.5 * h11(id + 7.)) * (1. - age * .6) * max(uCam.z, .5);
+  vA = (1. - age) * smoothstep(0., .1, age) * uAmt;
+}`;
+const FS_SP = `#version 300 es
+precision highp float; in float vA; out vec4 o;
+void main(){ vec2 c = gl_PointCoord - .5; float r = length(c); float a = smoothstep(.5, .1, r) * vA; o = vec4(vec3(1., .72, .32) * a, a); }`;
+
+let prg, progSp, quad, sparkBuf, tex;
+const U = {};
+function compile(vs, fs) {
+  const mk = (ty, src) => { const s = gl.createShader(ty); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
+  gl.bindAttribLocation(p, 0, 'p'); gl.bindAttribLocation(p, 0, 'aId');
+  gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+function setupGL() {
+  prg = compile(VS, FS); progSp = compile(VS_SP, FS_SP);
+  quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  sparkBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, sparkBuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(Array.from({ length: 160 }, (_, i) => i)), gl.STATIC_DRAW);
+  tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, ATW, ATH, 0, gl.RED, gl.UNSIGNED_BYTE, ATLAS);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  for (const n of ['uTile0', 'uTile1', 'uTileN', 'uIdx', 'uA', 'uAS', 'uCam', 'uN', 'uR', 'uU', 'uS', 'uB', 'uWL', 'uWU', 'uLight', 'uBurn', 'uFire', 'uRain', 'uFill', 'uWave', 'uWave2', 'uWind', 'uVort', 'uQuake', 'uPlates', 'uPlateR', 'uEnd', 'uUnder']) U[n] = gl.getUniformLocation(prg, n);
+  for (const n of ['uCam', 'uBox', 'uAmt']) U['sp_' + n] = gl.getUniformLocation(progSp, n);
+  // static uniforms
+  gl.useProgram(prg);
+  const R = new Float32Array(160), UU = new Float32Array(160), B = new Float32Array(160);
+  WORDS.forEach((w, i) => {
+    R.set([w.wx0, w.wy0, w.wx0 + w.ww, w.wy0 + w.wh], i * 4);
+    UU.set([w.sdf.ax, w.sdf.ay, w.sdf.ax + w.sdf.w, w.sdf.ay + w.sdf.h], i * 4);
+    B.set([w.y, w.x, 0, 0], i * 4);
+  });
+  gl.uniform4fv(U.uR, R); gl.uniform4fv(U.uU, UU); gl.uniform4fv(U.uB, B);
+  gl.uniform1i(U.uN, WORDS.length);
+  gl.uniform2f(U.uAS, ATW, ATH);
+  const WU = new Float32Array(40);
+  WL.forEach((l, i) => WU.set([l.sdf.ax, l.sdf.ay, l.sdf.ax + l.sdf.w, l.sdf.ay + l.sdf.h], i * 4));
+  gl.uniform4fv(U.uWU, WU);
+  // tectonic plates: three seeds along EARTHQUAKE, five elsewhere (seeded)
+  const E = BY.earthquake, ey = E.y - E.cap * .45, ex0 = E.x, ex1 = E.x + E.adv;
+  const seeds = [[lerp(ex0, ex1, .12), ey + 60], [lerp(ex0, ex1, .5), ey - 70], [lerp(ex0, ex1, .88), ey + 40],
+    [700, 600], [2000, 450], [3300, 900], [2400, 1400], [600, 1450]];
+  const fin = [[-34, 18, -.012], [22, -26, .009], [40, 14, -.007], [-10, -8, .003], [12, 10, -.004], [-14, 6, .005], [18, -12, -.006], [-8, 14, .004]];
+  const P = new Float32Array(32), PR = new Float32Array(32);
+  seeds.forEach((s, i) => { P.set([s[0], s[1], fin[i][0], fin[i][1]], i * 4); PR.set([fin[i][2], i * 1.7 + .3, 0, 0], i * 4); });
+  gl.uniform4fv(U.uPlates, P); gl.uniform4fv(U.uPlateR, PR);
+  // spatial tiles: candidate words per 32×32 world cell (expanded by effect reach)
+  const TS = 32, TX = Math.ceil(WORLD.w / TS), TY = Math.ceil(WORLD.h / TS);
+  const t0 = new Uint8Array(TX * TY * 4), t1 = new Uint8Array(TX * TY * 4), cnt = new Uint8Array(TX * TY);
+  WORDS.forEach((w, i) => {
+    const m = w.style === 2 ? w.cap * .7 : w.style === 5 ? w.cap * 1.0 : Math.max(w.cap * .3, 50);
+    const reach = m + 130;   // wind smear, wave and plate displacement
+    const x0 = Math.max(0, Math.floor((w.wx0 - reach) / TS)), x1 = Math.min(TX - 1, Math.floor((w.wx0 + w.ww + reach) / TS));
+    const y0 = Math.max(0, Math.floor((w.wy0 - reach) / TS)), y1 = Math.min(TY - 1, Math.floor((w.wy0 + w.wh + reach) / TS));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const c = y * TX + x, n = cnt[c]; if (n >= 8) { TILE_OVERFLOW++; continue; }
+      (n < 4 ? t0 : t1)[c * 4 + (n % 4)] = i + 1; cnt[c] = n + 1;
+    }
+  });
+  const mk = (data) => { const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, TX, TY, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); return tx; };
+  TILES = [mk(t0), mk(t1)];
+  gl.uniform2f(U.uTileN, TX, TY);
+  const idx = id => WORDS.findIndex(w => w.id === id);
+  gl.uniform4i(U.uIdx, idx('light'), idx('fire'), idx('gentle'), idx('shower'));
+}
+let TILES = [], TILE_OVERFLOW = 0;
+
+// ── camera ──
+let KEYS = [];
+function frameRect(x0, y0, x1, y1, fillW = .75, dy = 0) {
+  const w = x1 - x0, h = y1 - y0;
+  const z = Math.min(SW * fillW / w, SH * .82 / h);
+  return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 + dy, z };
+}
+const wb = id => { const w = BY[id]; return [w.x, w.y - w.cap, w.x + w.adv, w.y]; };
+const uni = (...bs) => [Math.min(...bs.map(b => b[0])), Math.min(...bs.map(b => b[1])), Math.max(...bs.map(b => b[2])), Math.max(...bs.map(b => b[3]))];
+function buildCamera() {
+  const K = (t, f) => KEYS.push({ t, ...f });
+  const L = wb('light'), F = wb('fire'), G = uni(wb('gentle'), wb('shower'), wb('it2')), T = uni(wb('thunder'), wb('but2'));
+  const W2 = uni(wb('we'), wb('need')), S = uni(wb('storm'), wb('the2'));
+  const V = [WHIRL.cx - WHIRL.R * 1.25, WHIRL.cy - WHIRL.R * 1.35, WHIRL.cx + WHIRL.R * 1.25, WHIRL.cy + WHIRL.R * 1.15];
+  const E = uni(wb('earthquake'), wb('and'));
+  K(0, frameRect(...uni(L, wb('for')), .70));
+  K(2.2, frameRect(...uni(L, wb('for')), .74));
+  K(3.2, frameRect(...uni(L, wb('for')), .72));
+  K(4.3, frameRect(...uni(L, F, wb('that')), .9));
+  K(5.3, frameRect(...uni(F, wb('that')), .66));
+  K(6.0, frameRect(...G, .9));
+  K(8.4, frameRect(...G, .92));
+  K(9.0, frameRect(...T, .72));
+  K(9.6, frameRect(...T, .70));
+  K(10.6, frameRect(...uni(T, G), .95));
+  K(11.3, frameRect(...uni(W2, wb('storm')), .62, -40));
+  K(12.9, frameRect(...uni(W2, wb('storm')), .64, -40));
+  K(13.6, frameRect(...S, .72));
+  K(15.3, frameRect(...S, .74));
+  K(16.0, frameRect(...V, .8));
+  K(18.2, frameRect(...V, .82));
+  K(18.8, frameRect(...E, .9));
+  K(21.4, frameRect(...E, .92));
+  const all = frameRect(0, 0, WORLD.w, WORLD.h, 1.0);
+  K(22.8, { ...all, z: Math.min(SW / WORLD.w, SH / WORLD.h) * 1.02 });
+  K(25.0, { ...all, z: Math.min(SW / WORLD.w, SH / WORLD.h) * 1.05 });
+}
+function camAt(t) {
+  if (t <= KEYS[0].t) return { ...KEYS[0] };
+  for (let i = 1; i < KEYS.length; i++) if (t <= KEYS[i].t) {
+    const a = KEYS[i - 1], b = KEYS[i], q = eIO((t - a.t) / (b.t - a.t));
+    return { cx: lerp(a.cx, b.cx, q), cy: lerp(a.cy, b.cy, q), z: Math.exp(lerp(Math.log(a.z), Math.log(b.z), q)) };
+  }
+  return { ...KEYS[KEYS.length - 1] };
+}
+
+// ── per-frame state: every value is a pure function of t ──
+function frameState(t) {
+  const S = {};
+  S.reveal = WORDS.map(w => {
+    if (w.style === 6) return 0;
+    if (w.style === 1) return eOut(prog(t, w.t - .7, w.t));
+    if (w.style === 2) return t >= w.t - .7 ? 1 : 0;
+    if (w.style === 3) return t >= w.t - 1.0 ? 1 : 0;
+    if (w.style === 4) return t >= w.t ? 1 : 0;
+    if (w.style === 5) return t >= w.t - .9 ? 1 : 0;
+    if (w.style === 7) return eOut(prog(t, w.t - .2, w.t));
+    return eOut(prog(t, w.t - ENTER(w), w.t));
+  });
+  const Lw = BY.light;
+  S.light = [Lw.x + Lw.adv / 2, Lw.y - Lw.cap * .5, Lw.adv * .5, eOut(prog(t, 1.0, 2.0)) * (1 - eIO(prog(t, 3.4, 4.4)))];
+  S.burn = [eIO(prog(t, 3.25, 4.9)), prog(t, 3.25, 3.5) * (1 - prog(t, 4.9, 5.6)), prog(t, 3.5, 4.4), 0];
+  S.fire = [eOut(prog(t, 4.4, 5.1)), eIO(prog(t, 5.6, 6.6)), eIO(prog(t, 5.9, 6.8)), 0];
+  const rainOn = eOut(prog(t, 5.5, 6.2)) * (1 - prog(t, 10.2, 10.5));
+  const storm = eOut(prog(t, 13.0, 13.8)) * (1 - eIO(prog(t, 15.2, 15.9)));
+  const rainT = t < 9.05 ? t : (t < 13 ? 9.05 : t);
+  S.rain = [Math.max(rainOn, storm * 1.3), rainT, t > 12.5 ? -30 * Math.PI / 180 : 0, t >= 9.27 && t < 12 ? prog(t, 9.27, 10.4) : 0];
+  S.fill = [eIO(prog(t, 6.1, 7.0)), eIO(prog(t, 7.0, 7.9)), 0, 0];
+  const Tw = BY.thunder;
+  const tc = [Tw.x + Tw.adv / 2, Tw.y - Tw.cap * .5];
+  const wt = t - 9.27;
+  S.wave = [tc[0], tc[1], wt > 0 ? wt * 2600 : -1e4, wt > 0 ? 70 * Math.exp(-wt * 1.1) * prog(t, 9.27, 9.3) : 0];
+  const e1 = t - 11.0, e2 = t - 11.8;
+  S.wave2 = [e1 > 0 ? e1 * 2200 : -1e4, e1 > 0 ? 24 * Math.exp(-e1 * 1.6) : 0, e2 > 0 ? e2 * 2200 : -1e4, e2 > 0 ? 10 * Math.exp(-e2 * 1.6) : 0];
+  S.wind = [storm * 1.0, eIO(prog(t, 13.4, 14.3)), t > 14.3 ? .45 * eOut(prog(t, 14.3, 15.0)) : 0, 0];
+  const vs = t < 15.6 ? 0 : t < 17.4 ? 2.4 * eIO(prog(t, 15.7, 17.4)) : t < 17.9 ? lerp(2.4, -.7, eIO(prog(t, 17.4, 17.9))) : lerp(-.7, 0, eIO(prog(t, 17.9, 18.4)));
+  S.vort = [WHIRL.cx, WHIRL.cy, WHIRL.R, vs];
+  S.quake = [prog(t, 19.25, 19.45), eIO(prog(t, 19.6, 21.0)), prog(t, 19.3, 19.5) * (1 - .6 * prog(t, 21.0, 22.0)), 0];
+  // whirlwind letters on a logarithmic spiral, read clockwise from the outside in
+  const WLs = new Float32Array(40);
+  const spin = (1 - eOut(prog(t, 16.0, 17.6))) * 3.2;
+  WL.forEach((l, i) => {
+    const th = -2.15 + i * .52 + spin;
+    const r = WHIRL.R * Math.exp(-i * .075);
+    const x = WHIRL.cx + Math.cos(th) * r, y = WHIRL.cy + Math.sin(th) * r;
+    const ap = eOut(prog(t, 16.2 + i * .13, 16.6 + i * .13));
+    WLs.set([x, y, th + Math.PI / 2, ap], i * 4);
+  });
+  S.wl = WLs;
+  const fade = prog(t, 23.6, 24.9);
+  S.end = [eIn(fade) * 40, t >= 24.9 ? 1 : eIn(fade), t >= 9.2 && t < 9.34 ? (t < 9.27 ? 1 : 1 - prog(t, 9.27, 9.34)) : 0, 0];
+  const nw = BY.not1;
+  S.under = [nw.x, nw.y + 12, nw.x + nw.adv, eOut(prog(t, 1.1, 1.5)) * (1 - prog(t, 23.6, 24.4))];
+  S.sparkAmt = prog(t, 4.5, 4.8) * (1 - prog(t, 6.2, 7.0));
+  return S;
+}
+
+function render(t) {
+  if (t >= DUR - 1e-9) t = 0;
+  gl.viewport(0, 0, SW, SH);
+  if (t < .4) { gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); return; }
+  const cam = camAt(t), S = frameState(t);
+  gl.useProgram(prg);
+  gl.disable(gl.BLEND);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(U.uA, 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, TILES[0]); gl.uniform1i(U.uTile0, 1);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, TILES[1]); gl.uniform1i(U.uTile1, 2);
+  gl.uniform4f(U.uCam, cam.cx, cam.cy, cam.z, t);
+  const SS = new Float32Array(160);
+  WORDS.forEach((w, i) => SS.set([w.style, S.reveal[i], w.k, w.cap], i * 4));
+  gl.uniform4fv(U.uS, SS);
+  gl.uniform4fv(U.uWL, S.wl);
+  gl.uniform4fv(U.uLight, S.light); gl.uniform4fv(U.uBurn, S.burn); gl.uniform4fv(U.uFire, S.fire);
+  gl.uniform4fv(U.uRain, S.rain); gl.uniform4fv(U.uFill, S.fill); gl.uniform4fv(U.uWave, S.wave); gl.uniform4fv(U.uWave2, S.wave2);
+  gl.uniform4fv(U.uWind, S.wind); gl.uniform4fv(U.uVort, S.vort); gl.uniform4fv(U.uQuake, S.quake); gl.uniform4fv(U.uEnd, S.end); gl.uniform4fv(U.uUnder, S.under);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  if (S.sparkAmt > 0) {
+    const F = BY.fire;
+    gl.useProgram(progSp);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.uniform4f(U.sp_uCam, cam.cx, cam.cy, cam.z, t);
+    gl.uniform4f(U.sp_uBox, F.x, F.y - F.cap, F.x + F.adv, F.y);
+    gl.uniform1f(U.sp_uAmt, S.sparkAmt);
+    gl.bindBuffer(gl.ARRAY_BUFFER, sparkBuf); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 1, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.POINTS, 0, 160);
+    gl.disable(gl.BLEND);
+  }
+}
+
+// ── playback & API ──
+let playing = true, t0 = null, tP = 0, ready = false;
+const capture = new URLSearchParams(location.search).has('capture');
+if (capture) document.body.classList.add('capture');
+const pp = document.getElementById('pp'), scrub = document.getElementById('scrub'), tcEl = document.getElementById('tc');
+function show(t) { scrub.value = String(Math.round(t * FPS) % NF); tcEl.textContent = t.toFixed(2) + ' s'; }
+function seek(t) { if (!ready) return; playing = false; pp.textContent = 'Play'; tP = clamp(t, 0, DUR); render(tP); gl.finish(); show(tP); }
+function tick(now) { if (playing && ready) { if (t0 === null) t0 = now - tP * 1000; const t = ((now - t0) / 1000) % DUR; render(t); show(t); tP = t; } requestAnimationFrame(tick); }
+pp.onclick = () => { if (playing) { playing = false; pp.textContent = 'Play'; } else { playing = true; t0 = null; pp.textContent = 'Pause'; } };
+scrub.oninput = () => seek(+scrub.value / FPS);
+window.duration = DUR; window.fps = FPS; window.seek = seek; window.renderFrame = n => seek(clamp(Math.round(n), 0, NF) / FPS);
+window.cues = [];
+window.ready = (async () => {
+  await loadFonts();
+  build(); setupGL(); buildCamera();
+  window.debug = {
+    words: WORDS.map(w => ({ id: w.id, style: w.style, x: w.x, y: w.y, adv: w.adv, cap: w.cap })), tileOverflow: () => TILE_OVERFLOW,
+    hashFrame: t => { seek(t); const px = new Uint8Array(SW * SH * 4); gl.readPixels(0, 0, SW, SH, gl.RGBA, gl.UNSIGNED_BYTE, px); let h = 2166136261; for (let i = 0; i < px.length; i += 7) { h ^= px[i]; h = Math.imul(h, 16777619); } return h >>> 0; },
+    isBlack: t => { seek(t); const px = new Uint8Array(SW * SH * 4); gl.readPixels(0, 0, SW, SH, gl.RGBA, gl.UNSIGNED_BYTE, px); for (let i = 0; i < px.length; i += 4) if (px[i] | px[i + 1] | px[i + 2]) return false; return true; }
+  };
+  ready = true; window.__ready = true;
+  if (capture) { playing = false; render(0); } else requestAnimationFrame(tick);
+  return true;
+})();
+})();
+</script>
+</body>
+</html>

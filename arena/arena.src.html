@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>In the Arena</title>
+<style>
+  html,body{margin:0;background:#0b0907;color:#d9cdb6;font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+  #stage{position:relative;width:min(100vw,calc((100vh - 58px) * 16 / 9));aspect-ratio:16/9;margin:0 auto;background:#000}
+  #c{display:block;width:100%;height:100%}
+  #bar{display:flex;gap:12px;align-items:center;max-width:1100px;margin:0 auto;padding:12px 16px}
+  #bar button{background:#231d17;color:#efe4cf;border:1px solid #43382c;border-radius:6px;padding:6px 12px;font:inherit;cursor:pointer}
+  #bar input[type=range]{flex:1}
+  #tc{font-variant-numeric:tabular-nums;min-width:64px;text-align:right}
+  body.capture #bar{display:none}
+  body.capture #stage{width:1920px;height:1080px;margin:0}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c" width="1920" height="1080"></canvas></div>
+<div id="bar">
+  <button id="pp" type="button">Pause</button>
+  <input id="scrub" type="range" min="0" max="1499" step="1" value="0" aria-label="Timeline">
+  <span id="tc">0.00 s</span>
+</div>
+<script>const FONT_DATA = /*FONTDATA*/;</script>
+<script>
+(() => {
+'use strict';
+const SW = 1920, SH = 1080, FPS = 60, DUR = 25, NF = 1500, FR = 1 / FPS;
+const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, p) => a + (b - a) * p;
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const eIO = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const eOut = p => 1 - Math.pow(1 - p, 3);
+const eIn = p => p * p * p;
+const DEG = Math.PI / 180;
+
+// ───────────── world ─────────────
+const A0 = 13, B0 = 9, TD = 1.4, TH = 1.5, NT = 6;    // floor ellipse, tier depth, tier height, tiers
+const ellA = k => A0 + (k - 1) * TD, ellB = k => B0 + (k - 1) * TD;  // riser k sits on ellipse k
+const FLOOR = { x0: -13, x1: 13, z0: -9, z1: 9, ppm: 104 };
+const SLAB = { w: 9, h: 4.4, x: -3.4, z: 0, th: .28, ppm: 190 };   // faces east; the western sun shines through its cut letters toward the camera
+
+// ───────────── locked text ─────────────
+// critics: clause per tier riser (reads left→right as seen from inside the bowl)
+// [id, text, landing t, readable end, style]  style: 0 normal, 1 deep (DOER), 2 faint (could have done them better)
+const RISER = [
+  { tier: 6, cap: .82, phi: -90, words: [['it', 'IT', .70], ['is1', 'IS', .82], ['not1', 'NOT', .95], ['the1', 'THE', 1.08], ['critic', 'CRITIC', 1.55], ['who1', 'WHO', 2.05], ['counts', 'COUNTS;', 2.50]] },
+  { tier: 5, cap: .74, phi: -100, words: [['not2', 'NOT', 3.80], ['the2', 'THE', 3.92], ['man1', 'MAN', 4.10], ['who2', 'WHO', 4.32], ['points', 'POINTS', 4.60], ['out', 'OUT', 4.90]] },
+  { tier: 4, cap: .66, phi: -110, words: [['how', 'HOW', 5.25], ['the3', 'THE', 5.38], ['strong', 'STRONG', 5.65], ['man2', 'MAN', 5.95], ['stumbles', 'STUM', 6.55]] },
+  { tier: 3, cap: .60, phi: -120, words: [['stumbles_b', 'BLES,', 6.80], ['or', 'OR', 8.30], ['where', 'WHERE', 8.45], ['the4', 'THE', 8.60], ['doer', 'DOER', 8.95, 1], ['of', 'OF', 9.20], ['deeds', 'DEEDS', 9.45]] },
+  { tier: 2, cap: .54, phi: -128, words: [['could', 'COULD', 9.95, 2], ['have', 'HAVE', 10.10, 2], ['done', 'DONE', 10.30, 2], ['them', 'THEM', 10.48, 2], ['better', 'BETTER.', 10.80, 2]] }
+];
+// doer: deep-cut floor lines. [id, text, t, capScale]
+const FLOORL = [
+  { z: -6.2, cap: .82, words: [['the5', 'THE', 11.55], ['credit', 'CREDIT', 11.85], ['belongs', 'BELONGS', 12.15], ['to', 'TO', 12.35], ['the6', 'THE', 12.45], ['man3', 'MAN', 12.65]] },
+  { z: -4.95, cap: .82, words: [['who3', 'WHO', 12.95], ['is2', 'IS', 13.07], ['actually', 'ACTUALLY', 13.40, 1.3], ['in', 'IN', 13.65], ['the7', 'THE', 13.78]] },
+  { z: -.55, cap: 3.7, words: [['arena', 'ARENA,', 14.25]] },
+  { z: 2.35, cap: .82, words: [['whose', 'WHOSE', 14.65], ['face', 'FACE', 15.00, 2.3], ['is3', 'IS', 15.25], ['marred', 'MARRED', 15.55], ['by', 'BY', 15.75]] },
+  { z: 4.75, cap: .72, words: [['dust', 'DUST', 16.20, 1.75], ['and1', 'AND', 17.00], ['sweat', 'SWEAT', 17.40, 1.75], ['and2', 'AND', 18.20], ['blood', 'BLOOD;', 18.60, 1.75]] }
+];
+const SLABW = [['who4', 'WHO', 20.35, .55], ['strives', 'STRIVES', 20.75, 1.25], ['valiantly', 'VALIANTLY;', 21.25, 1.25]];
+const ATTR = ['THEODORE ROOSEVELT', '“CITIZENSHIP IN A REPUBLIC” · SORBONNE, PARIS · 23 APRIL 1910'];
+
+// ───────────── fonts & distance fields ─────────────
+const FAM = { thin: 'MontL', heavy: 'OswB', attr: 'MontSB' };
+async function loadFonts() {
+  const b = s => Uint8Array.from(atob(s), c => c.charCodeAt(0)).buffer;
+  const f = [new FontFace(FAM.thin, b(FONT_DATA['montserrat-300']), { weight: '300' }), new FontFace(FAM.heavy, b(FONT_DATA['oswald-700']), { weight: '700' }), new FontFace(FAM.attr, b(FONT_DATA['montserrat-600']), { weight: '600' })];
+  await Promise.all(f.map(x => x.load())); f.forEach(x => document.fonts.add(x));
+}
+const fw = fam => fam === FAM.thin ? 300 : fam === FAM.heavy ? 700 : 600;
+const mctx = document.createElement('canvas').getContext('2d');
+function capR(fam) { mctx.font = `${fw(fam)} 200px "${fam}"`; return mctx.measureText('H').actualBoundingBoxAscent / 200; }
+function edt1(f, n, d, v, z) {
+  let k = 0; v[0] = 0; z[0] = -1e20; z[1] = 1e20;
+  for (let q = 1; q < n; q++) { let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); while (s <= z[k]) { k--; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); } k++; v[k] = q; z[k] = s; z[k + 1] = 1e20; }
+  k = 0; for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; d[q] = (q - v[k]) * (q - v[k]) + f[v[k]]; }
+}
+function edt2(g, w, h) {
+  const n = Math.max(w, h), f = new Float64Array(n), d = new Float64Array(n), v = new Int32Array(n), z = new Float64Array(n + 1);
+  for (let x = 0; x < w; x++) { for (let y = 0; y < h; y++) f[y] = g[y * w + x]; edt1(f, h, d, v, z); for (let y = 0; y < h; y++) g[y * w + x] = d[y]; }
+  for (let y = 0; y < h; y++) { for (let x = 0; x < w; x++) f[x] = g[y * w + x]; edt1(f, w, d, v, z); for (let x = 0; x < w; x++) g[y * w + x] = d[x]; }
+}
+// draw(ctx) paints white glyphs; returns an R8 SDF (128 = edge, lower = inside) with spread px
+function sdfCanvas(w, h, spread, draw) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const c = cv.getContext('2d'); c.fillStyle = '#fff'; draw(c);
+  const img = c.getImageData(0, 0, w, h).data, N = w * h, a = new Float64Array(N), b = new Float64Array(N);
+  for (let i = 0; i < N; i++) { const on = img[i * 4 + 3] > 127; a[i] = on ? 0 : 1e20; b[i] = on ? 1e20 : 0; }
+  edt2(a, w, h); edt2(b, w, h);
+  const out = new Uint8Array(N);
+  for (let i = 0; i < N; i++) out[i] = Math.round(clamp(.5 + (Math.sqrt(a[i]) - Math.sqrt(b[i])) / (2 * spread)) * 255);
+  return out;
+}
+function measure(fam, capPx, s) { mctx.font = `${fw(fam)} ${capPx / capR(fam)}px "${fam}"`; return mctx.measureText(s).width; }
+
+// ───────────── layout of every text surface ─────────────
+const T = { riser: [], floorWords: [], slabWords: [] };
+let RISER_ATLAS, FLOOR_TEX, SLAB_TEX;
+function arcTable(a, b) {   // cumulative arc length on ellipse from φ = -π
+  const n = 2048, s = new Float64Array(n + 1); let acc = 0, px = a * Math.cos(-Math.PI), pz = b * Math.sin(-Math.PI);
+  for (let i = 1; i <= n; i++) { const p = -Math.PI + i / n * 2 * Math.PI, x = a * Math.cos(p), z = b * Math.sin(p); acc += Math.hypot(x - px, z - pz); s[i] = acc; px = x; pz = z; }
+  return { s, n, at: phi => { const f = (phi + Math.PI) / (2 * Math.PI) * n, i = Math.floor(f); return lerp(s[i], s[Math.min(n, i + 1)], f - i); } };
+}
+const ARC = {};
+function buildText() {
+  // risers
+  const SP = 16, PX = 84;   // spread, cap px
+  const rows = [];
+  for (const R of RISER) {
+    const k = R.tier, ar = arcTable(ellA(k), ellB(k)); ARC[k] = ar;
+    const ppm = PX / R.cap, gap = .34 * R.cap;
+    const ws = R.words.map(w => { const wd = measure(FAM.thin, PX, w[1]) / ppm; return { id: w[0], text: w[1], t: w[2], style: w[3] || 0, wd }; });
+    const sCenter = ar.at(R.phi * DEG);
+    let lead = [];
+    if (k === 3) { const prev = T.riser.find(r => r.id === 'stumbles'); lead = ws.splice(0, 1); lead[0].s0 = ar.at(prev.phiEnd) + .08; lead[0].s1 = lead[0].s0 + lead[0].wd; lead[0].tier = k; T.riser.push(lead[0]); }
+    let total2 = 0; ws.forEach((w, i) => { total2 += w.wd + (i ? gap : 0); });
+    let s = sCenter - total2 / 2;
+    ws.forEach((w, i) => { if (i) s += gap; w.s0 = s; w.s1 = s + w.wd; w.tier = k; s += w.wd; T.riser.push(w);
+      if (w.id === 'stumbles') { let lo = -Math.PI, hi = Math.PI; for (let it = 0; it < 40; it++) { const m = (lo + hi) / 2; if (ar.at(m) < w.s1) lo = m; else hi = m; } w.phiEnd = lo; }
+    });
+    ws.unshift(...lead);
+    const all = ws;
+    const sStart = Math.min(...all.map(w => w.s0)) - 1.2;
+    const sEnd = Math.max(...all.map(w => w.s1)) + 1.2;
+    rows.push({ k, sStart, sEnd, ppm, cap: R.cap, ws, wpx: Math.ceil((sEnd - sStart) * ppm), hpx: Math.ceil(TH * ppm) });
+  }
+  // pack riser rows into one atlas
+  const AW = 4096; let y = 0; rows.forEach(r => { r.ax = 0; r.ay = y; y += r.hpx + 2; });
+  const AH = y; const atlas = new Uint8Array(AW * AH).fill(255);
+  for (const r of rows) {
+    const data = sdfCanvas(r.wpx, r.hpx, SP, c => {
+      c.font = `300 ${PX / capR(FAM.thin)}px "${FAM.thin}"`;
+      for (const w of r.ws) c.fillText(w.text, (w.s0 - r.sStart) * r.ppm, r.hpx * .74);
+    });
+    for (let rr = 0; rr < r.hpx; rr++) atlas.set(data.subarray(rr * r.wpx, (rr + 1) * r.wpx), (r.ay + rr) * AW + r.ax);
+  }
+  RISER_ATLAS = { data: atlas, w: AW, h: AH, rows, spread: SP };
+  // floor (one field over the whole floor rectangle; text "up" points south, away from the north-side camera)
+  const FW = Math.round((FLOOR.x1 - FLOOR.x0) * FLOOR.ppm), FH = Math.round((FLOOR.z1 - FLOOR.z0) * FLOOR.ppm), FSP = 20;
+  const items = [];
+  for (const L of FLOORL) {
+    const ws = L.words.map(w => { const cap = L.cap * (w[3] || 1); return { id: w[0], text: w[1], t: w[2], cap, wd: measure(FAM.heavy, cap * FLOOR.ppm, w[1]) / FLOOR.ppm }; });
+    const gap = L.cap * .42; let total = 0; ws.forEach((w, i) => { total += w.wd + (i ? gap : 0); });
+    // text x runs west→east as seen from the north looking south: east is screen-left, so mirror x
+    let x = -total / 2;
+    ws.forEach((w, i) => { if (i) x += gap; w.x0 = x; w.x1 = x + w.wd; w.base = L.z; x += w.wd; items.push(w); });
+  }
+  T.floorWords = items;
+  const fdata = sdfCanvas(FW, FH, FSP, c => {
+    for (const w of items) { c.font = `700 ${w.cap * FLOOR.ppm / capR(FAM.heavy)}px "${FAM.heavy}"`; c.fillText(w.text, (w.x0 - FLOOR.x0) * FLOOR.ppm, (w.base - FLOOR.z0) * FLOOR.ppm); }
+  });
+  FLOOR_TEX = { data: fdata, w: FW, h: FH, spread: FSP };
+  items.forEach(w => { w.wx0 = w.x0; w.wx1 = w.x1; w.wz0 = w.base - w.cap * 1.05; w.wz1 = w.base + .02; });
+  // slab (front face seen from the north; reading direction = world -x again)
+  const SWp = Math.round(SLAB.w * SLAB.ppm), SHp = Math.round(SLAB.h * SLAB.ppm), SSP = 18;
+  const sw = SLABW.map(w => ({ id: w[0], text: w[1], t: w[2], cap: w[3] }));
+  const lines = [[sw[0]], [sw[1]], [sw[2]]];
+  const baseY = [3.95, 2.62, 1.08];   // metres from slab bottom
+  lines.forEach((ln, li) => ln.forEach(w => { w.wd = measure(FAM.heavy, w.cap * SLAB.ppm, w.text) / SLAB.ppm; w.x0 = -SLAB.w / 2 + .55; w.base = baseY[li]; }));
+  // centre the two big lines, keep WHO at the left
+  sw[1].x0 = -sw[1].wd / 2; sw[2].x0 = -sw[2].wd / 2; sw[0].x0 = sw[2].x0;
+  T.slabWords = sw;
+  const sdata = sdfCanvas(SWp, SHp, SSP, c => {
+    for (const w of sw) { c.font = `700 ${w.cap * SLAB.ppm / capR(FAM.heavy)}px "${FAM.heavy}"`; c.fillText(w.text, (w.x0 + SLAB.w / 2) * SLAB.ppm, (SLAB.h - w.base) * SLAB.ppm); }
+  });
+  SLAB_TEX = { data: sdata, w: SWp, h: SHp, spread: SSP };
+}
+
+// ───────────── matrices ─────────────
+const M4 = {
+  persp(fy, asp, n, f) { const t = 1 / Math.tan(fy / 2); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]); },
+  ortho(l, r, b, t, n, f) { return new Float32Array([2 / (r - l), 0, 0, 0, 0, 2 / (t - b), 0, 0, 0, 0, -2 / (f - n), 0, -(r + l) / (r - l), -(t + b) / (t - b), -(f + n) / (f - n), 1]); },
+  look(e, c, u) {
+    let zx = e[0] - c[0], zy = e[1] - c[1], zz = e[2] - c[2]; let l = Math.hypot(zx, zy, zz); zx /= l; zy /= l; zz /= l;
+    let xx = u[1] * zz - u[2] * zy, xy = u[2] * zx - u[0] * zz, xz = u[0] * zy - u[1] * zx; l = Math.hypot(xx, xy, xz); xx /= l; xy /= l; xz /= l;
+    const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+    return new Float32Array([xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0, -(xx * e[0] + xy * e[1] + xz * e[2]), -(yx * e[0] + yy * e[1] + yz * e[2]), -(zx * e[0] + zy * e[1] + zz * e[2]), 1]);
+  },
+  mul(a, b) { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s; } return o; },
+  inv(m) {
+    const a = m, o = new Float32Array(16);
+    const b00 = a[0] * a[5] - a[1] * a[4], b01 = a[0] * a[6] - a[2] * a[4], b02 = a[0] * a[7] - a[3] * a[4], b03 = a[1] * a[6] - a[2] * a[5], b04 = a[1] * a[7] - a[3] * a[5], b05 = a[2] * a[7] - a[3] * a[6];
+    const b06 = a[8] * a[13] - a[9] * a[12], b07 = a[8] * a[14] - a[10] * a[12], b08 = a[8] * a[15] - a[11] * a[12], b09 = a[9] * a[14] - a[10] * a[13], b10 = a[9] * a[15] - a[11] * a[13], b11 = a[10] * a[15] - a[11] * a[14];
+    const det = 1 / (b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06);
+    o[0] = (a[5] * b11 - a[6] * b10 + a[7] * b09) * det; o[1] = (a[2] * b10 - a[1] * b11 - a[3] * b09) * det; o[2] = (a[13] * b05 - a[14] * b04 + a[15] * b03) * det; o[3] = (a[10] * b04 - a[9] * b05 - a[11] * b03) * det;
+    o[4] = (a[6] * b08 - a[4] * b11 - a[7] * b07) * det; o[5] = (a[0] * b11 - a[2] * b08 + a[3] * b07) * det; o[6] = (a[14] * b02 - a[12] * b05 - a[15] * b01) * det; o[7] = (a[8] * b05 - a[10] * b02 + a[11] * b01) * det;
+    o[8] = (a[4] * b10 - a[5] * b08 + a[7] * b06) * det; o[9] = (a[1] * b08 - a[0] * b10 - a[3] * b06) * det; o[10] = (a[12] * b04 - a[13] * b02 + a[15] * b00) * det; o[11] = (a[9] * b02 - a[8] * b04 - a[11] * b00) * det;
+    o[12] = (a[5] * b07 - a[4] * b09 - a[6] * b06) * det; o[13] = (a[0] * b09 - a[1] * b07 + a[2] * b06) * det; o[14] = (a[13] * b01 - a[12] * b03 - a[14] * b00) * det; o[15] = (a[8] * b03 - a[9] * b01 + a[10] * b00) * det;
+    return o;
+  }
+};
+
+// ───────────── geometry ─────────────
+function buildGeometry() {
+  // interleaved: pos3 nrm3 s v tier  (tier: k for riser k, 0 tread/wall, -2 slab)
+  const V = [];
+  const seg = 256;
+  const pt = (a, b, p) => [a * Math.cos(p), b * Math.sin(p)];
+  const nrm = (a, b, p) => { const x = Math.cos(p) / a, z = Math.sin(p) / b, l = Math.hypot(x, z); return [x / l, z / l]; };
+  const quad = (p0, p1, p2, p3) => { V.push(...p0, ...p1, ...p2, ...p0, ...p2, ...p3); };
+  for (let k = 1; k <= NT + 1; k++) {
+    const a = ellA(k), b = ellB(k), ar = ARC[k] || arcTable(a, b);
+    const y0 = (k - 1) * TH, y1 = k === NT + 1 ? NT * TH + .7 : k * TH;
+    for (let i = 0; i < seg; i++) {
+      const p0 = -Math.PI + i / seg * 2 * Math.PI, p1 = -Math.PI + (i + 1) / seg * 2 * Math.PI;
+      const [x0, z0] = pt(a, b, p0), [x1, z1] = pt(a, b, p1), [nx0, nz0] = nrm(a, b, p0), [nx1, nz1] = nrm(a, b, p1);
+      const s0 = ar.at(p0), s1 = ar.at(p1), tf = k <= NT ? k : 0;
+      // riser faces inward (normal = -outward)
+      quad([x0, y0, z0, -nx0, 0, -nz0, s0, 0, tf], [x1, y0, z1, -nx1, 0, -nz1, s1, 0, tf], [x1, y1, z1, -nx1, 0, -nz1, s1, 1, tf], [x0, y1, z0, -nx0, 0, -nz0, s0, 1, tf]);
+      if (k <= NT) {   // tread from ellipse k to k+1 at height y1
+        const a2 = ellA(k + 1), b2 = ellB(k + 1); const [X0, Z0] = pt(a2, b2, p0), [X1, Z1] = pt(a2, b2, p1);
+        quad([x0, y1, z0, 0, 1, 0, s0, 0, 0], [X0, y1, Z0, 0, 1, 0, s0, 0, 0], [X1, y1, Z1, 0, 1, 0, s1, 0, 0], [x1, y1, z1, 0, 1, 0, s1, 0, 0]);
+      } else {         // parapet top
+        const a2 = a + .6, b2 = b + .6; const [X0, Z0] = pt(a2, b2, p0), [X1, Z1] = pt(a2, b2, p1);
+        quad([x0, y1, z0, 0, 1, 0, 0, 0, 0], [X0, y1, Z0, 0, 1, 0, 0, 0, 0], [X1, y1, Z1, 0, 1, 0, 0, 0, 0], [x1, y1, z1, 0, 1, 0, 0, 0, 0]);
+        const [G0x, G0z] = pt(a2 + 110, b2 + 110, p0), [G1x, G1z] = pt(a2 + 110, b2 + 110, p1), yg = y1 - .02;
+        quad([X0, yg, Z0, 0, 1, 0, 0, 0, -1], [G0x, yg, G0z, 0, 1, 0, 0, 0, -1], [G1x, yg, G1z, 0, 1, 0, 0, 0, -1], [X1, yg, Z1, 0, 1, 0, 0, 0, -1]);
+      }
+    }
+  }
+  GEO.tiers = new Float32Array(V);
+  // slab box (local: x ∈ [-w/2,w/2], y ∈ [0,h], z ∈ [-th/2, th/2]); front faces +z (north, toward the camera)
+  const S = [], w2 = SLAB.w / 2, h = SLAB.h, d = SLAB.th / 2;
+  const toW = p => [p[2], p[1], -p[0]];
+  const sq = (p0, p1, p2, p3, n, flag) => { const Q = [p0, p1, p2, p0, p2, p3]; for (const p of Q) S.push(...toW(p), ...toW(n), (p[0] + w2) / SLAB.w, p[1] / h, flag); };
+  sq([-w2, 0, d], [w2, 0, d], [w2, h, d], [-w2, h, d], [0, 0, 1], -2);       // front (cut letters)
+  sq([w2, 0, -d], [-w2, 0, -d], [-w2, h, -d], [w2, h, -d], [0, 0, -1], -2);  // back (cut letters)
+  sq([-w2, h, d], [w2, h, d], [w2, h, -d], [-w2, h, -d], [0, 1, 0], -3);     // top
+  sq([w2, 0, d], [w2, 0, -d], [w2, h, -d], [w2, h, d], [1, 0, 0], -3);
+  sq([-w2, 0, -d], [-w2, 0, d], [-w2, h, d], [-w2, h, -d], [-1, 0, 0], -3);
+  GEO.slab = new Float32Array(S);
+}
+const GEO = {};
+
+// ───────────── GL ─────────────
+const gl = document.getElementById('c').getContext('webgl2', { preserveDrawingBuffer: true, antialias: false });
+gl.getExtension('EXT_color_buffer_float');
+const COMMON = `
+uniform vec3 uSun; uniform vec3 uSunCol; uniform mat4 uLVP; uniform sampler2D uShadow; uniform float uT;
+float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h21(i),h21(i+vec2(1,0)),f.x), mix(h21(i+vec2(0,1)),h21(i+1.),f.x), f.y); }
+float fbm(vec2 p){ float a=.5,s=0.; for(int i=0;i<4;i++){ s+=a*vn(p); p=p*2.07+11.; a*=.5; } return s; }
+float shadowVis(vec3 wp, vec3 n){
+  vec4 lp = uLVP * vec4(wp + n * .06, 1.); vec3 q = lp.xyz / lp.w * .5 + .5;
+  if (q.x < 0. || q.y < 0. || q.x > 1. || q.y > 1.) return 1.;
+  float s = 0.; vec2 px = vec2(1. / 2048.);
+  for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) s += step(q.z - .0015, texture(uShadow, q.xy + vec2(i, j) * px).r);
+  return s / 9.;
+}
+float shadow1(vec3 wp){
+  vec4 lp = uLVP * vec4(wp, 1.); vec3 q = lp.xyz / lp.w * .5 + .5;
+  if (q.x < 0. || q.y < 0. || q.x > 1. || q.y > 1.) return 1.;
+  return step(q.z - .002, texture(uShadow, q.xy).r);
+}
+vec3 shade(vec3 alb, vec3 n, vec3 wp, float occl, float spec, vec3 V){
+  float nl = max(dot(n, uSun), 0.);
+  float vis = shadowVis(wp, n) * occl;
+  vec3 sky = vec3(.86,.80,.72) * (.16 + .08 * n.y);
+  vec3 bounce = vec3(.72,.56,.37) * .10 * clamp(-n.y * .5 + .5, 0., 1.);
+  vec3 c = alb * (uSunCol * nl * vis + sky + bounce);
+  vec3 H = normalize(uSun + V);
+  c += uSunCol * pow(max(dot(n, H), 0.), 60.) * spec * vis;
+  return c;
+}`;
+const VS_GEO = `#version 300 es
+layout(location=0) in vec3 aP; layout(location=1) in vec3 aN; layout(location=2) in vec3 aU;
+uniform mat4 uVP; uniform vec3 uOff;
+out vec3 vP; out vec3 vN; out vec3 vU;
+void main(){ vec3 p = aP + (aU.z < -1.5 ? uOff : vec3(0)); vP = p; vN = aN; vU = aU; gl_Position = uVP * vec4(p, 1.); }`;
+const FS_TIER = `#version 300 es
+precision highp float;
+in vec3 vP; in vec3 vN; in vec3 vU; out vec4 o;
+uniform vec3 uCamPos; uniform sampler2D uRA; uniform vec2 uRAS;
+uniform vec4 uRow[8];      // per tier: sStart, ppm, atlasY, rowHeightPx
+uniform vec4 uRW[32];      // tier, s0, s1, reveal
+uniform vec4 uRWs[32];     // style, -, -, -
+uniform int uNRW; uniform float uSpread; uniform ivec2 uTR[8];
+${COMMON}
+void main(){
+  vec3 n = normalize(vN), V = normalize(uCamPos - vP);
+  vec3 alb = mix(vec3(.80,.75,.66), vec3(.70,.64,.55), fbm(vP.xz * .7 + vP.y * .9));
+  alb *= .92 + .08 * vn(vP.xz * 9. + vP.y * 7.);
+  float occ = 1.;
+  if (vU.z < -.5) alb = mix(vec3(.70,.55,.38), vec3(.60,.47,.32), fbm(vP.xz * .15));
+  int tier = int(vU.z + .5);
+  if (tier >= 1) {
+    vec4 R = uRow[tier];
+    float s = vU.x, v = vU.y;
+    // which word owns this arc position?
+    float rev = 0., sty = 0., wi0 = 0., wi1 = 1.;
+    ivec2 tr = uTR[tier];
+    for (int i = tr.x; i < tr.y; i++) { vec4 w = uRW[i]; if (int(w.x + .5) == tier && s > w.y - .25 && s < w.z + .25) { rev = w.w; sty = uRWs[i].x; wi0 = w.y; wi1 = w.z; } }
+    if (rev > 0.) {
+      vec2 px = vec2((s - R.x) * R.y, R.z + (1. - v) * R.w);
+      float d = (texture(uRA, px / uRAS).r - .5) * 2. * uSpread / R.y;     // metres, <0 inside letters
+      float e = .5 / R.y;
+      float dx = (texture(uRA, (px + vec2(1.5, 0)) / uRAS).r - texture(uRA, (px - vec2(1.5, 0)) / uRAS).r);
+      float dy = (texture(uRA, (px + vec2(0, 1.5)) / uRAS).r - texture(uRA, (px - vec2(0, 1.5)) / uRAS).r);
+      // raking-light reveal sweeps along the word
+      float f = (s - wi0) / max(wi1 - wi0, .01);
+      float on = smoothstep(f - .02, f + .02, rev * 1.12 - .06);
+      float depth = sty > .5 && sty < 1.5 ? 1. : (sty > 1.5 ? .45 : .7);
+      if (sty > 1.5) on *= smoothstep(.25, .55, vn(vec2(s, v) * 22.) + .35);   // wind-worn
+      float inside = smoothstep(e, -e, d) * on;
+      float wall = smoothstep(.045, 0., abs(d)) * on;
+      // tangent frame on the riser: along the arc and up
+      vec3 T = normalize(cross(vec3(0,1,0), n)); vec3 B = vec3(0,1,0);
+      vec3 bent = normalize(n + (T * dx * 26. - B * dy * 26.) * wall);
+      n = bent;
+      occ = 1. - inside * .8 * depth;
+      alb *= 1. - inside * .45 * depth;
+      // a thin light band at the reveal front
+      alb += vec3(.25,.2,.12) * smoothstep(.04, 0., abs(f - rev * 1.12 + .06)) * step(.001, rev) * step(rev, .999) * .6;
+    }
+  }
+  vec3 c = shade(alb, n, vP, occ, .06, V);
+  o = vec4(c, 1.);
+}`;
+const FS_SLAB = `#version 300 es
+precision highp float;
+in vec3 vP; in vec3 vN; in vec3 vU; out vec4 o;
+uniform vec3 uCamPos; uniform sampler2D uST; uniform float uSpread; uniform vec4 uSW[3]; uniform vec4 uSWr;
+${COMMON}
+float cut(vec2 uv){
+  float d = (texture(uST, vec2(uv.x, 1. - uv.y)).r - .5) * 2.;
+  // per-word reveal (holes open word by word)
+  float ok = 0.;
+  for (int i = 0; i < 3; i++) { vec4 r = uSW[i]; if (uv.x > r.x && uv.x < r.z && uv.y > r.y && uv.y < r.w) ok = uSWr[i]; }
+  return ok > .5 ? d : 1.;
+}
+void main(){
+  if (vU.z > -2.5 && cut(vU.xy) < 0.) discard;
+  vec3 n = normalize(vN), V = normalize(uCamPos - vP);
+  vec3 alb = mix(vec3(.55,.49,.42), vec3(.47,.41,.35), fbm(vU.xy * vec2(9., 4.)));
+  o = vec4(shade(alb, n, vP, 1., .05, V), 1.);
+}`;
+const VS_FLOOR = `#version 300 es
+layout(location=0) in vec2 aP;
+uniform mat4 uVP; out vec3 vP;
+void main(){ vP = vec3(aP.x, 0., aP.y); gl_Position = uVP * vec4(vP, 1.); }`;
+const FS_FLOOR = `#version 300 es
+precision highp float;
+in vec3 vP; out vec4 o;
+uniform vec3 uCamPos; uniform sampler2D uFT; uniform float uSpread; uniform vec4 uFRect; // x0,z0,x1,z1
+uniform vec4 uFW[24];   // word rect x0,z0,x1,z1
+uniform vec4 uFR[24];   // reveal, material(0 none,1 dust,2 sweat,3 blood,4 face), -, -
+uniform int uNFW;
+uniform vec4 uMat;      // dust, sweat, blood (progress 0..1), _
+uniform float uEll;     // floor ellipse check
+${COMMON}
+const float D = .34;
+float sd(vec2 xz){
+  vec2 uv = (xz - uFRect.xy) / (uFRect.zw - uFRect.xy);
+  if (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) return 1.;
+  return (texture(uFT, uv).r - .5) * 2. * uSpread / ${FLOOR.ppm}.0;
+}
+float hgt(vec2 xz){ return -D * smoothstep(.012, -.012, sd(xz)); }
+int wordAt(vec2 xz){ for (int i = 0; i < 24; i++) { if (i >= uNFW) break; vec4 r = uFW[i]; if (xz.x > r.x - .25 && xz.x < r.z + .25 && xz.y > r.y - .3 && xz.y < r.w + .3) return i; } return -1; }
+void main(){
+  if (pow(vP.x / ${A0}.0, 2.) + pow(vP.z / ${B0}.0, 2.) > 1.) discard;
+  vec3 V = normalize(uCamPos - vP), dir = -V;
+  // relief: march the ray into the cut letters
+  vec3 hit = vP; int kind = 0;   // 0 top, 1 wall, 2 recess floor
+  if (hgt(vP.xz) < -.001) {        // the ray enters above a cut letter: find the wall or the recess floor
+    float L = D / max(-dir.y, .05), a = 0., b = L; bool found = false;
+    for (int i = 1; i <= 20; i++) { float tt = L * float(i) / 20.; vec3 q = vP + dir * tt; if (q.y <= hgt(q.xz)) { b = tt; found = true; break; } a = tt; }
+    if (found) { for (int j = 0; j < 6; j++) { float m = (a + b) * .5; vec3 q = vP + dir * m; if (q.y <= hgt(q.xz)) b = m; else a = m; } }
+    hit = vP + dir * b;
+    kind = hit.y > -D + .015 ? 1 : 2;
+  }
+  vec3 n = vec3(0,1,0);
+  vec2 g = vec2(sd(hit.xz + vec2(.01,0)) - sd(hit.xz - vec2(.01,0)), sd(hit.xz + vec2(0,.01)) - sd(hit.xz - vec2(0,.01)));
+  if (kind == 1 && dot(g, g) > 1e-10) n = normalize(vec3(-g.x, 0., -g.y));
+  // sand and stone
+  vec3 sand = mix(vec3(.73,.56,.37), vec3(.62,.46,.30), fbm(hit.xz * 1.3)) * (.93 + .07 * vn(hit.xz * 40.));
+  vec3 stone = mix(vec3(.47,.40,.33), vec3(.40,.34,.28), fbm(hit.xz * 3.)) ;
+  vec3 alb = kind == 0 ? sand : stone;
+  float spec = .04, occ = 1.;
+  int wi = wordAt(hit.xz);
+  float rev = 1.;
+  if (wi >= 0 && kind != 0) {
+    vec4 R = uFR[wi]; rev = R.x;
+    float m = R.y;
+    float dIn = -sd(hit.xz);
+    float x01 = (hit.x - uFW[wi].x) / (uFW[wi].z - uFW[wi].x);
+    // material passes
+    bool face = m > 3.5;
+    if ((m > .5 && m < 1.5) || face) { float dm = smoothstep(.0, .3, uMat.x * 1.25 - vn(hit.xz * 6.) * .5 - (1. - x01) * .3); alb = mix(alb, vec3(.72,.66,.58), dm * .85); }
+    if ((m > 1.5 && m < 2.5) || face) { float wet = smoothstep(.03, 0., (1. - x01) - uMat.y * 1.15 + .1); spec = mix(spec, .9, wet); alb *= 1. - .25 * wet; }
+    if ((m > 2.5 && m < 3.5) || face) {
+      float lvl = -D + D * .62 * smoothstep(.15, 1., uMat.z);
+      float edge = smoothstep(.0, .02, uMat.z * .22 - dIn);           // pools along the inner walls first
+      float b = max(step(hit.y, lvl) * step(.01, uMat.z), edge * step(.01, uMat.z));
+      alb = mix(alb, vec3(.35,.04,.05), b); spec = mix(spec, .7, b);
+    }
+    occ = mix(.25, 1., rev);
+  }
+  // self-shadow inside the cut letters
+  if (kind != 0) {
+    for (int j = 1; j <= 10; j++) { vec3 q = hit + uSun * (float(j) * .07); if (q.y < hgt(q.xz) - .002) { occ *= .25; break; } if (q.y > 0.) break; }
+    occ *= kind == 2 ? .78 : .88;
+  }
+  vec3 c = shade(alb, n, hit, occ, spec, V);
+  if (spec > .3) { float fr = pow(1. - max(dot(n, V), 0.), 3.); c += vec3(.95,.88,.76) * (.08 + .5 * fr) * (spec - .3) * 1.4; }
+  o = vec4(c, 1.);
+}`;
+const VS_SH = `#version 300 es
+layout(location=0) in vec3 aP; layout(location=2) in vec3 aU;
+uniform mat4 uLVP; uniform vec3 uOff; out vec3 vU;
+void main(){ vec3 p = aP + (aU.z < -1.5 ? uOff : vec3(0)); vU = aU; gl_Position = uLVP * vec4(p, 1.); }`;
+const FS_SH = `#version 300 es
+precision highp float; in vec3 vU; out vec4 o;
+uniform sampler2D uST; uniform vec4 uSW[3]; uniform vec4 uSWr; uniform int uSlab;
+void main(){
+  if (uSlab == 1 && vU.z < -1.5 && vU.z > -2.5) {
+    float d = texture(uST, vec2(vU.x, 1. - vU.y)).r - .5; float ok = 0.;
+    for (int i = 0; i < 3; i++) { vec4 r = uSW[i]; if (vU.x > r.x && vU.x < r.z && vU.y > r.y && vU.y < r.w) ok = uSWr[i]; }
+    if (ok > .5 && d < 0.) discard;
+  }
+  o = vec4(1.);
+}`;
+const VS_POST = `#version 300 es
+layout(location=0) in vec2 aP; out vec2 vUV; void main(){ vUV = aP * .5 + .5; gl_Position = vec4(aP, 0., 1.); }`;
+const FS_POST = `#version 300 es
+precision highp float;
+in vec2 vUV; out vec4 o;
+uniform sampler2D uCol; uniform sampler2D uDep; uniform mat4 uInvVP; uniform vec3 uCamPos;
+uniform vec4 uDust;     // density, ground boost, exposure, fade
+uniform sampler2D uAttr; uniform float uAttrA;
+${COMMON}
+void main(){
+  vec3 col = texture(uCol, vUV).rgb;
+  float z = texture(uDep, vUV).r;
+  vec4 a = uInvVP * vec4(vUV * 2. - 1., -1., 1.); a /= a.w;
+  vec4 b = uInvVP * vec4(vUV * 2. - 1., 1., 1.); b /= b.w;
+  vec3 dir = normalize(b.xyz - a.xyz);
+  float dist = 90.;
+  if (z < 1.) { vec4 w = uInvVP * vec4(vUV * 2. - 1., z * 2. - 1., 1.); w /= w.w; dist = length(w.xyz - uCamPos); }
+  else {
+    // sky haze with the low sun
+    float sd = max(dot(dir, uSun), 0.);
+    col = mix(vec3(.86,.70,.50), vec3(.42,.52,.62), clamp(dir.y * 1.8, 0., 1.)) + uSunCol * (pow(sd, 90.) * 2.5 + pow(sd, 6.) * .22);
+  }
+  // dust: height-limited, sunlit where the shadow map sees the sun
+  float steps = 18., L = min(dist, 60.), dt = L / steps;
+  float jit = h21(gl_FragCoord.xy + 3.1);
+  vec3 acc = vec3(0); float Tr = 1.;
+  float mu = dot(dir, uSun), g = .55;
+  float phase = (1. - g * g) / pow(1. + g * g - 2. * g * mu, 1.5) * .25 + .18;
+  for (float i = 0.; i < 18.; i++) {
+    vec3 p = uCamPos + dir * (i + jit) * dt;
+    float dens = uDust.x * exp(-max(p.y, 0.) / (1.6 + uDust.y * 1.5)) * (.55 + .9 * vn(p.xz * .5 + vec2(uT * .3, uT * .1)));
+    float vis = shadow1(p);
+    acc += Tr * dens * dt * (uSunCol * vis * phase * 1.7 + vec3(.55,.48,.38) * .1);
+    Tr *= exp(-dens * dt * .9);
+  }
+  col = col * Tr + acc;
+  if (z < 1.) col = mix(col, vec3(.80,.71,.58) * .9, 1. - exp(-max(dist - 30., 0.) * .012));
+  // tone map (ACES approximation) and grade
+  col *= uDust.z;
+  col = clamp((col * (2.51 * col + .03)) / (col * (2.43 * col + .59) + .14), 0., 1.);
+  col = pow(col, vec3(1. / 2.2));
+  vec4 at = texture(uAttr, vec2(vUV.x, 1. - vUV.y));
+  col = mix(col, at.rgb, at.a * uAttrA);
+  col *= 1. - uDust.w;
+  o = vec4(col, 1.);
+}`;
+
+const P = {}, U = {}, BUF = {}, TEX = {};
+let FBO, colTex, depTex, SFBO, shTex;
+function compile(vs, fs) {
+  const mk = (ty, src) => { const s = gl.createShader(ty); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) + '\n' + src.split('\n').slice(0, 3).join('\n')); return s; };
+  const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS), u = {};
+  for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i), nm = info.name.replace(/\[0\]$/, ''); u[nm] = gl.getUniformLocation(p, info.name); }
+  return { p, u };
+}
+function tex2D(w, h, data, fmt = gl.R8, f = gl.RED, ty = gl.UNSIGNED_BYTE, filter = gl.LINEAR) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, fmt, w, h, 0, f, ty, data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function setupGL() {
+  P.tier = compile(VS_GEO, FS_TIER); P.slab = compile(VS_GEO, FS_SLAB); P.floor = compile(VS_FLOOR, FS_FLOOR); P.sh = compile(VS_SH, FS_SH); P.post = compile(VS_POST, FS_POST);
+  const vbo = (arr) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW); return b; };
+  BUF.tiers = vbo(GEO.tiers); BUF.slab = vbo(GEO.slab);
+  BUF.floor = vbo(new Float32Array([FLOOR.x0, FLOOR.z0, FLOOR.x1, FLOOR.z0, FLOOR.x1, FLOOR.z1, FLOOR.x0, FLOOR.z0, FLOOR.x1, FLOOR.z1, FLOOR.x0, FLOOR.z1]));
+  BUF.quad = vbo(new Float32Array([-1, -1, 3, -1, -1, 3]));
+  TEX.riser = tex2D(RISER_ATLAS.w, RISER_ATLAS.h, RISER_ATLAS.data);
+  TEX.floor = tex2D(FLOOR_TEX.w, FLOOR_TEX.h, FLOOR_TEX.data);
+  TEX.slab = tex2D(SLAB_TEX.w, SLAB_TEX.h, SLAB_TEX.data);
+  // attribution layer (typography composited in screen space at the end)
+  const ac = document.createElement('canvas'); ac.width = SW; ac.height = SH; const c = ac.getContext('2d');
+  c.fillStyle = '#2e241c'; c.textAlign = 'center'; c.shadowColor = 'rgba(255,240,215,.55)'; c.shadowBlur = 10;
+  c.font = `600 34px "${FAM.attr}"`; c.letterSpacing = '8px'; c.fillText(ATTR[0], SW / 2, 968);
+  c.font = `300 22px "${FAM.thin}"`; c.letterSpacing = '4px'; c.fillText(ATTR[1], SW / 2, 1010);
+  const id = c.getImageData(0, 0, SW, SH).data;
+  TEX.attr = tex2D(SW, SH, id, gl.RGBA8, gl.RGBA);
+  // scene target
+  colTex = tex2D(SW, SH, null, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.NEAREST);
+  depTex = tex2D(SW, SH, null, gl.DEPTH_COMPONENT24, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, gl.NEAREST);
+  FBO = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, FBO);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colTex, 0);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, depTex, 0);
+  shTex = tex2D(2048, 2048, null, gl.DEPTH_COMPONENT24, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, gl.NEAREST);
+  SFBO = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, SFBO);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, shTex, 0);
+  gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+// ───────────── camera path (authored keys, eased) ─────────────
+const KEYS = [];
+function riserPoint(k, phiDeg, yFrac) { const p = phiDeg * DEG; return [ellA(k) * Math.cos(p), (k - 1 + yFrac) * TH, ellB(k) * Math.sin(p)]; }
+function buildCamera() {
+  const K = (t, pos, tgt, fov = 38) => KEYS.push({ t, pos, tgt, fov });
+  // look at a riser clause from across the bowl
+  const clauseKey = (t, R, dist, lift, dx = 0) => {
+    const c = riserPoint(R.tier, R.phi, .5);
+    const n = [-c[0], 0, -c[2]]; const l = Math.hypot(n[0], n[2]); n[0] /= l; n[2] /= l;
+    return [t, [c[0] + n[0] * dist + dx, c[1] + lift, c[2] + n[2] * dist], c];
+  };
+  const [r6, r5, r4, r3, r2] = RISER;
+  K(...clauseKey(0.0, r6, 20.5, 1.6));
+  K(...clauseKey(3.3, r6, 19.8, 1.5, .6));
+  K(...clauseKey(4.0, r5, 18.6, 1.4));
+  K(...clauseKey(5.0, r5, 18.2, 1.3, .4));
+  K(...clauseKey(5.6, r4, 16.4, 1.2));
+  K(7.2, clauseKey(0, r4, 15.6, 1.0)[1], riserPoint(4, -92, -.05));
+  K(...clauseKey(8.4, r3, 14.6, 1.0));
+  K(...clauseKey(9.6, r3, 14.2, 1.0, .3));
+  K(...clauseKey(10.1, r2, 12.6, .9));
+  K(...clauseKey(11.0, r2, 12.2, .9, .3));
+  // onto the floor
+  K(11.6, [0, 5.4, 2.4], [0, 0, -6.6]);
+  K(12.7, [0, 5.2, 2.0], [0, 0, -6.4]);
+  K(13.1, [.2, 4.9, 1.8], [.2, 0, -5.4]);
+  K(13.9, [5.6, 1.9, 3.6], [1.0, 0, -2.6]);
+  K(14.4, [-5.0, 1.75, 3.4], [-1.2, 0, -2.4]);
+  K(14.9, [-2.6, 4.9, 8.4], [-.6, 0, 2.3]);
+  K(16.0, [-1.6, 5.1, 9.6], [-.2, 0, 3.1]);
+  K(19.9, [1.2, 5.3, 9.9], [.4, 0, 3.4]);
+  // the slab rises: low angle
+  K(20.55, [7.2, .95, .5], [SLAB.x, 2.1, 0]);
+  K(22.4, [6.3, .8, .3], [SLAB.x, 3.1, 0]);
+  // final crane: the whole bowl
+  K(23.9, [0, 33, 29], [0, 0, -3.2], 44);
+  K(25.0, [0, 34, 30], [0, 0, -3.2], 44);
+}
+function camAt(t) {
+  if (t <= KEYS[0].t) return KEYS[0];
+  for (let i = 1; i < KEYS.length; i++) if (t <= KEYS[i].t) {
+    const a = KEYS[i - 1], b = KEYS[i], q = eIO((t - a.t) / (b.t - a.t));
+    return { pos: a.pos.map((v, j) => lerp(v, b.pos[j], q)), tgt: a.tgt.map((v, j) => lerp(v, b.tgt[j], q)), fov: lerp(a.fov, b.fov, q) };
+  }
+  return KEYS[KEYS.length - 1];
+}
+
+// ───────────── frame ─────────────
+function sunAt(t) {
+  const el = (t < 24.2 ? 22 : lerp(22, -3, eIn(prog(t, 24.2, 24.9)))) * DEG, az = 292 * DEG;   // low sun from the west-north-west: rakes the engraved south risers and the floor
+  return [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
+}
+function revealOf(t0, t1, t) { return eIO(prog(t, t0, t1)); }
+function render(t) {
+  if (t >= DUR - 1e-9) t = 0;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, SW, SH);
+  if (t < .4) { gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); return; }
+  const cam = camAt(t);
+  const view = M4.look(cam.pos, cam.tgt, [0, 1, 0]), proj = M4.persp(cam.fov * DEG, SW / SH, .2, 160), VP = M4.mul(proj, view);
+  const sun = sunAt(t);
+  const lview = M4.look([sun[0] * 60, sun[1] * 60, sun[2] * 60], [0, 0, 0], [0, 1, 0]), lproj = M4.ortho(-30, 30, -30, 30, 1, 140), LVP = M4.mul(lproj, lview);
+  const sunCol = [2.15, 1.62, 1.08].map(v => v * clamp((sun[1] + .02) * 12));
+  const rise = eOut(prog(t, 20.15, 20.95));
+  const slabOff = [SLAB.x, -SLAB.h - .05 + (SLAB.h + .05) * rise, SLAB.z];
+  // slab word reveal
+  const swr = T.slabWords.map(w => t >= w.t - .3 ? 1 : 0);
+  const swRects = new Float32Array(12);
+  T.slabWords.forEach((w, i) => { const u0 = (SLAB.w / 2 - (-(w.x0 + w.wd)) ) / SLAB.w; swRects.set([(w.x0 + SLAB.w / 2) / SLAB.w - .01, (w.base - w.cap * .1) / SLAB.h, (w.x0 + w.wd + SLAB.w / 2) / SLAB.w + .01, (w.base + w.cap * 1.1) / SLAB.h], i * 4); void u0; });
+  // ── shadow pass ──
+  gl.bindFramebuffer(gl.FRAMEBUFFER, SFBO); gl.viewport(0, 0, 2048, 2048);
+  gl.clearDepth(1); gl.clear(gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+  gl.useProgram(P.sh.p);
+  gl.uniformMatrix4fv(P.sh.u.uLVP, false, LVP);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, TEX.slab); gl.uniform1i(P.sh.u.uST, 0);
+  gl.uniform4fv(P.sh.u.uSW, swRects); gl.uniform4f(P.sh.u.uSWr, swr[0], swr[1], swr[2], 0);
+  const drawGeo = (buf, count, prog, slab) => {
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 36, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 36, 24);
+    if (prog.u.uOff) gl.uniform3fv(prog.u.uOff, slabOff);
+    if (prog.u.uSlab) gl.uniform1i(prog.u.uSlab, slab ? 1 : 0);
+    gl.drawArrays(gl.TRIANGLES, 0, count);
+  };
+  drawGeo(BUF.tiers, GEO.tiers.length / 9, P.sh, false);
+  if (rise > 0) drawGeo(BUF.slab, GEO.slab.length / 9, P.sh, true);
+  // ── scene pass ──
+  gl.bindFramebuffer(gl.FRAMEBUFFER, FBO); gl.viewport(0, 0, SW, SH);
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  const common = (pr) => {
+    gl.useProgram(pr.p);
+    if (pr.u.uVP) gl.uniformMatrix4fv(pr.u.uVP, false, VP);
+    gl.uniformMatrix4fv(pr.u.uLVP, false, LVP);
+    gl.uniform3fv(pr.u.uSun, sun); gl.uniform3fv(pr.u.uSunCol, sunCol);
+    if (pr.u.uCamPos) gl.uniform3fv(pr.u.uCamPos, cam.pos);
+    if (pr.u.uT) gl.uniform1f(pr.u.uT, t);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, shTex); gl.uniform1i(pr.u.uShadow, 1);
+  };
+  // tiers
+  common(P.tier);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, TEX.riser); gl.uniform1i(P.tier.u.uRA, 0);
+  gl.uniform2f(P.tier.u.uRAS, RISER_ATLAS.w, RISER_ATLAS.h); gl.uniform1f(P.tier.u.uSpread, RISER_ATLAS.spread);
+  const rows = new Float32Array(32); RISER_ATLAS.rows.forEach(r => rows.set([r.sStart, r.ppm, r.ay, r.hpx], r.k * 4));
+  gl.uniform4fv(P.tier.u.uRow, rows);
+  const RW = new Float32Array(128), RWs = new Float32Array(128);
+  const RS = [...T.riser].sort((a, b) => a.tier - b.tier), TR = new Int32Array(16);
+  RS.forEach((w, i) => { const start = w.id === 'stumbles_b' ? 6.62 : w.t - .32; RW.set([w.tier, w.s0, w.s1, revealOf(start, w.t, t)], i * 4); RWs.set([w.style, 0, 0, 0], i * 4); });
+  for (let k = 1; k <= NT; k++) { const a = RS.findIndex(w => w.tier === k); const b = RS.filter(w => w.tier === k).length; TR.set(a < 0 ? [0, 0] : [a, a + b], k * 2); }
+  gl.uniform2iv(P.tier.u.uTR, TR);
+  gl.uniform4fv(P.tier.u.uRW, RW); gl.uniform4fv(P.tier.u.uRWs, RWs); gl.uniform1i(P.tier.u.uNRW, T.riser.length);
+  drawGeo(BUF.tiers, GEO.tiers.length / 9, P.tier, false);
+  // floor
+  common(P.floor);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, TEX.floor); gl.uniform1i(P.floor.u.uFT, 0);
+  gl.uniform1f(P.floor.u.uSpread, FLOOR_TEX.spread);
+  gl.uniform4f(P.floor.u.uFRect, FLOOR.x0, FLOOR.z0, FLOOR.x1, FLOOR.z1);
+  const FW = new Float32Array(96), FRv = new Float32Array(96);
+  const matOf = id => ({ dust: 1, sweat: 2, blood: 3, face: 4 })[id] || 0;
+  T.floorWords.forEach((w, i) => { FW.set([w.wx0, w.wz0, w.wx1, w.wz1], i * 4); FRv.set([revealOf(w.t - .35, w.t, t), matOf(w.id), 0, 0], i * 4); });
+  gl.uniform4fv(P.floor.u.uFW, FW); gl.uniform4fv(P.floor.u.uFR, FRv); gl.uniform1i(P.floor.u.uNFW, T.floorWords.length);
+  gl.uniform4f(P.floor.u.uMat, eIO(prog(t, 15.9, 16.9)), eIO(prog(t, 17.1, 18.1)), eIO(prog(t, 18.3, 19.7)), 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, BUF.floor); gl.disableVertexAttribArray(1); gl.disableVertexAttribArray(2);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  // slab
+  if (rise > 0) {
+    common(P.slab);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, TEX.slab); gl.uniform1i(P.slab.u.uST, 0);
+    gl.uniform4fv(P.slab.u.uSW, swRects); gl.uniform4f(P.slab.u.uSWr, swr[0], swr[1], swr[2], 0);
+    drawGeo(BUF.slab, GEO.slab.length / 9, P.slab, true);
+  }
+  // ── post: dust, sky, tone map ──
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, SW, SH); gl.disable(gl.DEPTH_TEST);
+  common(P.post);
+  gl.uniformMatrix4fv(P.post.u.uInvVP, false, M4.inv(VP));
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, colTex); gl.uniform1i(P.post.u.uCol, 0);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, depTex); gl.uniform1i(P.post.u.uDep, 2);
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, TEX.attr); gl.uniform1i(P.post.u.uAttr, 3);
+  const dust = .010 + .03 * eIO(prog(t, 11.0, 14.0)) - .022 * eIO(prog(t, 19.9, 20.5)) - .012 * eIO(prog(t, 22.4, 23.6));
+  const exposure = eOut(prog(t, .4, 1.3));
+  const fade = t >= 24.9 ? 1 : eIn(prog(t, 24.2, 24.9));
+  gl.uniform4f(P.post.u.uDust, Math.max(dust, .012), eIO(prog(t, 11, 14)), exposure * .95, fade);
+  gl.uniform1f(P.post.u.uAttrA, eOut(prog(t, 23.2, 23.9)));
+  gl.bindBuffer(gl.ARRAY_BUFFER, BUF.quad); gl.disableVertexAttribArray(1); gl.disableVertexAttribArray(2);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+// ───────────── playback & API ─────────────
+let playing = true, t0 = null, tP = 0, ready = false;
+const capture = new URLSearchParams(location.search).has('capture');
+if (capture) document.body.classList.add('capture');
+const pp = document.getElementById('pp'), scrub = document.getElementById('scrub'), tcEl = document.getElementById('tc');
+function show(t) { scrub.value = String(Math.round(t * FPS) % NF); tcEl.textContent = t.toFixed(2) + ' s'; }
+function seek(t) { if (!ready) return; playing = false; pp.textContent = 'Play'; tP = clamp(t, 0, DUR); render(tP); gl.finish(); show(tP); }
+function tick(now) { if (playing && ready) { if (t0 === null) t0 = now - tP * 1000; const t = ((now - t0) / 1000) % DUR; render(t); show(t); tP = t; } requestAnimationFrame(tick); }
+pp.onclick = () => { if (playing) { playing = false; pp.textContent = 'Play'; } else { playing = true; t0 = null; pp.textContent = 'Pause'; } };
+scrub.oninput = () => seek(+scrub.value / FPS);
+window.duration = DUR; window.fps = FPS; window.seek = seek; window.renderFrame = n => seek(clamp(Math.round(n), 0, NF) / FPS);
+window.cues = [];
+window.ready = (async () => {
+  await loadFonts();
+  buildText(); buildGeometry(); setupGL(); buildCamera();
+  const all = [];
+  RISER.forEach(R => R.words.forEach(w => all.push({ id: w[0], word: w[1], t: w[2] })));
+  FLOORL.forEach(L => L.words.forEach(w => all.push({ id: w[0], word: w[1], t: w[2] })));
+  SLABW.forEach(w => all.push({ id: w[0], word: w[1], t: w[2] }));
+  const merged = all.filter(c => c.id !== 'stumbles_b').map(c => c.id === 'stumbles' ? { ...c, word: 'STUMBLES,' } : c).sort((a, b) => a.t - b.t);
+  const ends = [3.6, 5.1, 8.2, 9.8, 11.4, 12.8, 14.4, 15.8, 20.2, 22.6];
+  window.cues = merged.map(c => ({ id: c.id, word: c.word.replace(/[.,;]/g, '').toLowerCase(), start: +(c.t - .32).toFixed(3), t: c.t, end: ends.find(e => e > c.t + .3) || 24.2 }));
+  window.debug = {
+    floorWords: T.floorWords.map(w => ({ id: w.id, x0: w.wx0, x1: w.wx1, z0: w.wz0, z1: w.wz1 })),
+    hashFrame: t => { seek(t); const px = new Uint8Array(SW * SH * 4); gl.readPixels(0, 0, SW, SH, gl.RGBA, gl.UNSIGNED_BYTE, px); let h = 2166136261; for (let i = 0; i < px.length; i += 7) { h ^= px[i]; h = Math.imul(h, 16777619); } return h >>> 0; },
+    isBlack: t => { seek(t); const px = new Uint8Array(SW * SH * 4); gl.readPixels(0, 0, SW, SH, gl.RGBA, gl.UNSIGNED_BYTE, px); for (let i = 0; i < px.length; i += 4) if (px[i] | px[i + 1] | px[i + 2]) return false; return true; }
+  };
+  ready = true; window.__ready = true;
+  if (capture) { playing = false; render(0); } else requestAnimationFrame(tick);
+  return true;
+})();
+})();
+</script>
+</body>
+</html>
