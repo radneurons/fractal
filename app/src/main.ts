@@ -14,6 +14,7 @@ import { buildParams, GLOBAL_SPECS } from './ui/params';
 import { Timeline, fmtT } from './ui/timeline';
 import { tapSync } from './ui/tapsync';
 import { exportVideo, recordRealtime, webCodecsAvailable, Cancelled } from './export/exporter';
+import { sha256, getCachedAnalysis, putCachedAnalysis, saveSession, loadSession } from './persist';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -33,6 +34,7 @@ const state = {
   preview: saved.preview ?? 0.6667,
   audio: null as AudioBuffer | null,
   audioName: '',
+  audioBytes: null as ArrayBuffer | null,
   analysis: null as Analysis | null,
   lyricsText: '',
   lyrics: null as Lyrics | null,
@@ -73,19 +75,24 @@ function toast(msg: string, err = false, ms = 3500) {
 }
 
 // ───────────────────────── loading ─────────────────────────
-async function loadAudioBytes(bytes: ArrayBuffer, name: string) {
+async function loadAudioBytes(bytes: ArrayBuffer, name: string, restored?: Lyrics | null) {
   busy(true, 'Decoding audio…', 0);
   try {
+    const keep = bytes.slice(0);
+    const hash = await sha256(keep).catch(() => '');
     const buf = await decodeAudio(bytes, player.ctx);
-    state.audio = buf; state.audioName = name; player.setBuffer(buf);
+    state.audio = buf; state.audioName = name; state.audioBytes = keep; player.setBuffer(buf);
     busy(true, 'Analysing…', 0);
     const t0 = performance.now();
-    state.analysis = await analyzeInWorker(buf, (stage, p) => busy(true, `Analysing — ${stage}`, p));
-    console.info(`analysis ${((performance.now() - t0) / 1000).toFixed(2)} s`);
+    const cached = hash ? await getCachedAnalysis(hash) : null;
+    state.analysis = cached ?? await analyzeInWorker(buf, (stage, p) => busy(true, `Analysing — ${stage}`, p));
+    if (!cached && hash) void putCachedAnalysis(hash, state.analysis);
+    console.info(`analysis ${cached ? '(cached) ' : ''}${((performance.now() - t0) / 1000).toFixed(2)} s`);
     player.beats = state.analysis.beats; player.downbeats = state.analysis.downbeats;
     if (!state.settings.title) state.settings.title = name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
     busy(false);
-    if (state.lyricsText) applyLyrics(state.lyricsText); else { rebuildSong(true); openLyricsDialog(); }
+    if (restored) applyLyrics(state.lyricsText, restored);
+    else if (state.lyricsText) applyLyrics(state.lyricsText); else { rebuildSong(true); openLyricsDialog(); }
   } catch (e) {
     busy(false); toast('Could not load audio: ' + (e as Error).message, true);
   }
@@ -112,6 +119,22 @@ function rebuildSong(newSong: boolean) {
   if (newSong) { buildGlobalPanel(); updateAnalysisInfo(); }
   updateAnalysisInfo();
   schedulePrepare(0);
+  scheduleSave();
+}
+
+let saveTimer = 0;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => {
+    if (!state.audioBytes) return;
+    void saveSession({ audioName: state.audioName, audio: state.audioBytes, lyricsText: state.lyricsText, lyrics: state.lyrics, title: state.settings.title, artist: state.settings.artist, savedAt: Date.now() });
+  }, 1500);
+}
+
+async function restoreSession() {
+  const s = await loadSession(); if (!s) return;
+  state.lyricsText = s.lyricsText; state.settings.title = s.title; state.settings.artist = s.artist;
+  await loadAudioBytes(s.audio, s.audioName, s.lyrics);
 }
 
 async function loadDemo() {
@@ -393,4 +416,13 @@ const LE = {
   try { await loadFonts(); } catch (e) { toast('Fonts failed to load: ' + (e as Error).message, true); }
   requestAnimationFrame(frame);
   if (new URLSearchParams(location.search).has('demo')) void loadDemo();
+  else {
+    const s = await loadSession();
+    if (s && !state.song) {
+      const b = document.createElement('button'); b.className = 'btn'; b.id = 'btnRestore';
+      b.textContent = `Restore last session — ${s.audioName}`; b.style.marginLeft = '8px';
+      b.onclick = () => void restoreSession();
+      document.querySelector('.emptyBtns')?.appendChild(b);
+    }
+  }
 })();
