@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>He Has</title>
+<style>
+@font-face{font-family:"Barlow Condensed";font-style:italic;font-weight:800;src:url(fonts/barlowc-800i.ttf) format("truetype")}
+@font-face{font-family:"Montserrat";font-style:normal;font-weight:600;src:url(fonts/montserrat-600.ttf) format("truetype")}
+@font-face{font-family:"Montserrat";font-style:normal;font-weight:800;src:url(fonts/montserrat-800.ttf) format("truetype")}
+@font-face{font-family:"Allerta Stencil";font-style:normal;font-weight:400;src:url(fonts/allerta-stencil.ttf) format("truetype")}
+@font-face{font-family:"Libre Caslon Text";font-style:normal;font-weight:700;src:url(fonts/libre-caslon-700.ttf) format("truetype")}
+html,body{margin:0;height:100%;background:#000;overflow:hidden}
+canvas{position:absolute;inset:0;margin:auto;width:100vw;height:56.25vw;max-height:100vh;max-width:177.78vh;display:block}
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+(() => {
+'use strict';
+const SW = 1920, SH = 1080, FPS = 60, DUR = 30, FR = 1 / FPS;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+const C = {
+  night: '#1A1918', vig: '#050505', bone: '#EDE7DA', parch: '#F2ECDF', ink: '#15130F',
+  red: '#B3202A', navy: '#1C2C5B', echo: '#77736B'
+};
+const F = {
+  refrain: { fam: 'Barlow Condensed', w: 800, s: 'italic' },
+  body:    { fam: 'Montserrat', w: 800, s: 'normal' },
+  small:   { fam: 'Montserrat', w: 600, s: 'normal' },
+  mil:     { fam: 'Allerta Stencil', w: 400, s: 'normal' },
+  doc:     { fam: 'Libre Caslon Text', w: 700, s: 'normal' }
+};
+const fontStr = (fk, px) => `${F[fk].s} ${F[fk].w} ${px}px "${F[fk].fam}"`;
+const CAP = {};
+
+// ---------- math ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, p) => a + (b - a) * p;
+const eIO = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const eOut = p => 1 - Math.pow(1 - p, 3);
+const eIn = p => p * p * p;
+const eQ = p => p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+const eBackOut = (p, s = 1.70158) => 1 + (s + 1) * Math.pow(p - 1, 3) + s * Math.pow(p - 1, 2);
+// in-out with a small overshoot on arrival (~6%)
+const eIOover = p => {
+  const a = eIO(clamp(p / .82));
+  if (p < .82) return a * 1.06;
+  const q = (p - .82) / .18;
+  return 1.06 - .06 * eIO(q);
+};
+const bounce1 = p => p < .72 ? Math.pow(p / .72, 2) : 1 - .1 * Math.sin(Math.PI * (p - .72) / .28);
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ---------- script ----------
+const MEAS = 1000;
+const w = (text, t, e, o = {}) => ({ k: 'w', text, t, e, ...o });
+const v = (text, t, o = {}) => ({ k: 'v', text, t, ...o });
+const s = (rows, o = {}) => ({ k: 's', rows, ...o });
+const L = (items, o = {}) => ({ items, ...o });
+
+const NIGHT_A = [
+  L([w('HE HAS', 1.30, 'fly', { f: 'refrain' })]),
+  L([w('KEPT', 1.62, 'slide'), v('AMONG', 1.85), w('US,', 2.05, 'slam'), s([['IN TIMES', 2.45], ['OF PEACE,', 2.75]])]),
+  L([w('STANDING', 3.55, 'standup', { f: 'mil' })]),
+  L([w('ARMIES', 3.95, 'slam', { f: 'mil', col: 'red', camDy: .75, camZ: .8, pict: { i: 0, type: 'musketA' } })], { tilt: -10, gapAfter: .9 })
+];
+const NIGHT_A2 = [
+  L([s([['WITHOUT', 4.95, { ct: 5.30 }], ['THE', 5.15, { nocam: 1 }]]),
+     w('CONSENT', 5.60, 'slide', { f: 'doc', pict: { i: 1, type: 'sealO', inner: 'OF OUR', innerT: 5.95, slashT: 6.05 } })]),
+  L([w('LEGISLATURES.', 6.75, 'slide')])
+];
+const NIGHT_B = [
+  L([w('HE HAS', 7.95, 'slam', { f: 'refrain', ct: 7.58 })]),
+  L([w('PLUNDERED', 8.45, 'slide'), s([['OUR', 8.70]]), w('SEAS,', 9.00, 'drop', { fx: 'waves', camDy: .9, camZ: .8 })], { gapAfter: .9 }),
+  L([w('RAVAGED', 9.60, 'slam'), s([['OUR', 9.85]]), w('COASTS,', 10.15, 'slam')]),
+  L([w('BURNT', 10.95, 'slam', { col: 'red', fx: 'flames' }), s([['OUR', 11.30]]), w('TOWNS,', 11.65, 'drop', { fx: 'skyline', camDy: .3 })], { gapBefore: .5, gapAfter: .55 }),
+  L([v('AND', 12.05), w('DESTROYED', 12.45, 'knocked'), v('THE', 12.80), w('LIVES', 13.05, 'drop'), s([['OF', 13.30], ['OUR', 13.45]])]),
+  L([w('PEOPLE.', 13.95, 'drop', { pict: { i: 2, type: 'peopleO' }, fx: 'people', camDy: .5, camZ: .9 })], { gapAfter: .6 })
+];
+const PARCH = [
+  L([v('THESE', 15.30, { ct: 15.45 }), w('UNITED', 15.90, 'slam', { col: 'navy' }), w('COLONIES', 16.70, 'slide', { pict: { i: 1, type: 'starsO' } }), v('ARE,', 17.30)]),
+  L([s([['AND', 17.70], ['OF', 17.85]]), w('RIGHT', 18.15, 'slam', { f: 'doc' }), s([['OUGHT', 18.55], ['TO BE', 18.80]])]),
+  L([w('FREE', 19.20, 'slam', { fx: 'shackle' }), v('AND', 19.60)]),
+  L([w('INDEPENDENT', 20.25, 'ghost', { col: 'navy', pict: { i: 0, type: 'hallI' } }), w('STATES;', 21.05, 'slide')]),
+  L([w('WE', 21.60, 'slam'), v('MUTUALLY', 21.90), w('PLEDGE', 22.45, 'slam', { fx: 'seal' }), s([['TO EACH', 23.10], ['OTHER', 23.30]])]),
+  L([s([['OUR', 23.50]]), w('LIVES,', 23.90, 'drop'), s([['OUR', 24.30]]), w('FORTUNES', 24.60, 'slide', { pict: { i: 1, type: 'coinO' } })]),
+  L([s([['AND OUR', 25.15], ['SACRED', 25.40]]), w('HONOR.', 25.90, 'wipe', { f: 'doc', fx: 'swash', camDy: .25 })], { gapAfter: .5 })
+];
+
+// ---------- layout ----------
+const blocks = [];
+const tokens = [];
+function measure(fk, cap, str) {
+  ctx.font = fontStr(fk, cap / CAP[fk]);
+  return ctx.measureText(str).width;
+}
+function letterXs(fk, cap, str) {
+  ctx.font = fontStr(fk, cap / CAP[fk]);
+  const xs = [];
+  for (let i = 0; i <= str.length; i++) xs.push(ctx.measureText(str.slice(0, i)).width);
+  return xs;
+}
+function makeToken(src, fk, cap, x, y, rot, line, block) {
+  const xs = letterXs(fk, cap, src.text);
+  const tk = {
+    text: src.text, t: src.t, e: src.e || 'tick', f: fk, cap, x, y, rot,
+    col: src.col, pict: src.pict, fx: src.fx, ct: src.ct, nocam: src.nocam, camDy: src.camDy || 0, camZ: src.camZ || 1,
+    xs, w: xs[xs.length - 1], line, block, world: block.world
+  };
+  tokens.push(tk);
+  return tk;
+}
+function layoutBlock(lines, world) {
+  const b = { lines: [], tokens: [], world, x: 0, y: 0, rot: 0, sc: 1, h: 0 };
+  let y = 0, prevH = 0;
+  lines.forEach((ln, li) => {
+    // measure in cap units (cap = 100 then normalise)
+    const parts = ln.items.map(it => {
+      if (it.k === 'w') return { it, wd: measure(it.f || 'body', 100, it.text) / 100, gapL: .2 };
+      if (it.k === 'v') {
+        const len = measure('small', 100, it.text) / 100;
+        const vc = Math.min(.3, .96 / len);
+        return { it, vc, wd: vc * 1.05, gapL: .13 };
+      }
+      const n = it.rows.length;
+      const rc = n === 1 ? .34 : (1 - .22 * (n - 1)) / n;
+      const wd = Math.max(...it.rows.map(r => measure('small', 100, r[0]) / 100 * rc));
+      return { it, rc, wd, gapL: .13 };
+    });
+    let nat = 0;
+    parts.forEach((p, i) => { nat += p.wd + (i ? Math.max(p.gapL, parts[i - 1].gapL) : 0); });
+    const S = MEAS / nat;
+    const gap = li === 0 ? 0 : (.17 * Math.min(prevH, S)) + (ln.gapBefore || 0) * Math.min(prevH, S) + (lines[li - 1].gapAfter || 0) * prevH;
+    y += gap;
+    const line = { top: y, h: S, tilt: ln.tilt || 0, toks: [] };
+    let x = 0;
+    parts.forEach((p, i) => {
+      if (i) x += Math.max(p.gapL, parts[i - 1].gapL) * S;
+      const base = y + S;
+      if (p.it.k === 'w') {
+        line.toks.push(makeToken(p.it, p.it.f || 'body', S, x, base, 0, line, b));
+      } else if (p.it.k === 'v') {
+        const tk = makeToken(p.it, 'small', p.vc * S, x + p.vc * S, base, -Math.PI / 2, line, b);
+        tk.vbox = { x0: x, x1: x + p.vc * S };
+        line.toks.push(tk);
+      } else {
+        const n = p.it.rows.length;
+        p.it.rows.forEach((r, j) => {
+          const rowBase = n === 1 ? base : y + ((j + 1) * p.rc + j * .22) * S;
+          const tk = makeToken({ text: r[0], t: r[1], e: 'tick', ...(r[2] || {}) }, 'small', p.rc * S, x, rowBase, 0, line, b);
+          line.toks.push(tk);
+        });
+      }
+      x += p.wd * S;
+    });
+    b.lines.push(line);
+    y += S; prevH = S;
+  });
+  b.h = y;
+  b.tokens = tokens.filter(t => t.block === b);
+  blocks.push(b);
+  return b;
+}
+// block-local -> world
+function toWorld(b, x, y) {
+  const c = Math.cos(b.rot), s2 = Math.sin(b.rot);
+  return [b.x + (x * c - y * s2) * b.sc, b.y + (x * s2 + y * c) * b.sc];
+}
+// token-local (baseline origin) -> block-local
+function tokLocal(tk, x, y) {
+  if (!tk.rot) return [tk.x + x, tk.y + y];
+  // rotate -90: (x,y) -> (y, -x)
+  return [tk.x + y, tk.y - x];
+}
+
+let BA, BA2, BB, BP, OC; // blocks and PEOPLE-O geometry (world)
+let actors = [], camKeys = [], slamTimes = [];
+
+function build() {
+  for (const k in F) { ctx.font = fontStr(k, 100); CAP[k] = ctx.measureText('H').actualBoundingBoxAscent / 100; }
+  BA = layoutBlock(NIGHT_A, 'night');
+  BA2 = layoutBlock(NIGHT_A2, 'night');
+  BB = layoutBlock(NIGHT_B, 'night');
+  BP = layoutBlock(PARCH, 'parch');
+  // A2 rotated 90deg clockwise, below block A, its first line near A's right edge
+  const armCap = BA.lines[3].h;
+  BA2.rot = Math.PI / 2; BA2.x = MEAS + 40; BA2.y = BA.h + armCap * 1.5;
+  // B upright, below A2
+  BB.x = -BA2.h - 120; BB.y = BA2.y + MEAS + 160;
+  // PEOPLE O
+  const ptk = BB.tokens.find(t => t.text === 'PEOPLE.');
+  const i = 2, cx = (ptk.xs[i] + ptk.xs[i + 1]) / 2, cap = ptk.cap;
+  const [wx, wy] = toWorld(BB, ptk.x + cx, ptk.y - cap / 2);
+  OC = { x: wx, y: wy, R: .56 * cap, r: .56 * cap - .2 * cap };
+  // parchment block inside the counter
+  const sc = (.93 * OC.r) / Math.hypot(MEAS / 2, BP.h / 2);
+  BP.sc = sc; BP.x = OC.x - MEAS / 2 * sc; BP.y = OC.y - BP.h / 2 * sc;
+  buildActors();
+  buildCamera();
+  tokens.forEach(t => { if (t.e === 'slam' || t.e === 'knocked') slamTimes.push(t.t); });
+}
+
+// ---------- camera ----------
+function frameFor(tk, zoomMul = 1) {
+  const b = tk.block, ln = tk.line;
+  const xEnd = tk.vbox ? tk.vbox.x1 : tk.x + tk.w;
+  const fw = Math.max(xEnd * 1.12, MEAS * .58, (tk.rot ? 0 : tk.w * 1.5));
+  let cxL = xEnd - fw * .44;
+  cxL = Math.max(cxL, fw * .42 - 20);
+  const cyL = ln.top + ln.h * .5 - ln.h * .28 + tk.camDy * ln.h;
+  const fh = ln.h * 2.6;
+  const [cx, cy] = toWorld(b, cxL, cyL);
+  const zoom = Math.min(SW / (fw * b.sc), SH / (fh * b.sc)) * zoomMul * tk.camZ;
+  return { cx, cy, zoom, rot: -b.rot + (ln.tilt || 0) * Math.PI / 180 };
+}
+function key(t, st, ease = 'io') { camKeys.push({ t, ...st, ease }); }
+function buildCamera() {
+  const byText = (b, txt) => b.tokens.find(t => t.text === txt);
+  const auto = tokens.filter(t => !t.nocam).sort((a, b) => (a.ct ?? a.t) - (b.ct ?? b.t));
+  const he = byText(BA, 'HE HAS');
+  key(0, frameFor(he, .78));
+  for (const tk of auto) {
+    const kt = tk.ct ?? tk.t;
+    const st = frameFor(tk);
+    let ease = 'io';
+    if (tk.text === 'WITHOUT') ease = 'over';
+    if (tk === byText(BB, 'HE HAS')) ease = 'whip';
+    if (tk.block === BP && tk.text === 'THESE') ease = 'out';
+    key(kt, st, ease);
+  }
+  const arm = frameFor(byText(BA, 'ARMIES'));
+  key(4.55, { ...arm, zoom: arm.zoom * .95, cx: arm.cx - 80 });
+  const leg = frameFor(byText(BA2, 'LEGISLATURES.'));
+  key(7.30, { ...leg, zoom: leg.zoom * 1.04 });
+  const peo = frameFor(byText(BB, 'PEOPLE.'));
+  key(14.40, { ...peo, zoom: peo.zoom * 1.05 });
+  key(14.72, { cx: OC.x, cy: OC.y, zoom: 420 / OC.R, rot: 0 });
+  key(15.00, { cx: OC.x, cy: OC.y, zoom: 1250 / OC.r, rot: 0 }, 'in');
+  const hon = frameFor(byText(BP, 'HONOR.'));
+  key(26.60, { ...hon, zoom: hon.zoom * 1.04 });
+  key(28.20, { cx: OC.x, cy: OC.y, zoom: 430 / OC.R, rot: 0 });
+  key(29.20, { cx: OC.x, cy: OC.y, zoom: 440 / OC.R, rot: 0 });
+  key(30.00, { cx: OC.x, cy: OC.y, zoom: 470 / OC.R, rot: 0 });
+  camKeys.sort((a, b) => a.t - b.t);
+}
+function camAt(t) {
+  const K = camKeys;
+  if (t <= K[0].t) return { ...K[0] };
+  for (let i = 1; i < K.length; i++) {
+    if (t <= K[i].t) {
+      const a = K[i - 1], b = K[i];
+      const p = (t - a.t) / Math.max(1e-6, b.t - a.t);
+      const ez = { io: eIO, over: eIO, whip: eQ, in: eIn, out: eOut }[b.ease] || eIO;
+      const q = ez(p);
+      const qr = b.ease === 'over' ? eIOover(p) : q;
+      return {
+        cx: lerp(a.cx, b.cx, q), cy: lerp(a.cy, b.cy, q),
+        zoom: Math.exp(lerp(Math.log(a.zoom), Math.log(b.zoom), q)),
+        rot: lerp(a.rot, b.rot, qr)
+      };
+    }
+  }
+  return { ...K[K.length - 1] };
+}
+
+// ---------- actors (silhouettes & moving shapes) ----------
+function buildActors() {
+  const tok = (b, txt) => b.tokens.find(t => t.text === txt);
+  // Redcoats: march right-to-left below ARMIES
+  const arm = tok(BA, 'ARMIES');
+  actors.push({ b: BA, t0: 3.0, t1: 6.2, echo: true, draw: (c, t) => drawRedcoats(c, t, arm) });
+  // Ship behind SEAS
+  const seas = tok(BB, 'SEAS,');
+  actors.push({ b: BB, t0: 8.15, t1: 10.0, echo: true, draw: (c, t) => drawShip(c, t, seas) });
+  // Coastline behind COASTS
+  const coasts = tok(BB, 'COASTS,');
+  actors.push({ b: BB, t0: 9.35, t1: 11.35, back: true, draw: (c, t) => drawCoast(c, t, coasts) });
+  // Flames on BURNT (drawn behind the word)
+  const burnt = tok(BB, 'BURNT');
+  actors.push({ b: BB, t0: 10.90, t1: 99, back: true, draw: (c, t) => drawFlames(c, t, burnt) });
+  // Skyline under TOWNS
+  const towns = tok(BB, 'TOWNS,');
+  actors.push({ b: BB, t0: 11.45, t1: 99, draw: (c, t) => drawSkyline(c, t, towns) });
+  // People under PEOPLE
+  const peo = tok(BB, 'PEOPLE.');
+  actors.push({ b: BB, t0: 13.95, t1: 99, draw: (c, t) => drawPeople(c, t, peo) });
+  // Stars into COLONIES
+  const col = tok(BP, 'COLONIES');
+  const R = rng(1776);
+  const starsFrom = [];
+  for (let i = 0; i < 13; i++) starsFrom.push([R() * MEAS, -R() * 260 - 40 + R() * 420, R() * 6.28]);
+  actors.push({ b: BP, t0: 15.55, t1: 17.40, draw: (c, t) => drawStarsFlying(c, t, col, starsFrom) });
+  // Shackle on FREE
+  const free = tok(BP, 'FREE');
+  actors.push({ b: BP, t0: 19.10, t1: 20.20, echo: true, draw: (c, t) => drawShackle(c, t, free) });
+  // Seal bloom behind PLEDGE
+  const pl = tok(BP, 'PLEDGE');
+  actors.push({ b: BP, t0: 22.45, t1: 23.10, back: true, draw: (c, t) => drawSealBloom(c, t, pl) });
+  // Swash under HONOR
+  const hon = tok(BP, 'HONOR.');
+  actors.push({ b: BP, t0: 26.00, t1: 99, draw: (c, t) => drawSwash(c, t, hon) });
+}
+
+function withTok(c, tk, fn) {
+  c.save();
+  c.translate(tk.x, tk.y);
+  if (tk.rot) c.rotate(tk.rot);
+  fn();
+  c.restore();
+}
+
+// Redcoat soldier, facing left, feet at (0,0), height h
+function soldier(c, h, pose, fill) {
+  c.fillStyle = fill; c.strokeStyle = fill;
+  const leg = (x0, x1) => { c.beginPath(); c.moveTo(x0 - .035 * h, -.36 * h); c.lineTo(x0 + .035 * h, -.36 * h); c.lineTo(x1 + .03 * h, 0); c.lineTo(x1 - .04 * h, 0); c.closePath(); c.fill(); c.fillRect(x1 - .075 * h, -.025 * h, .08 * h, .025 * h); };
+  if (pose) { leg(-.02 * h, -.13 * h); leg(.03 * h, .1 * h); } else { leg(-.01 * h, -.04 * h); leg(.02 * h, .04 * h); }
+  // coat with tails
+  c.beginPath();
+  c.moveTo(-.09 * h, -.66 * h); c.lineTo(.09 * h, -.66 * h);
+  c.lineTo(.12 * h, -.3 * h); c.lineTo(.03 * h, -.34 * h); c.lineTo(-.03 * h, -.3 * h); c.lineTo(-.12 * h, -.3 * h);
+  c.closePath(); c.fill();
+  // head + tricorn
+  c.beginPath(); c.arc(0, -.73 * h, .062 * h, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.moveTo(-.13 * h, -.775 * h); c.quadraticCurveTo(0, -.9 * h, .13 * h, -.775 * h); c.lineTo(.06 * h, -.79 * h); c.lineTo(0, -.83 * h); c.lineTo(-.06 * h, -.79 * h); c.closePath(); c.fill();
+  // arm swing
+  c.lineWidth = .05 * h; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(-.03 * h, -.62 * h); c.lineTo((pose ? -.1 : .06) * h, -.42 * h); c.stroke();
+  // shouldered musket (right shoulder, angled back)
+  c.save(); c.translate(.07 * h, -.6 * h); c.rotate(.42);
+  c.fillRect(-.016 * h, -.5 * h, .032 * h, .62 * h);       // barrel
+  c.fillRect(-.03 * h, .02 * h, .06 * h, .2 * h);          // stock
+  c.beginPath(); c.moveTo(-.008 * h, -.5 * h); c.lineTo(0, -.66 * h); c.lineTo(.008 * h, -.5 * h); c.fill(); // bayonet
+  c.restore();
+  c.lineWidth = .045 * h; c.beginPath(); c.moveTo(.06 * h, -.62 * h); c.lineTo(.12 * h, -.48 * h); c.stroke();
+}
+function drawRedcoats(c, t, arm) {
+  const h = arm.cap * 1.15, ground = arm.y + arm.cap * 1.42;
+  const speed = 420; // block units / s
+  const x0 = MEAS + 100 - (t - 3.0) * speed;
+  const pose = Math.floor(t * 10) % 2;
+  for (let i = 0; i < 5; i++) {
+    c.save(); c.translate(x0 + i * .48 * h, ground);
+    soldier(c, h, (pose + i) % 2, c.__fill || C.red);
+    c.restore();
+  }
+}
+function drawShip(c, t, seas) {
+  const h = seas.cap * 1.3;
+  const x = -250 + (t - 8.15) * 880, y = seas.y + seas.cap * 1.6;
+  c.save(); c.translate(x, y); c.rotate(Math.sin(t * 5) * .035);
+  c.fillStyle = c.__fill || C.bone;
+  // hull
+  c.beginPath(); c.moveTo(-.62 * h, -.2 * h); c.lineTo(.5 * h, -.2 * h); c.lineTo(.7 * h, -.3 * h); c.lineTo(.55 * h, 0); c.lineTo(-.5 * h, 0); c.lineTo(-.66 * h, -.28 * h); c.closePath(); c.fill();
+  // masts & square sails
+  const masts = [[-.35, .78], [.02, .95], [.36, .82]];
+  for (const [mx, mh] of masts) {
+    c.fillRect(mx * h - .012 * h, -mh * h - .2 * h, .024 * h, mh * h);
+    for (let k = 0; k < 3; k++) {
+      const top = -.2 * h - mh * h * (.92 - k * .29), bot = top + mh * h * .24, wd = (.17 - k * -.02) * h * (1 - k * .12);
+      c.beginPath(); c.moveTo(mx * h - wd * .82, top); c.lineTo(mx * h + wd * .82, top);
+      c.quadraticCurveTo(mx * h + wd * 1.08, (top + bot) / 2, mx * h + wd, bot);
+      c.lineTo(mx * h - wd, bot); c.quadraticCurveTo(mx * h - wd * .7, (top + bot) / 2, mx * h - wd * .82, top); c.fill();
+    }
+    c.beginPath(); c.moveTo(mx * h, -mh * h - .2 * h); c.lineTo(mx * h - .1 * h, -mh * h - .17 * h); c.lineTo(mx * h, -mh * h - .14 * h); c.fill();
+  }
+  // jib
+  c.beginPath(); c.moveTo(.4 * h, -.95 * h); c.lineTo(.68 * h, -.32 * h); c.lineTo(.42 * h, -.36 * h); c.closePath(); c.fill();
+  c.restore();
+}
+// Atlantic seaboard of the thirteen colonies, [lon, lat]
+const COAST = [[-67,45],[-67.1,44.6],[-68.2,44.3],[-69.5,43.9],[-70.2,43.6],[-70.7,42.9],[-70.6,42.6],[-71,42.3],[-70.6,41.9],[-70.0,41.7],[-70.0,42.05],[-69.9,41.65],[-70.5,41.55],[-71.2,41.45],[-71.9,41.3],[-72.9,41.2],[-73.7,40.85],[-74.0,40.5],[-74.05,40.0],[-74.4,39.4],[-74.9,38.95],[-75.3,39.25],[-75.1,38.8],[-75.05,38.3],[-75.6,37.6],[-75.95,37.15],[-76.3,37.2],[-76.0,36.9],[-75.75,36.2],[-75.5,35.25],[-76.5,34.75],[-77.9,33.9],[-79.1,33.3],[-80.0,32.7],[-81.0,32.05],[-81.35,31.3],[-81.45,30.7],[-82.2,30.6],[-84.9,30.75],[-85.1,31.9],[-85.6,34.98],[-83.1,35.0],[-81.7,36.55],[-80.0,37.4],[-79.5,39.7],[-80.52,40.0],[-80.52,42.0],[-79.76,42.27],[-79.0,43.3],[-76.5,43.6],[-76.2,44.2],[-74.7,45.0],[-71.5,45.0],[-71.0,45.3],[-70.2,46.4],[-69.2,47.45],[-68.0,47.35],[-67.8,47.0],[-67.78,45.7]];
+function coastPath(c, scale, ox, oy) {
+  const k = Math.cos(38 * Math.PI / 180);
+  const cx = -75.5, cy = 38.5;
+  c.beginPath();
+  COAST.forEach(([lo, la], i) => {
+    const x = ox + (lo - cx) * k * scale, y = oy - (la - cy) * scale;
+    i ? c.lineTo(x, y) : c.moveTo(x, y);
+  });
+  c.closePath();
+}
+function drawCoast(c, t, coasts) {
+  const sc = coasts.cap * .3;
+  const ox = coasts.x + coasts.w * .5, oy = coasts.y - coasts.cap * .55;
+  const p = clamp((t - 9.35) / .55);
+  const out = clamp((t - 10.95) / .4);
+  c.save();
+  c.translate(ox, oy);
+  c.rotate((1 - eBackOut(p, 1.2)) * -.55);
+  c.scale(lerp(.5, 1, eOut(p)) * (1 - .25 * eIn(out)), lerp(.5, 1, eOut(p)) * (1 - .25 * eIn(out)));
+  c.globalAlpha *= p * (1 - out);
+  // echo pulses
+  for (let k = 0; k < 3; k++) {
+    const pk = clamp((t - (10.10 + k * 8 / 60)) / .45);
+    if (pk > 0 && pk < 1) {
+      c.save(); c.globalAlpha *= (1 - pk) * .9; c.scale(1 + pk * .35, 1 + pk * .35);
+      coastPath(c, sc, 0, 0); c.lineWidth = 3 / (1 + pk * .35) * coasts.cap / 60; c.strokeStyle = C.echo; c.stroke(); c.restore();
+    }
+  }
+  coastPath(c, sc, 0, 0);
+  c.fillStyle = '#423E37'; c.fill();
+  c.lineWidth = coasts.cap * .025; c.strokeStyle = C.bone; c.stroke();
+  c.restore();
+}
+function flameShape(c, x0, x1, base, h, k, seed) {
+  const R = rng(seed * 31 + k * 7);
+  const xm = lerp(x0, x1, .35 + R() * .3);
+  c.beginPath();
+  c.moveTo(x0, base);
+  c.quadraticCurveTo(x0 - (x1 - x0) * .1, base - h * .5, xm + (R() - .5) * (x1 - x0) * .5, base - h * (.85 + R() * .3));
+  c.quadraticCurveTo(x1 + (x1 - x0) * .1, base - h * .45, x1, base);
+  c.closePath(); c.fill();
+}
+function flameTongue(c, cx, base, wd, h, lean) {
+  c.beginPath();
+  c.moveTo(cx - wd / 2, base);
+  c.bezierCurveTo(cx - wd * .62, base - h * .42, cx - wd * .1 + lean * .4, base - h * .62, cx + lean, base - h);
+  c.bezierCurveTo(cx + wd * .12 + lean * .3, base - h * .58, cx + wd * .66, base - h * .38, cx + wd / 2, base);
+  c.closePath(); c.fill();
+}
+function drawFlames(c, t, burnt) {
+  const g = eOut(clamp((t - 10.90) / .15));
+  withTok(c, burnt, () => {
+    c.fillStyle = C.red;
+    const cap = burnt.cap, base = -cap * .97;
+    for (let i = 0; i < burnt.text.length; i++) {
+      const x0 = burnt.xs[i], x1 = burnt.xs[i + 1], lw = x1 - x0, cx = (x0 + x1) / 2;
+      const fl = Math.floor(t * 15);           // 4-frame flicker steps
+      const R = rng(i * 53 + fl * 7);
+      const h = cap * .62 * g * (.8 + R() * .35);
+      flameTongue(c, cx + (R() - .5) * lw * .1, base, lw * .46, h, (R() - .5) * cap * .16);
+      flameTongue(c, x0 + lw * .2, base, lw * .26, h * (.42 + R() * .2), -cap * .05);
+      flameTongue(c, x1 - lw * .2, base, lw * .26, h * (.38 + R() * .2), cap * .05);
+    }
+  });
+}
+function drawSkyline(c, t, towns) {
+  const p = eBackOut(clamp((t - 11.45) / .4), 1.4);
+  withTok(c, towns, () => {
+    const hgt = towns.cap * .45, base = towns.cap * .55;
+    c.save(); c.translate(0, base); c.scale(1, p);
+    c.fillStyle = C.bone;
+    const R = rng(77); let x = 0; const W = towns.w;
+    c.fillRect(0, -hgt * .05, W, hgt * .05);
+    while (x < W - hgt * .3) {
+      const steeple = Math.abs(x - W * .55) < hgt * .5;
+      const bw = steeple ? hgt * .45 : hgt * (.45 + R() * .45), bh = steeple ? hgt * .55 : hgt * (.35 + R() * .3);
+      c.fillRect(x, -bh, bw, bh);
+      if (steeple) {
+        c.fillRect(x + bw * .25, -bh - hgt * .35, bw * .5, hgt * .35);
+        c.beginPath(); c.moveTo(x + bw * .25, -bh - hgt * .35); c.lineTo(x + bw * .5, -bh - hgt * 1.05); c.lineTo(x + bw * .75, -bh - hgt * .35); c.fill();
+      } else {
+        c.beginPath(); c.moveTo(x - hgt * .03, -bh); c.lineTo(x + bw / 2, -bh - bw * .45); c.lineTo(x + bw + hgt * .03, -bh); c.fill();
+        c.fillRect(x + bw * .7, -bh - bw * .4, bw * .1, bw * .3);
+      }
+      x += bw + hgt * (.06 + R() * .12);
+    }
+    c.restore();
+  });
+}
+function person(c, h, kind) {
+  c.beginPath(); c.arc(0, -.86 * h, .075 * h, 0, Math.PI * 2); c.fill();
+  if (kind === 0) { // tricorn man
+    c.beginPath(); c.moveTo(-.14 * h, -.92 * h); c.quadraticCurveTo(0, -1.06 * h, .14 * h, -.92 * h); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(-.11 * h, -.78 * h); c.lineTo(.11 * h, -.78 * h); c.lineTo(.13 * h, -.38 * h); c.lineTo(-.13 * h, -.38 * h); c.fill();
+    c.fillRect(-.09 * h, -.4 * h, .07 * h, .4 * h); c.fillRect(.02 * h, -.4 * h, .07 * h, .4 * h);
+  } else if (kind === 1) { // bonnet woman
+    c.beginPath(); c.arc(0, -.87 * h, .1 * h, Math.PI * .9, Math.PI * 2.1); c.fill();
+    c.beginPath(); c.moveTo(-.08 * h, -.78 * h); c.lineTo(.08 * h, -.78 * h); c.lineTo(.2 * h, 0); c.lineTo(-.2 * h, 0); c.closePath(); c.fill();
+  } else if (kind === 2) { // child
+    c.save(); c.scale(.62, .62);
+    c.beginPath(); c.moveTo(-.1 * h, -.78 * h); c.lineTo(.1 * h, -.78 * h); c.lineTo(.12 * h, -.38 * h); c.lineTo(-.12 * h, -.38 * h); c.fill();
+    c.fillRect(-.08 * h, -.4 * h, .06 * h, .4 * h); c.fillRect(.02 * h, -.4 * h, .06 * h, .4 * h);
+    c.restore();
+  } else { // farmer with hoe
+    c.fillRect(-.14 * h, -.97 * h, .28 * h, .05 * h);
+    c.fillRect(-.07 * h, -1.03 * h, .14 * h, .08 * h);
+    c.beginPath(); c.moveTo(-.11 * h, -.78 * h); c.lineTo(.11 * h, -.78 * h); c.lineTo(.13 * h, -.38 * h); c.lineTo(-.13 * h, -.38 * h); c.fill();
+    c.fillRect(-.09 * h, -.4 * h, .07 * h, .4 * h); c.fillRect(.02 * h, -.4 * h, .07 * h, .4 * h);
+    c.save(); c.translate(.16 * h, -.6 * h); c.rotate(-.25); c.fillRect(-.015 * h, -.45 * h, .03 * h, 1.05 * h); c.fillRect(-.015 * h, -.47 * h, .12 * h, .05 * h); c.restore();
+  }
+}
+function drawPeople(c, t, peo) {
+  withTok(c, peo, () => {
+    const h = peo.cap * .5, ground = peo.cap * .7;
+    c.fillStyle = C.bone;
+    const n = 9;
+    for (let i = 0; i < n; i++) {
+      const p = eBackOut(clamp((t - (14.0 + i * .025)) / .2), 1.6);
+      if (p <= 0) continue;
+      c.save(); c.translate(peo.w * (i + .5) / n, ground); c.scale(1, p);
+      person(c, h * (i % 4 === 2 ? 1 : 1), [0, 1, 2, 3, 1, 0, 3, 2, 0, 1, 0][i]);
+      c.restore();
+    }
+    c.fillRect(0, ground, peo.w, peo.cap * .02);
+  });
+}
+function star(c, x, y, r, rot = 0) {
+  c.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = rot - Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .42 : r;
+    const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+    i ? c.lineTo(px, py) : c.moveTo(px, py);
+  }
+  c.closePath(); c.fill();
+}
+function starRing(tk) {
+  const i = 1, cx = tk.x + (tk.xs[i] + tk.xs[i + 1]) / 2, cy = tk.y - tk.cap / 2, R = tk.cap * .42;
+  const pts = [];
+  for (let k = 0; k < 13; k++) { const a = -Math.PI / 2 + k * Math.PI * 2 / 13; pts.push([cx + Math.cos(a) * R, cy + Math.sin(a) * R]); }
+  return { pts, r: tk.cap * .1 };
+}
+function drawStarsFlying(c, t, tk, from) {
+  const ring = starRing(tk);
+  c.fillStyle = C.navy;
+  for (let k = 0; k < 13; k++) {
+    const t0 = 15.6 + k * .02, t1 = 16.55 + k * .06;
+    const p = clamp((t - t0) / (t1 - t0));
+    const q = eIO(p);
+    const [fx, fy, fr] = from[k];
+    const [tx, ty] = ring.pts[k];
+    const mx = (fx + tx) / 2 + (k % 2 ? 1 : -1) * 120, my = Math.min(fy, ty) - 140;
+    const x = (1 - q) * (1 - q) * fx + 2 * (1 - q) * q * mx + q * q * tx;
+    const y = (1 - q) * (1 - q) * fy + 2 * (1 - q) * q * my + q * q * ty;
+    const lift = clamp((t - 15.55) / .12);
+    star(c, x, y, ring.r * lift * lerp(2.6, 1, q), fr * (1 - q));
+  }
+}
+function drawShackle(c, t, free) {
+  withTok(c, free, () => {
+    const cap = free.cap;
+    const sx = free.xs[0] + (free.xs[1] - free.xs[0]) * .2, cy = -cap * .5;
+    const rx = cap * .2, ry = cap * .28, lw = cap * .075;
+    const p = clamp((t - 19.35) / .55), a = eOut(p);
+    const ink = c.__fill || C.ink;
+    c.strokeStyle = ink; c.fillStyle = ink; c.lineWidth = lw;
+    // chain trailing left from the cuff; falls away once the cuff snaps
+    c.save(); c.translate(-a * cap * .3, a * a * cap * 2.4); c.rotate(-a * .5);
+    for (let k = 0; k < 4; k++) {
+      const lx = sx - rx - cap * (.2 + k * .3);
+      c.lineWidth = lw * .8;
+      c.beginPath();
+      if (k % 2 === 0) c.ellipse(lx, cy, cap * .17, cap * .085, 0, 0, Math.PI * 2);
+      else { c.moveTo(lx - cap * .14, cy); c.lineTo(lx + cap * .14, cy); }
+      c.stroke();
+    }
+    c.restore();
+    for (const sd of [-1, 1]) {
+      c.save();
+      c.translate(sx + sd * a * cap * 1.4, cy + a * a * cap * 2.2);
+      c.rotate(sd * a * 1.9);
+      c.lineWidth = lw;
+      c.beginPath();
+      c.ellipse(0, 0, rx, ry, 0, sd < 0 ? Math.PI * .5 : -Math.PI * .5, sd < 0 ? Math.PI * 1.5 : Math.PI * .5);
+      c.stroke();
+      if (sd > 0) { c.fillRect(rx * .45, -ry * .25, rx * .55, ry * .5); }
+      else { c.beginPath(); c.arc(0, 0, lw * .9, 0, Math.PI * 2); }
+      c.restore();
+    }
+  });
+}
+function sealPath(c, x, y, r, seed) {
+  c.beginPath();
+  for (let i = 0; i <= 72; i++) {
+    const a = i / 72 * Math.PI * 2;
+    const rr = r * (1 + .045 * Math.sin(a * 9 + seed) + .02 * Math.sin(a * 23 + seed * 2));
+    const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+    i ? c.lineTo(px, py) : c.moveTo(px, py);
+  }
+  c.closePath();
+}
+function drawSealBloom(c, t, pl) {
+  const p = clamp((t - 22.45) / .55);
+  withTok(c, pl, () => {
+    c.save();
+    c.globalAlpha *= (1 - p) * .55;
+    sealPath(c, pl.w / 2, -pl.cap / 2, pl.cap * lerp(.6, 1.7, eOut(p)), 3);
+    c.lineWidth = pl.cap * .06; c.strokeStyle = C.ink; c.stroke();
+    sealPath(c, pl.w / 2, -pl.cap / 2, pl.cap * lerp(.45, 1.45, eOut(p)), 5);
+    c.lineWidth = pl.cap * .02; c.stroke();
+    c.restore();
+  });
+}
+function swashPts(hon) {
+  const c = hon.cap, W = hon.w, y0 = c * .32;
+  const segs = [
+    [[-c * .05, y0 + c * .05], [W * .05, y0 + c * .45], [W * .2, y0 - c * .05], [W * .12, y0 + c * .1]],
+    [[W * .12, y0 + c * .1], [W * .05, y0 + c * .25], [W * .3, y0 + c * .32], [W * .55, y0 + c * .2]],
+    [[W * .55, y0 + c * .2], [W * .8, y0 + c * .08], [W * 1.0, y0 + c * .05], [W * 1.02, y0 + c * .18]],
+    [[W * 1.02, y0 + c * .18], [W * 1.04, y0 + c * .32], [W * .9, y0 + c * .3], [W * .94, y0 + c * .2]]
+  ];
+  const pts = [];
+  for (const [a, b, d, e] of segs) for (let i = 0; i <= 40; i++) {
+    const u = i / 40, m = 1 - u;
+    pts.push([m * m * m * a[0] + 3 * m * m * u * b[0] + 3 * m * u * u * d[0] + u * u * u * e[0],
+              m * m * m * a[1] + 3 * m * m * u * b[1] + 3 * m * u * u * d[1] + u * u * u * e[1]]);
+  }
+  return pts;
+}
+let SWASH = null;
+function drawSwash(c, t, hon) {
+  if (!SWASH) SWASH = swashPts(hon);
+  const p = eIO(clamp((t - 26.0) / .6));
+  const n = Math.floor(p * (SWASH.length - 1));
+  if (n < 1) return;
+  withTok(c, hon, () => {
+    c.strokeStyle = C.navy; c.lineCap = 'round'; c.lineJoin = 'round';
+    for (let i = 1; i <= n; i++) {
+      const u = i / (SWASH.length - 1);
+      c.lineWidth = hon.cap * (.012 + .03 * Math.pow(Math.sin(Math.PI * u), 1.5));
+      c.beginPath(); c.moveTo(...SWASH[i - 1]); c.lineTo(...SWASH[i]); c.stroke();
+    }
+  });
+}
+
+// ---------- pictogram letters (token-local, baseline y=0) ----------
+function musket(c, x0, y0, x1, y1, cap) {
+  const L = Math.hypot(x1 - x0, y1 - y0);
+  c.save(); c.translate(x0, y0); c.rotate(Math.atan2(y1 - y0, x1 - x0));
+  c.beginPath(); c.moveTo(0, -cap * .075); c.lineTo(L * .3, -cap * .04); c.lineTo(L * .3, cap * .045); c.lineTo(0, cap * .1); c.closePath(); c.fill();
+  c.fillRect(L * .28, -cap * .035, L * .74, cap * .07);
+  c.fillRect(L * .34, cap * .03, L * .06, cap * .07);
+  c.beginPath(); c.moveTo(L * 1.0, -cap * .02); c.lineTo(L * 1.0 + cap * .3, 0); c.lineTo(L * 1.0, cap * .02); c.fill();
+  c.restore();
+}
+function drawPict(c, tk, i, t, fill) {
+  const x0 = tk.xs[i], x1 = tk.xs[i + 1], wd = x1 - x0, cap = tk.cap, mx = (x0 + x1) / 2;
+  const pt = tk.pict.type;
+  c.fillStyle = fill; c.strokeStyle = fill;
+  if (pt === 'musketA') {
+    musket(c, x0 + wd * .02, 0, x0 + wd * .64, -cap * .86, cap);
+    musket(c, x1 - wd * .02, 0, x0 + wd * .36, -cap * .86, cap);
+    c.lineWidth = cap * .04; c.beginPath(); c.moveTo(x0 + wd * .2, -cap * .32); c.quadraticCurveTo(mx, -cap * .22, x1 - wd * .2, -cap * .32); c.stroke();
+  } else if (pt === 'sealO') {
+    const R = cap * .56, cy = -cap * .5;
+    sealPath(c, mx, cy, R, 1.3); c.arc(mx, cy, R * .74, 0, Math.PI * 2); c.fill('evenodd');
+    c.lineWidth = cap * .025; c.beginPath(); c.arc(mx, cy, R * .64, 0, Math.PI * 2); c.stroke();
+    if (t >= tk.pict.innerT) {
+      const fs = cap * .16 / CAP.small;
+      c.font = fontStr('small', fs); c.textAlign = 'center';
+      c.fillText('OF', mx, cy - cap * .02); c.fillText('OUR', mx, cy + cap * .2);
+      c.textAlign = 'left';
+    }
+    const sp = clamp((t - tk.pict.slashT) / (8 / 60));
+    if (sp > 0) {
+      const a = Math.PI * .75, r = R * .74;
+      const ax = mx + Math.cos(a - Math.PI) * r, ay = cy + Math.sin(a - Math.PI) * r;
+      const bx = mx + Math.cos(a) * r, by = cy + Math.sin(a) * r;
+      c.lineWidth = cap * .09; c.lineCap = 'butt';
+      c.beginPath(); c.moveTo(ax, ay); c.lineTo(lerp(ax, bx, eOut(sp)), lerp(ay, by, eOut(sp))); c.stroke();
+    }
+  } else if (pt === 'peopleO') {
+    const R = cap * .56, r = R - cap * .2, cy = -cap * .5;
+    c.beginPath(); c.arc(mx, cy, R, 0, Math.PI * 2); c.arc(mx, cy, r, 0, Math.PI * 2, true); c.fill();
+  } else if (pt === 'starsO') {
+    if (t >= 16.55 + 12 * .06) { const ring = starRing(tk); for (const [x, y] of ring.pts) star(c, x - tk.x, y - tk.y, ring.r); }
+  } else if (pt === 'hallI') {
+    const bw = Math.max(wd * .9, cap * .32), bx = mx - bw / 2;
+    c.fillRect(bx, -cap * .52, bw, cap * .52);
+    c.fillRect(bx + bw * .14, -cap * .78, bw * .72, cap * .27);
+    c.save(); c.fillStyle = BG(tk);
+    c.beginPath(); c.arc(mx, -cap * .66, bw * .2, 0, Math.PI * 2); c.fill();
+    c.fillRect(mx - bw * .1, -cap * .3, bw * .2, cap * .3);
+    c.fillStyle = fill; c.fillRect(mx - bw * .015, -cap * .76, bw * .03, cap * .1);
+    c.restore();
+    c.beginPath(); c.moveTo(bx + bw * .22, -cap * .78); c.lineTo(bx + bw * .28, -cap * .92); c.lineTo(bx + bw * .72, -cap * .92); c.lineTo(bx + bw * .78, -cap * .78); c.fill();
+    c.fillRect(bx + bw * .34, -cap * 1.02, bw * .32, cap * .1);
+    c.beginPath(); c.moveTo(bx + bw * .34, -cap * 1.02); c.quadraticCurveTo(mx, -cap * 1.12, bx + bw * .66, -cap * 1.02); c.fill();
+    c.fillRect(mx - cap * .008, -cap * 1.25, cap * .016, cap * .16);
+  } else if (pt === 'coinO') {
+    const R = cap * .52, cy = -cap * .5;
+    const sp = clamp((t - 24.62) / .4);
+    const sx = Math.cos(sp * Math.PI * 2);
+    c.save(); c.translate(mx, cy); c.scale(Math.max(.04, Math.abs(sx)), 1);
+    c.beginPath(); c.arc(0, 0, R, 0, Math.PI * 2); c.fill();
+    c.save(); c.fillStyle = BG(tk); c.strokeStyle = BG(tk);
+    c.lineWidth = cap * .03; c.beginPath(); c.arc(0, 0, R * .8, 0, Math.PI * 2); c.stroke();
+    if (sx >= 0) {
+      c.fillRect(-R * .42, -R * .45, R * .14, R * .9); c.fillRect(R * .28, -R * .45, R * .14, R * .9);
+      star(c, 0, 0, R * .26);
+    } else { c.fillRect(-R * .4, -R * .06, R * .8, R * .12); }
+    c.restore(); c.restore();
+  }
+}
+
+// ---------- tokens ----------
+const BG = tk => tk.world === 'night' ? C.night : C.parch;
+function tokColor(tk) {
+  if (tk.col) return C[tk.col];
+  return tk.world === 'night' ? C.bone : C.ink;
+}
+const D = { slam: 5, slide: 14, drop: 16, ghost: 14, fly: 50, wipe: 30, knocked: 5, standup: 8 };
+function tokStart(tk) {
+  if (tk.e === 'standup') return tk.t - (8 + 3 * (tk.text.length - 1)) * FR;
+  return tk.t - (D[tk.e] || 0) * FR;
+}
+function drawLetters(c, tk, t, fill, perLetter) {
+  c.font = fontStr(tk.f, tk.cap / CAP[tk.f]);
+  c.fillStyle = fill;
+  for (let i = 0; i < tk.text.length; i++) {
+    const ch = tk.text[i];
+    if (ch === ' ') continue;
+    let dx = 0, dy = 0, rot = 0, sx = 1, sy = 1, al = 1;
+    if (perLetter) { const r = perLetter(i); if (!r) continue; ({ dx = 0, dy = 0, rot = 0, sx = 1, sy = 1, al = 1 } = r); }
+    const x0 = tk.xs[i], cxl = (tk.xs[i] + tk.xs[i + 1]) / 2;
+    c.save();
+    c.translate(cxl + dx, dy); c.rotate(rot); c.scale(sx, sy);
+    if (al !== 1) c.globalAlpha *= al;
+    if (tk.pict && tk.pict.i === i) { c.translate(-cxl, 0); drawPict(c, tk, i, t, fill); }
+    else c.fillText(ch, x0 - cxl, 0);
+    c.restore();
+  }
+}
+const KNOCK = {};
+function knockFor(tk, i) {
+  const k = tk.text + i;
+  if (!KNOCK[k]) { const R = rng(i * 97 + 13); KNOCK[k] = { dx: (R() - .5) * 10 * tk.cap / 90, dy: (R() - .5) * 10 * tk.cap / 90, rot: (R() - .5) * .17 }; }
+  return KNOCK[k];
+}
+const FLY = {};
+function flyFor(i) {
+  if (!FLY[i]) { const R = rng(i * 131 + 7); FLY[i] = { dx: (R() - .5) * 1300, dy: (R() - .5) * 900 - 200, rot: (R() - .5) * 3, sc: .3 + R() * 2.2 }; }
+  return FLY[i];
+}
+function drawToken(c, tk, t, opts = {}) {
+  if (t < tokStart(tk)) return;
+  const fill = opts.fill || tokColor(tk);
+  const night = tk.world === 'night';
+  c.save();
+  c.translate(tk.x, tk.y);
+  if (tk.rot) c.rotate(tk.rot);
+  if (night && !opts.fill) {
+    c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 4; c.shadowOffsetX = 3; c.shadowOffsetY = 3;
+  }
+  const W = tk.w, cap = tk.cap;
+  const p = clamp((t - tokStart(tk)) / Math.max(FR, tk.t - tokStart(tk)));
+  let per = null;
+  const fx = tk.fx;
+  if (fx === 'waves') per = i => ({ dy: Math.sin(t * 5.2 + i * 1.1) * cap * .06 });
+  switch (tk.e) {
+    case 'slam': case 'knocked': {
+      const sc = 1.4 - .4 * eOut(p);
+      c.translate(W / 2, -cap / 2); c.scale(sc, sc); c.translate(-W / 2, cap / 2);
+      c.globalAlpha *= clamp(p * 2.5);
+      if (tk.e === 'knocked') {
+        const q = eOut(clamp((t - tk.t) / (4 / 60)));
+        per = i => { const k = knockFor(tk, i); return { dx: k.dx * q, dy: k.dy * q, rot: k.rot * q }; };
+      }
+      break;
+    }
+    case 'slide': {
+      const dist = Math.max(W * .9, 380);
+      if (p < 1 && !opts.ghost) {
+        for (const [lag, al] of [[.2, .1], [.13, .18], [.06, .3]]) {
+          const pp = clamp(p - lag);
+          c.save(); c.globalAlpha *= al; c.translate((1 - eOut(pp)) * dist, 0);
+          drawLetters(c, tk, t, fill, per); c.restore();
+        }
+      }
+      c.translate((1 - eOut(p)) * dist, 0);
+      break;
+    }
+    case 'drop': {
+      c.translate(0, -(1 - bounce1(p)) * cap * 1.8);
+      c.globalAlpha *= clamp(p * 3);
+      break;
+    }
+    case 'ghost': {
+      const sc = lerp(3, 1, eOut(p));
+      c.translate(W / 2, -cap / 2); c.scale(sc, sc); c.translate(-W / 2, cap / 2);
+      c.globalAlpha *= lerp(.15, 1, eIn(p));
+      break;
+    }
+    case 'standup': {
+      per = i => {
+        const st = tokStart(tk) + 3 * i * FR;
+        const q = clamp((t - st) / (8 * FR));
+        if (q <= 0) return null;
+        return { sy: Math.max(.02, eBackOut(q, 2.2)) };
+      };
+      break;
+    }
+    case 'fly': {
+      per = i => {
+        const st = tokStart(tk) + i * 3 * FR;
+        const q = eOut(clamp((t - st) / ((D.fly - 3 * tk.text.length) * FR)));
+        if (q <= 0) return null;
+        const f = flyFor(i);
+        const sc = lerp(f.sc, 1, q);
+        return { dx: f.dx * (1 - q), dy: f.dy * (1 - q), rot: f.rot * (1 - q), sx: sc, sy: sc, al: clamp(q * 2) };
+      };
+      break;
+    }
+    case 'wipe': {
+      c.beginPath(); c.rect(-cap * .3, -cap * 1.6, (W + cap * .6) * eIO(p), cap * 2.2); c.clip();
+      break;
+    }
+    default: break;
+  }
+  drawLetters(c, tk, t, fill, per);
+  c.restore();
+}
+
+// ---------- render ----------
+function applyBlock(c, b) {
+  c.translate(b.x, b.y); c.rotate(b.rot); c.scale(b.sc, b.sc);
+}
+function drawActors(c, b, t, back, fillOverride) {
+  for (const a of actors) {
+    if (a.b !== b || !!a.back !== back || t < a.t0 || t > a.t1) continue;
+    if (a.echo && !fillOverride) {
+      for (const [k, al] of [[3, .15], [2, .35], [1, .6]]) {
+        const te = t - k * 4 * FR;
+        if (te < a.t0) continue;
+        c.save(); c.globalAlpha *= al; c.__fill = C.echo; a.draw(c, te); c.__fill = null; c.restore();
+      }
+    }
+    c.save(); a.draw(c, t); c.restore();
+  }
+}
+function drawBlock(c, b, t) {
+  c.save(); applyBlock(c, b);
+  drawActors(c, b, t, true);
+  for (const tk of b.tokens) drawToken(c, tk, t);
+  drawActors(c, b, t, false);
+  c.restore();
+}
+function camTransform(c, t) {
+  const cam = camAt(t);
+  // continuous breathing so the camera is never still
+  const dr = .6 * Math.PI / 180 * Math.sin(t * .7);
+  const dz = 1 + .015 * Math.sin(t * .9 + 1);
+  let sx = 0, sy = 0;
+  for (const st of slamTimes) {
+    const d = t - st;
+    if (d >= 0 && d < 2 * FR) { const f = Math.round(d / FR); sx += (f ? -1 : 1) * SH * .015; sy += (f ? 1 : -.6) * SH * .01; }
+  }
+  // opening tilted plane
+  const k = 1 - eIO(clamp((t - .4) / 2.6));
+  c.translate(SW / 2 + sx, SH / 2 + sy);
+  if (k > 0) { c.rotate(-15 * Math.PI / 180 * k); c.transform(1, 0, -.38 * k, 1 - .3 * k, 0, 0); }
+  c.rotate(cam.rot + dr);
+  c.scale(cam.zoom * dz, cam.zoom * dz);
+  c.translate(-cam.cx, -cam.cy);
+}
+function background(c) {
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  const g = c.createRadialGradient(SW / 2, SH / 2, SH * .25, SW / 2, SH / 2, SW * .62);
+  g.addColorStop(0, C.night); g.addColorStop(.55, '#151413'); g.addColorStop(1, C.vig);
+  c.fillStyle = g; c.fillRect(0, 0, SW, SH);
+}
+function parchFill(t) {
+  return clamp((t - 14.45) / .35);
+}
+function content(c, t, alpha) {
+  c.save();
+  c.globalAlpha = alpha;
+  camTransform(c, t);
+  const base = c.getTransform();
+  drawBlock(c, BA, t);
+  drawBlock(c, BA2, t);
+  drawBlock(c, BB, t);
+  // parchment world inside PEOPLE's O
+  const pf = parchFill(t);
+  if (pf > 0) {
+    c.save();
+    c.beginPath(); c.arc(OC.x, OC.y, OC.r + .5, 0, Math.PI * 2); c.clip();
+    c.globalAlpha = alpha * pf;
+    c.fillStyle = C.parch; c.fillRect(OC.x - OC.R, OC.y - OC.R, OC.R * 2, OC.R * 2);
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.fillStyle = 'rgba(21,19,15,.04)';
+    for (let y = 0; y < SH; y += 6) c.fillRect(0, y, SW, 1);
+    c.setTransform(base);
+    c.globalAlpha = alpha;
+    drawBlock(c, BP, t);
+    c.restore();
+  }
+  c.restore();
+}
+const BLUR = [[7.26, 7.62], [14.62, 15.02]];
+function render(t) {
+  t = ((t % DUR) + DUR) % DUR;
+  const c = ctx;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.globalAlpha = 1;
+  background(c);
+  if (BLUR.some(([a, b]) => t >= a && t <= b)) {
+    content(c, t - 2 * FR, .22);
+    content(c, t - FR, .35);
+  }
+  content(c, t, 1);
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  // caption
+  const cp = clamp((t - 28.2) / .5);
+  if (cp > 0) {
+    c.globalAlpha = .7 * cp;
+    c.fillStyle = C.bone; c.font = fontStr('small', 22); c.textAlign = 'center';
+    if ('letterSpacing' in c) c.letterSpacing = '6px';
+    c.fillText('THE DECLARATION OF INDEPENDENCE  ·  1776', SW / 2, SH - 34);
+    if ('letterSpacing' in c) c.letterSpacing = '0px';
+    c.textAlign = 'left'; c.globalAlpha = 1;
+  }
+  // iris close (end) / breathe in (start)
+  if (t >= 29.2) {
+    const q = eIn(clamp((t - 29.2) / .8));
+    const rr = lerp(1150, 0, q);
+    c.fillStyle = '#000';
+    c.beginPath(); c.rect(0, 0, SW, SH); c.arc(SW / 2, SH / 2, Math.max(0, rr), 0, Math.PI * 2, true); c.fill('evenodd');
+    if (q >= 1) c.fillRect(0, 0, SW, SH);
+  }
+  if (t < .55) {
+    c.fillStyle = `rgba(0,0,0,${1 - eIO(t / .55)})`; c.fillRect(0, 0, SW, SH);
+  }
+}
+
+// ---------- public API ----------
+let ready = false, playing = true, t0 = null;
+window.duration = DUR;
+window.seek = t => { if (ready) render(Math.abs(t - DUR) < 1e-9 ? 0 : t); };
+window.render = window.seek;
+window.cues = [];
+function loop(now) {
+  if (playing) {
+    if (t0 === null) t0 = now;
+    const t = ((now - t0) / 1000) % DUR;
+    render(Math.round(t * FPS) / FPS);
+  }
+  requestAnimationFrame(loop);
+}
+document.fonts.ready.then(() => Promise.all(Object.values(F).map(f => document.fonts.load(fontStr(Object.keys(F).find(k => F[k] === f), 40))))).then(() => {
+  build();
+  window.cues = tokens.map(t => ({ word: t.text, t: t.t })).sort((a, b) => a.t - b.t);
+  window.cues.push({ word: 'OF OUR', t: 5.95 });
+  window.cues.sort((a, b) => a.t - b.t);
+  ready = true;
+  window.__ready = true;
+  if (!/[?&]still/.test(location.search)) requestAnimationFrame(loop);
+  else render(0);
+});
+window.pause = () => { playing = false; };
+})();
+</script>
+</body>
+</html>
