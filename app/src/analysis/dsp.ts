@@ -150,7 +150,7 @@ export function analyze(monoIn: Float32Array, srIn: number, progress: Progress =
     if (sc > bestScore) { bestScore = sc; bestLag = lag; }
   }
   const sortedScores = [...scores].sort((a, b) => b - a);
-  const bpmConfidence = sortedScores.length > 4 && sortedScores[0] > 0 ? Math.min(1, Math.max(0, (sortedScores[0] - median(scores.map(Math.abs))) / (sortedScores[0] + 1e-9))) : 0;
+  let bpmConfidence = sortedScores.length > 4 && sortedScores[0] > 0 ? Math.min(1, Math.max(0, (sortedScores[0] - median(scores.map(Math.abs))) / (sortedScores[0] + 1e-9))) : 0;
   // refine to fractional lag by parabolic interpolation
   const li = bestLag - minLag;
   let lagF = bestLag;
@@ -176,15 +176,40 @@ export function analyze(monoIn: Float32Array, srIn: number, progress: Progress =
   const beats = beatIdx.map(onsetTime);
   progress('beats', 1);
 
-  // ── downbeats: choose the phase (mod meter) with the strongest bass + flux ──
+  // ── downbeats: the phase (mod meter) with the strongest bass, flux and harmonic change ──
+  // chords change on bar lines, so the chroma change between consecutive beats is a strong downbeat cue
   const meter = 4;
   const bassRaw = bandRaw[1];
+  const nBt = beatIdx.length, Bv = new Float32Array(nBt), Fv = new Float32Array(nBt), Hv = new Float32Array(nBt);
+  let prevC: Float32Array | null = null;
+  for (let b = 0; b < nBt; b++) {
+    const i = beatIdx[b], z = b + 1 < nBt ? beatIdx[b + 1] : Math.min(nFrames, i + Math.round(period));
+    const cv = new Float32Array(12); for (let k = i; k < z; k++) for (let c = 0; c < 12; c++) cv[c] += chroma[k * 12 + c];
+    let nn = 0; for (let c = 0; c < 12; c++) nn += cv[c] * cv[c]; nn = Math.sqrt(nn) || 1; for (let c = 0; c < 12; c++) cv[c] /= nn;
+    if (prevC) { let d = 0; for (let c = 0; c < 12; c++) d += cv[c] * prevC[c]; Hv[b] = 1 - d; }
+    prevC = cv;
+    let bs = 0, bn = 0; for (let k = i; k < Math.min(z, i + 6); k++) { bs += bassRaw[k] || 0; bn++; } Bv[b] = bs / Math.max(1, bn);
+    Fv[b] = fluxN[i] || 0;
+  }
+  const meanOf = (a: Float32Array) => { let s = 0; for (const v of a) s += v; return s / Math.max(1, a.length) || 1; };
+  const mB = meanOf(Bv), mF = meanOf(Fv), mH = meanOf(Hv);
   let bestPhase = 0, bestPh = -1;
   for (let ph = 0; ph < meter; ph++) {
-    let s = 0; for (let b = ph; b < beatIdx.length; b += meter) { const i = beatIdx[b]; s += (bassRaw[i] || 0) * 1 + (fluxN[i] || 0) * 0.5; }
-    s /= Math.max(1, Math.ceil((beatIdx.length - ph) / meter));
+    let s = 0, k = 0; for (let b = ph; b < nBt; b += meter) { s += Bv[b] / mB + 0.5 * Fv[b] / mF + 1.2 * Hv[b] / (mH || 1); k++; }
+    s /= Math.max(1, k);
     if (s > bestPh) { bestPh = s; bestPhase = ph; }
   }
+  // pulse clarity: onset strength on the beat grid relative to the average (speech ≈ 1, music ≫ 1)
+  let onBeat = 0; for (const i of beatIdx) onBeat += fluxN[i] || 0; onBeat /= Math.max(1, nBt);
+  const pulseClarity = onBeat / (meanEnv || 1e-6);
+  // silence ratio: share of frames ≥ 30 dB below the loud level (speech pauses between phrases; music rarely stops)
+  const dbs = Array.from(rms, v => 20 * Math.log10(v + 1e-6)).sort((p, q) => p - q);
+  const loudDb = dbs[Math.floor(dbs.length * .95)] ?? 0;
+  let quiet = 0; for (const v of rms) if (20 * Math.log10(v + 1e-6) < loudDb - 30) quiet++;
+  const silenceRatio = quiet / Math.max(1, rms.length);
+  // speech (or free-time recitation): many pauses and no clear pulse → sections split at pauses, not by tempo
+  if (silenceRatio > .15 && (pulseClarity < 6 || bpmConfidence < .7)) bpmConfidence = Math.min(bpmConfidence, .05);
+  if ((globalThis as { LE_DEBUG?: boolean }).LE_DEBUG) console.log('pulseClarity', pulseClarity.toFixed(2), 'conf', bpmConfidence.toFixed(2), 'silence', silenceRatio.toFixed(3));
   const downbeats = beats.filter((_, i) => i % meter === bestPhase);
 
   // ── output arrays at 60 fps ──
@@ -252,7 +277,7 @@ function findSections(beatIdx: number[], chroma: Float32Array, mfcc: Float32Arra
     for (let c = 0; c < 12; c++) F[b * D + c] /= n1; for (let c = 12; c < D; c++) F[b * D + c] /= n2;
   }
   const sim = (i: number, j: number) => { let s = 0; for (let c = 0; c < D; c++) s += F[i * D + c] * F[j * D + c]; return s / 2; };
-  const K = Math.min(16, Math.max(4, Math.floor(nB / 12)));
+  const K = Math.min(8, Math.max(4, Math.floor(nB / 16)));   // ≤ 2 bars: resolves 4-bar bridges
   const nov = new Float32Array(nB);
   for (let i = K; i < nB - K; i++) {
     let s = 0;
@@ -306,7 +331,7 @@ function findSections(beatIdx: number[], chroma: Float32Array, mfcc: Float32Arra
   const last = sections[sections.length - 1];
   if (sections.length > 2 && last.energy < meanE * 0.8 && last.label !== 'chorus') last.label = 'outro';
   // a one-off section between choruses late in the song is the bridge
-  for (let i = 1; i < sections.length - 1; i++) if (sections[i].label === 'verse' && byCluster.get(cluster[i])!.length === 1 && i > sections.length / 2) { sections[i].label = 'bridge'; break; }
+  for (let i = 1; i < sections.length - 1; i++) if (sections[i].label === 'verse' && byCluster.get(cluster[i])!.length === 1 && i >= sections.length / 2) { sections[i].label = 'bridge'; break; }
   return sections;
 }
 

@@ -23,7 +23,7 @@ export async function sha256(buf: ArrayBuffer): Promise<string> {
   return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-const ANALYSIS_VERSION = 3;   // bump when the analysis changes
+const ANALYSIS_VERSION = 4;   // bump when the analysis changes
 export async function getCachedAnalysis(hash: string): Promise<Analysis | null> {
   try { const v = await tx<{ v: number; a: Analysis } | undefined>('analysis', 'readonly', s => s.get(hash)); return v && v.v === ANALYSIS_VERSION ? v.a : null; } catch { return null; }
 }

@@ -6,6 +6,7 @@ const wav = readFileSync('public/demo/demo-song.wav');
 const truth = JSON.parse(readFileSync('public/demo/demo-song.json', 'utf8'));
 const sr = wav.readUInt32LE(24), n = (wav.length - 44) / 4, mono = new Float32Array(n);
 for (let i = 0; i < n; i++) mono[i] = (wav.readInt16LE(44 + i * 4) + wav.readInt16LE(46 + i * 4)) / 65536;
+(globalThis as { LE_DEBUG?: boolean }).LE_DEBUG = true;
 const t0 = performance.now();
 const a = analyze(mono, sr);
 const ms = performance.now() - t0;
