@@ -21,6 +21,8 @@ export class Timeline {
   selected: number | null = null;
   private dpr = Math.min(2, window.devicePixelRatio || 1);
   syncOffset = 0;
+  plan: { start: number; end: number; effect: string }[] = [];
+  effectNames: Record<string, string> = {};
 
   constructor(private ov: HTMLCanvasElement, private tl: HTMLCanvasElement, private hooks: TimelineHooks) {
     const seekOv = (e: MouseEvent) => { if (!this.song) return; const r = ov.getBoundingClientRect(); this.hooks.seek((e.clientX - r.left) / r.width * this.song.analysis.duration); };
@@ -101,6 +103,16 @@ export class Timeline {
     // words
     for (const w of song.lyrics.words) { c.fillStyle = ROLE_COL[w.role]; c.fillRect(x(w.start + this.syncOffset), H - 5, Math.max(1, x(w.end - w.start)), 4); }
     for (const d of a.drops) { c.fillStyle = '#ff2a4a'; c.fillRect(x(d) - 1, 0, 2, H); }
+    // effect plan (Director mode): a strip with effect names
+    if (this.plan.length > 1) {
+      const PC = ['#ff5a1f', '#ffd23f', '#4fb3ff', '#7ee081', '#c792ea', '#ff7aa8', '#9aa0a6', '#f6c177'];
+      const ids = [...new Set(this.plan.map(p => p.effect))];
+      for (const p of this.plan) {
+        const x0 = x(p.start), x1 = x(p.end); c.fillStyle = PC[ids.indexOf(p.effect) % PC.length]; c.fillRect(x0, H - 14, x1 - x0 - 1, 8);
+        const nm = (this.effectNames[p.effect] ?? p.effect).toUpperCase(); c.font = 'bold 8px system-ui'; c.fillStyle = '#111';
+        if (c.measureText(nm).width < x1 - x0 - 4) c.fillText(nm, x0 + 2, H - 7.2);
+      }
+    }
     c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(x(this.v0), 0, x(this.view), H);
     c.fillStyle = '#ffd23f'; c.fillRect(x(now) - 1, 0, 2, H);
     c.font = '10px system-ui'; c.fillStyle = 'rgba(255,255,255,.75)';

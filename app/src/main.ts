@@ -155,10 +155,11 @@ async function loadFile(f: File) {
 let customPlan: PlanSeg[] | null = null;
 function replan() {
   if (!state.song) return;
-  if (customPlan) { stage.plan = customPlan; stage.transition = state.transition; return; }
+  if (customPlan) { stage.plan = customPlan; stage.transition = state.transition; timeline.plan = customPlan; return; }
   const dur = state.song.analysis.duration;
   const plan: PlanSeg[] = state.mode === 'director' ? directorPlan(state.song, state.byLabel, state.effect) : [{ start: 0, end: dur, effect: state.effect }];
   stage.plan = plan; stage.transition = state.transition;
+  timeline.plan = plan; timeline.effectNames = Object.fromEntries(EFFECTS.map(f => [f.id, f.name]));
 }
 
 let prepTimer = 0, preparing = false, prepAgain = false;

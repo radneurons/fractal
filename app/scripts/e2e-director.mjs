@@ -7,7 +7,7 @@ const out = process.argv[2] ?? 'out/director'; mkdirSync(out, { recursive: true 
 const browser = await pw.chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });
 const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-await page.goto('http://localhost:4173/'); await page.waitForFunction(() => window.LE);
+await page.goto(process.argv[3] ?? 'http://localhost:4173/'); await page.waitForFunction(() => window.LE);
 await page.evaluate(() => window.LE.loadDemo());
 await page.evaluate(() => { window.LE.state.transition = 'flash'; window.LE.setMode('director'); });
 await page.waitForTimeout(100);
