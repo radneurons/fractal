@@ -12,7 +12,7 @@ const page = `${title}\n<style>\n${css}\n</style>\n${body}\n<script type="module
 mkdirSync('dist-artifact', { recursive: true });
 writeFileSync('dist-artifact/index.html', page);
 const files = {};
-const walk = d => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) walk(p); else { const rel = p.slice('dist/'.length); if (rel !== 'index.html' && rel !== cssHref) files[rel] = 'app/' + p; } } };
+const walk = d => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) walk(p); else { const rel = p.slice('dist/'.length); if (rel !== 'index.html' && rel !== cssHref && !/ort-wasm|transformers\.web|whisperWorker/.test(rel)) files[rel] = 'app/' + p;   // speech recognition is not available on the hosted page } } };
 walk('dist');
 writeFileSync('dist-artifact/files.json', JSON.stringify(files, null, 1));
 console.log('page', (page.length / 1024).toFixed(1), 'KB;', Object.keys(files).length, 'supporting files');

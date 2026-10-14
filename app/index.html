@@ -88,6 +88,7 @@
       <textarea id="txtLyrics" spellcheck="false"></textarea>
       <div class="dlgBtns">
         <button class="btn" value="cancel">Cancel</button>
+        <button class="btn" id="btnAuto" value="auto" title="Listen to the vocals with speech recognition and time every word">Auto-sync…</button>
         <button class="btn" id="btnTap" value="tap" title="Play the song and tap Space on every word">Tap sync…</button>
         <button class="btn" id="btnDownloadLrc" value="lrc" title="Download the current timing as enhanced LRC">Download LRC</button>
         <button class="btn accent" value="apply">Apply</button>
@@ -104,6 +105,19 @@
       <div id="tapNext"></div>
       <div class="dlgBtns"><button class="btn" id="tapStart">Start from 0:00</button><button class="btn accent" id="tapDone">Done</button></div>
     </div>
+  </dialog>
+
+  <dialog id="dlgAuto">
+    <form method="dialog" class="dlg">
+      <h2>Auto-sync lyrics</h2>
+      <p class="small">A speech-recognition model (Whisper) listens to the vocals and times every word of your lyrics. It runs in this browser: the model downloads once and is reused. Words it couldn't hear are placed between their neighbours and shown dashed on the timeline, so you can check them.</p>
+      <div class="grid2">
+        <label>Model <select id="asrModel"></select></label>
+        <label>Language <select id="asrLang"></select></label>
+      </div>
+      <p id="asrNote" class="small"></p>
+      <div class="dlgBtns"><button class="btn" value="cancel">Cancel</button><button class="btn accent" id="asrGo" value="go">Start</button></div>
+    </form>
   </dialog>
 
   <dialog id="dlgExport">

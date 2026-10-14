@@ -19,7 +19,8 @@ Open `/?demo` to load the demo song straight away.
 2. **Lyrics**:
    - **Lyrics** (file) or **Edit lyrics** (paste).
    - LRC with `<mm:ss.xx>` word tags is exact. Line-timed LRC, SRT and VTT are spread on the beat. Plain text is auto-placed.
-   - Use **Tap sync…** for exact timing: tap Space on every word, or tick *Tap lines only* and tap once per line.
+   - **Auto-sync…** (plain lyrics, no timestamps needed): a Whisper speech-recognition model listens to the vocals in your browser and times every word. The model downloads once from huggingface.co (40–250 MB, depending on the size you pick) and is reused afterwards. Words it couldn't hear are estimated and shown dashed on the timeline. Not available on the hosted page, which can't download models.
+   - **Tap sync…** for exact timing by hand: tap Space on every word, or tick *Tap lines only* and tap once per line.
 3. **Pick an effect** (cards on the right, or keys 1–8), tune its sliders, or switch **Mode → Director** to change effect per section with a transition.
 4. **Fix anything on the timeline**:
    - drag a word to retime it (Shift drags the whole line);

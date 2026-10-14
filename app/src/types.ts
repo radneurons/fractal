@@ -75,7 +75,7 @@ export interface Line {
 export interface Lyrics {
   words: Word[];
   lines: Line[];
-  source: 'lrc' | 'enhanced-lrc' | 'srt' | 'vtt' | 'plain' | 'tap' | 'demo';
+  source: 'lrc' | 'enhanced-lrc' | 'srt' | 'vtt' | 'plain' | 'tap' | 'auto' | 'demo';
 }
 
 export interface Song {

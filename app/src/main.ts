@@ -3,7 +3,9 @@ import './style.css';
 import type { Analysis, GlobalSettings, Lyrics, Params, Song, Word, ElementKind } from './types';
 import { DEFAULT_SETTINGS } from './types';
 import { decodeAudio, analyzeInWorker } from './analysis/index';
-import { parseAny, buildLyrics, exportLRC, refreshLines } from './lyrics/parse';
+import { parseAny, buildLyrics, exportLRC, refreshLines, snapToOnsets } from './lyrics/parse';
+import { alignLyrics, type AsrChunk } from './align/align';
+import { ASR_MODELS, ASR_LANGS, voice16k, transcribe } from './align/index';
 import { direct, assignElements } from './director/director';
 import { loadFonts } from './render/sdf';
 import { Player } from './player';
@@ -311,12 +313,77 @@ dlgLyrics.addEventListener('close', async () => {
   const v = dlgLyrics.returnValue, txt = ($('txtLyrics') as HTMLTextAreaElement).value;
   if (v === 'apply') applyLyrics(txt);
   else if (v === 'lrc' && state.lyrics) void download(new Blob([exportLRC(state.lyrics)], { type: 'text/plain' }), (state.settings.title || 'lyrics') + '.lrc');
+  else if (v === 'auto') openAutoSync(txt);
   else if (v === 'tap') {
     if (!state.audio) { toast('Load the audio first.', true); return; }
     const raw = await tapSync($<HTMLDialogElement>('dlgTap'), txt, player);
     if (raw) { const ly = buildLyrics(raw, state.analysis, 'tap'); const wordLevel = raw.some(r => r.words?.length); if (wordLevel) ly.words.forEach(w => { w.confidence = 1; }); applyLyrics(txt, ly); toast(wordLevel ? `Tap sync: ${ly.words.length} words timed.` : `Tap sync: ${ly.lines.length} lines timed; words placed by syllables and snapped to onsets.`); }
   }
 });
+
+// ───────────────────────── auto-sync (speech recognition) ─────────────────────────
+const dlgAuto = $<HTMLDialogElement>('dlgAuto');
+const ASR_PREF = 'lyric-engine:asr';
+{
+  const ms = $<HTMLSelectElement>('asrModel'), ls = $<HTMLSelectElement>('asrLang');
+  for (const m of ASR_MODELS) { const o = document.createElement('option'); o.value = m.id; o.textContent = m.label; ms.appendChild(o); }
+  for (const [v, l] of ASR_LANGS) { const o = document.createElement('option'); o.value = v; o.textContent = l; ls.appendChild(o); }
+  try { const p = JSON.parse(localStorage.getItem(ASR_PREF) || '{}'); if (p.model) ms.value = p.model; if (p.lang !== undefined) ls.value = p.lang; } catch { /* storage unavailable */ }
+  const sync = () => { ls.disabled = /\.en$/.test(ms.value); };
+  ms.onchange = sync; sync();
+}
+let autoText = '';
+function openAutoSync(txt: string) {
+  if (!state.audio || !state.analysis) { toast('Load the audio first.', true); return; }
+  if (!txt.trim()) { toast('Paste the lyrics first, then choose Auto-sync.', true); openLyricsDialog(); return; }
+  autoText = txt;
+  const hosted = Boolean(hostClaude);
+  $<HTMLButtonElement>('asrGo').disabled = hosted;
+  $('asrNote').textContent = hosted
+    ? 'Auto-sync needs to download the speech model from huggingface.co, which this hosted page cannot reach. Use the app on your computer (npm run dev) for auto-sync, or use Tap sync here.'
+    : 'Choose an English model for English songs, or an "Any language" model and set the language. Bigger models hear sung words better but take longer.';
+  dlgAuto.returnValue = ''; dlgAuto.showModal();
+}
+dlgAuto.addEventListener('close', () => { if (dlgAuto.returnValue === 'go') void runAutoSync(autoText); });
+
+/** Align the lyrics to recognised words and apply them (shared by auto-sync and its test hook). */
+function applyAlignment(text: string, chunks: AsrChunk[], level: 'word' | 'phrase', secs: number) {
+  if (!state.analysis) return null;
+  const lines = text.split(/\r?\n/).map(l => l.replace(/\[[^\]]*\]|<[^>]*>/g, '').trim()).filter(Boolean);
+  const res = alignLyrics(lines, chunks, state.analysis.duration, state.analysis.sections.map(s => s.start));
+  const ly = buildLyrics(res.lines, state.analysis, 'auto');
+  ly.words.forEach((w, k) => { w.confidence = res.confidence[k] ?? .35; });
+  snapToOnsets(ly.words, state.analysis);            // nudges only the guessed words onto nearby sounds
+  applyLyrics(text, ly);
+  const pct = Math.round(100 * res.matched / Math.max(1, res.total));
+  if (pct < 30) toast(`Auto-sync heard only ${pct}% of the lyrics (${res.matched}/${res.total} words). Try a bigger model or set the language, or use Tap sync.`, true, 10000);
+  else toast(`Auto-sync matched ${res.matched} of ${res.total} words (${pct}%) in ${secs.toFixed(0)} s${level === 'phrase' ? ', phrase timing' : ''}. Dashed words on the timeline were estimated — check them.`, false, 10000);
+  return { matched: res.matched, total: res.total };
+}
+
+async function runAutoSync(text: string) {
+  if (!state.audio || !state.analysis || state.exporting) return;
+  const model = $<HTMLSelectElement>('asrModel').value, lang = $<HTMLSelectElement>('asrLang').value || null;
+  try { localStorage.setItem(ASR_PREF, JSON.stringify({ model, lang: lang ?? '' })); } catch { /* storage unavailable */ }
+  const cancel: { cancelled: boolean; abort?: () => void } = { cancelled: false };
+  const stop = () => { cancel.cancelled = true; cancel.abort?.(); };
+  busy(true, 'Preparing the vocals…', -1, stop);
+  const t0 = performance.now();
+  try {
+    const audio = await voice16k(state.audio);
+    const mb = (b: number) => (b / 1e6).toFixed(0);
+    const r = await transcribe(audio, model, /\.en$/.test(model) ? null : lang, (stage, p, info) => {
+      if (stage === 'download') busy(true, `Downloading the speech model (first time only)${info ? ` — ${mb(info.loaded)} of ${mb(info.total)} MB` : ''}`, p, stop);
+      else busy(true, 'Listening to the vocals… this can take about as long as the song on slower computers', -1, stop);
+    }, cancel);
+    busy(false);
+    applyAlignment(text, r.chunks, r.level, (performance.now() - t0) / 1000);
+  } catch (e) {
+    busy(false);
+    if (!cancel.cancelled) toast(`Auto-sync failed: ${(e as Error).message}. Check your connection (the model downloads from huggingface.co) or try another model.`, true, 10000);
+    else toast('Auto-sync cancelled');
+  }
+}
 
 // ───────────────────────── export ─────────────────────────
 const dlgExport = $<HTMLDialogElement>('dlgExport');
@@ -443,6 +510,9 @@ const LE = {
   renderAt(t: number) { stage.render(t); },
   exportClip: (o: Parameters<typeof runExport>[0]) => runExport(o, false).then(r => r && { size: r.blob.size, codec: r.videoCodec, audio: r.audioCodec, frames: r.frames, url: URL.createObjectURL(r.blob) }),
   applyLyrics,
+  /** test hook: run the post-recognition path (alignment + apply) on a given transcript */
+  alignWith: (text: string, chunks: AsrChunk[]) => applyAlignment(text, chunks, 'word', 0),
+  autoSync: (text: string) => runAutoSync(text),
   assignElements: () => state.lyrics && assignElements(state.lyrics, state.analysis)
 };
 (window as unknown as { LE: typeof LE }).LE = LE;

@@ -19,12 +19,12 @@ Run: `cd app && npm install && npm run dev` (or `npm run build && npx vite previ
   - **PRESS** — engraved page; loudness → ink weight, brightness → width, melisma curves, page curl.
   - **POP-UP** — WebGL2 paper theatre with die-cut hinged cards, props, planar shadows and page turns.
 - Portrait (9:16) adaptations; Director mode verified.
+- **Auto-sync**: Whisper (transformers.js, WebGPU/WASM, in a worker) + fuzzy sequence alignment of the user's lyrics; estimated words flagged.
 - **Build prompt reverse-engineered** from this app: `prompts/lyric-engine-app.v2.prompt.md`.
 
 ## Ideas for later
 - Per-clip editing of the Director plan on the timeline (drag edges, snapped to downbeats).
 - IndexedDB projects and analysis caching by audio hash.
-- Optional Whisper word alignment for untimed lyrics.
 
 ## Testing
 - `node scripts/e2e.mjs <effect|all> <t1,t2,…> out/e2e` renders stills of the demo (needs `npx vite preview --port 4173`).

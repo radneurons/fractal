@@ -163,6 +163,23 @@ Outputs at 60 fps: percentile-normalise (5th→0, 95th→1) and smooth with atta
   - Backspace undoes; Esc or Done finishes.
   - The result is word-level timing with confidence 1.
   - **Line mode** ("Tap lines only"): one tap per line. Each line runs until the next tap; words are placed by tempo-aware spreading and snapped to onsets.
+- **Auto-sync** (plain lyrics):
+  - Run Whisper with transformers.js (`@huggingface/transformers` 3.8.1, pinned) in a worker.
+    - Device: WebGPU when an adapter exists, else WASM. Bundle the ONNX runtime WASM; no CDN.
+    - Models (downloaded once from huggingface.co, cached by the browser): `Xenova/whisper-{tiny,base,small}.en` for English, `Xenova/whisper-{base,small}` with a language choice for other languages.
+    - Settings: `chunk_length_s: 30, stride_length_s: 5, return_timestamps: 'word'`. If a model can't produce word timing, fall back to phrase timing (`true`) and split phrases into words by syllables.
+  - Input audio: 16 kHz mono via `OfflineAudioContext`, high-pass 100 Hz and low-pass 7 kHz.
+  - **Alignment:** Needleman–Wunsch between the lyric words and the recognised words.
+    - Scores: +2 exact, +1.2 at ≥ 70 % Levenshtein similarity, +1 shared stem of ≥ 3 letters, −1 otherwise.
+    - Gaps: −0.6 to skip a lyric word (missed), −0.4 to skip a recognised word (hallucinated, common on instrumentals).
+  - **Anchors:** matched words take the recognised start. Exact matches get confidence 0.96, fuzzy ones 0.75. Anchors must strictly increase.
+  - **Filling gaps** between anchors (unmatched words, confidence 0.35):
+    - Spread the words by syllables when the gap fits about 1.6 × 0.28 s per syllable.
+    - Otherwise it's an instrumental break: finish the previous line right after its anchor, and start the rest at a section start inside the break if there is one, else lead them into the next anchor.
+    - Cap a recognised word's end at start + 1.2 s when measuring a gap.
+  - Afterwards snap only the estimated words to onsets. Dashed chips on the timeline mark low confidence.
+  - Toast the match rate; below 30 %, suggest a bigger model, setting the language, or tap sync.
+  - Show the feature disabled with an explanation on the hosted page, which can't reach huggingface.co.
 - **LRC export.** Download the current timing as enhanced LRC. Round to whole centiseconds before splitting into minutes and seconds (never `:60.00`), and clamp at 0.
 
 ---
@@ -716,6 +733,12 @@ Synthesise a 73 s, 120 BPM WAV:
     - blank-line handling; syllable counts; concept matching;
     - director roles and elements (concept words are heroes, stopwords connective, a hero in every line);
     - `refreshLines`; LRC round-trip.
+  - `test-align.ts`, against the demo's true word times:
+    - a perfect transcript (exact);
+    - 25 % missed, 15 % misheard, ±60 ms jitter plus hallucinations (median error < 80 ms, worst < 1 s, ordered);
+    - phrase-only timing (median < 250 ms);
+    - an empty transcript (ordered, inside the song);
+    - a line missed inside a break (starts at the section, < 1.5 s off).
   - `test-robustness.ts` synthesises two more recordings in memory:
     - A 92 BPM ballad (8-bar drumless piano intro, soft verse, full chorus, 4-bar half-time bridge, chorus, pad outro). Expect: tempo ±3 %, beats < 30 ms, verse and chorus boundaries within a bar, the first chorus labelled chorus, ≤ 1 drop.
     - Formant-synthesised speech in phrases with pauses. Expect: speech mode, and > 80 % of word starts found as onsets within 60 ms.
