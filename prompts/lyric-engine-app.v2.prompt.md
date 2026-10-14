@@ -98,11 +98,11 @@ Per frame:
 - 40-band mel filterbank (30–8000 Hz) in log; **spectral flux** = sum of positive log-mel differences; 13 MFCCs (DCT-II of log-mel);
 - 12-bin chroma (55–5000 Hz, A=440).
 
-Outputs at 60 fps: percentile-normalise (5th→0, 95th→1) and smooth with attack 15 ms / release 120 ms.
+Outputs at 60 fps: percentile-normalise (5th→0, 95th→1) and smooth with attack 15 ms / release 120 ms. **Align them in time with the onsets**: frame *i* represents `(i·HOP + lead)/SR`, with lead = WIN/2 for energy-like features and WIN·0.82 for flux. Without this the features run about 80 ms early, and "flux high on a downbeat" never fires.
 
 **Onsets.** Normalised flux; a local maximum is an onset if it exceeds `1.4 × median(±0.25 s) + 0.07` and is ≥ 50 ms after the previous one. Onset time = `(frame·HOP + WIN·0.82)/SR`. This correction matters: without it beats land about 34 ms early.
 
-**Tempo.** Autocorrelate the onset envelope over 60–200 BPM, weighting with a log-Gaussian prior centred on 120 BPM (σ = 0.9 octave); confidence = peak prominence.
+**Tempo.** Autocorrelate the onset envelope over **40–220 BPM**, weighting with a log-Gaussian prior centred on 120 BPM (σ = 0.9 octave); confidence = peak prominence. Start the arg-max at −∞; a fixed fallback lag silently returns 120 BPM for slow material.
 
 **Beats.** Dynamic-programming beat tracker (Ellis 2007): local score = onset envelope, transition penalty `−α·log²(Δ/period)`, backtrack.
 
@@ -122,7 +122,7 @@ Outputs at 60 fps: percentile-normalise (5th→0, 95th→1) and smooth with atta
   - Energy < 0.6 × mean (not first or last) → **breakdown**.
   - A quiet first section → **intro**; a quiet last section → **outro**.
   - A one-off section in the second half → **bridge**.
-  - If too few beats or low confidence: speech mode, splitting at pauses ≥ 1.2 s.
+  - Low confidence: speech mode, splitting at pauses ≥ 1.2 s, at least 6 s apart. A confident but short clip (< 24 beats) is one section, not speech.
 
 **Drops.** Bar-to-bar rise with bass > 0.28 **and** loudness > 0.18, preceded by a build (rising highs over the previous bars) or a breakdown; drops at least 8 s apart.
 
@@ -139,9 +139,19 @@ Outputs at 60 fps: percentile-normalise (5th→0, 95th→1) and smooth with atta
 ## 5. LYRICS
 
 - **Formats.**
-  - LRC: `[mm:ss.xx]` lines, plus optional enhanced word tags `<mm:ss.xx>word`, and `[ti:]`/`[ar:]` metadata, which fill the title and artist.
-  - SRT and VTT.
-  - Plain text, one lyric line per line.
+  - **LRC.**
+    - Stamps: `[mm:ss.xx]`, `[mm:ss.xxx]` and `[mm:ss:xx]`, with up to 3-digit minutes. Several stamps on one line repeat it.
+    - Optional enhanced word tags `<…>word`. Text before the first tag starts with the line.
+    - An empty stamp line ends the previous line.
+    - `[offset:±ms]`, and `[ti:]`/`[ar:]` metadata, which fill the title and artist. A BOM and CRLF are tolerated.
+  - **SRT and VTT**, parsed block by block:
+    - hours optional (VTT `mm:ss.ttt`); cue settings ignored;
+    - multi-line cues joined; HTML tags stripped and entities decoded; empty cues skipped.
+  - **Plain text**, one lyric line per line.
+- **Tokens.**
+  - Words are split on whitespace. Chinese and Japanese runs split per character, with punctuation attached to the previous character.
+  - Syllables: the English heuristic for Latin text, vowel letters for Cyrillic, one per character for CJK, about letters/2.5 for other scripts.
+  - Normalisation lowercases and strips accents from Latin letters only, so kana voicing marks and Devanagari vowel signs survive.
 - **Plain text** is spread over the first-to-last onset span, weighted by syllables (+2 per line). Inside a line, words are distributed by syllable count (heuristic counter with an exception table).
 - **Tempo-aware spreading.** When a line has a start but no word times and the tempo is known (confidence > 0.1), sing about one syllable per eighth note (one per quarter below 100 BPM) instead of stretching to the next line. Compress only if the line is shorter than that, then snap to onsets.
 - **Snapping.** Words with confidence < 0.95 snap to the nearest onset within ±80 ms. End times are clipped so words in a line don't overlap; minimum duration 60 ms.
@@ -153,7 +163,7 @@ Outputs at 60 fps: percentile-normalise (5th→0, 95th→1) and smooth with atta
   - Backspace undoes; Esc or Done finishes.
   - The result is word-level timing with confidence 1.
   - **Line mode** ("Tap lines only"): one tap per line. Each line runs until the next tap; words are placed by tempo-aware spreading and snapped to onsets.
-- **LRC export.** Download the current timing as enhanced LRC.
+- **LRC export.** Download the current timing as enhanced LRC. Round to whole centiseconds before splitting into minutes and seconds (never `:60.00`), and clamp at 0.
 
 ---
 
@@ -178,7 +188,7 @@ Outputs at 60 fps: percentile-normalise (5th→0, 95th→1) and smooth with atta
   - Otherwise the top-ranked word (2 for lines > 8 words, needing score > 0.35) → hero.
   - At least one hero per line. The rest → support.
   - User overrides persist (`roleLocked`).
-- **Concept lexicon** (prefix stems; match if stem ≥ 3 letters and suffix ≤ 3). Each concept carries element, accent colour, icon and letter shape (`ring` = O-like, `stem` = I-like, `tri` = A-like):
+- **Concept lexicon.** A word matches a stem only as a real inflection: +s/es/ed/d/ing/er/ers/y/ly/n/en/'s, a doubled final consonant (stopped), e-drop (dance → dancing) or y → i (cries). So start ≠ star and hotel ≠ hot. Foreign stopwords that are English words (die, son, con, lo, pas) are left out. Each concept carries element, accent colour, icon and letter shape (`ring` = O-like, `stem` = I-like, `tri` = A-like):
   - fire (burn, flame, ember, ash…) → fire, flame icon, tri
   - light (shine, glow, sun, dawn, morning, star…) → light, sun, ring
   - water (rain, tear, ocean, river, storm…) → water, drop, ring
