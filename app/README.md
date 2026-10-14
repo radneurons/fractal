@@ -22,11 +22,14 @@ Open `/?demo` to load the demo song straight away.
    - **Auto-sync…** (plain lyrics, no timestamps needed): a Whisper speech-recognition model listens to the vocals in your browser and times every word. The model downloads once from huggingface.co (40–250 MB, depending on the size you pick) and is reused afterwards. Words it couldn't hear are estimated and shown dashed on the timeline. Not available on the hosted page, which can't download models.
    - **Tap sync…** for exact timing by hand: tap Space on every word, or tick *Tap lines only* and tap once per line.
 3. **Pick an effect** (cards on the right, or keys 1–8), tune its sliders, or switch **Mode → Director** to change effect per section with a transition.
-4. **Fix anything on the timeline**:
+4. **Hybrid** (optional; both parts are off by default):
+   - **Material** re-skins the words of a layout effect (Broadside, Mission Poster, Droste, Pop-Up) as liquid chrome, fire, engraving, neon, halftone or stardust, keeping that effect's motion. Set strength and tint, and keep the layout's backdrop or use the material's own.
+   - **Overlay** blends a second effect on top (screen, add, multiply, overlay, soft light or normal, with an opacity), for example Swarm over Press. It renders two effects per frame, so exports take longer.
+5. **Fix anything on the timeline**:
    - drag a word to retime it (Shift drags the whole line);
    - double-click to cycle hero / support / connective;
    - Alt-click to edit the word, its role and its element.
-5. **Export video**: frame-exact MP4 (H.264/AAC where available) or WebM, 720p/1080p, 24/30/60 fps, the whole song or N seconds from the playhead.
+6. **Export video**: frame-exact MP4 (H.264/AAC where available) or WebM, 720p/1080p, 24/30/60 fps, the whole song or N seconds from the playhead.
 
 Your last session (audio, lyrics, edits) is kept in the browser; the start screen offers **Restore last session**.
 

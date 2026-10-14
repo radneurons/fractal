@@ -20,13 +20,15 @@ Run: `cd app && npm install && npm run dev` (or `npm run build && npx vite previ
   - **POP-UP** — WebGL2 paper theatre with die-cut hinged cards, props, planar shadows and page turns.
 - Portrait (9:16) adaptations; Director mode verified.
 - **Auto-sync**: Whisper (transformers.js, WebGPU/WASM, in a worker) + fuzzy sequence alignment of the user's lyrics; estimated words flagged.
+- **Hybrid effects** (both off by default): *Material* re-skins a layout effect's words (word mask → GL pass: chrome, fire, engraving, neon, halftone, stardust); *Overlay* blends a second effect on top with a blend mode and opacity. `scripts/e2e-hybrid.mjs` renders each pairing.
 - **Build prompt reverse-engineered** from this app: `prompts/lyric-engine-app.v2.prompt.md`.
 
 ## Ideas for later
-- Per-clip editing of the Director plan on the timeline (drag edges, snapped to downbeats).
-- IndexedDB projects and analysis caching by audio hash.
+- Materials for the GPU effects (Elements, Swarm, Liquid Chrome) and Press, which have no word mask yet.
+- More than one overlay layer.
 
 ## Testing
 - `node scripts/e2e.mjs <effect|all> <t1,t2,…> out/e2e` renders stills of the demo (needs `npx vite preview --port 4173`).
 - `node scripts/e2e-export.mjs <effect> mp4 <start> <len>` exports a clip through the real exporter.
 - `node scripts/e2e-director.mjs` checks Director mode and saves a UI screenshot.
+- `node scripts/e2e-hybrid.mjs [out] [url]` renders material and overlay pairings.
