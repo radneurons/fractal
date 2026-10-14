@@ -32,6 +32,7 @@ const PALS: Record<string, Pal> = {
   mars: { ink: '#1E0F0C', paper: '#F3E3D3', blue: '#5A2A1E', orange: '#FF7A3D', brass: '#D9A066', dim: '#9A7D72' }
 };
 
+const MASK_PAL: Pal = { ink: '#000000', paper: '#FFFFFF', blue: '#000000', orange: '#FFFFFF', brass: '#000000', dim: '#000000' };
 const FR = 1 / 60;
 type Motion = 'conn' | 'register' | 'impulse' | 'glide' | 'impact' | 'hero' | 'assemble' | 'rule' | 'rise' | 'snap' | 'tower' | 'settle' | 'stop' | 'compass';
 const ENTER: Record<Motion, number> = { conn: 7, register: 26, impulse: 14, compass: 26, glide: 28, impact: 16, hero: 22, assemble: 22, rule: 22, rise: 14, snap: 12, tower: 34, settle: 16, stop: 18 };
@@ -55,7 +56,9 @@ class MissionEffect implements Effect {
   async prepare(ctx: EffectContext) { this.ctx = ctx; this.p = { ...defaults(PARAMS), ...ctx.params }; this.build(); }
   setParams(p: Params) { this.p = { ...this.p, ...p }; }
   dispose() { /* nothing */ }
-  private pal() { return PALS[String(this.p.palette)] ?? PALS.mission; }
+  private maskMode = false;
+  private pal() { return this.maskMode ? MASK_PAL : PALS[String(this.p.palette)] ?? PALS.mission; }
+  renderMask(t: number, out: CanvasRenderingContext2D) { this.maskMode = true; try { this.render(t, out); } finally { this.maskMode = false; } }
   private measure(f: FontKey, cap: number, s: string) { this.mc.font = fontCSS(f, cap / capRatio(f)); return this.mc.measureText(s).width; }
   private xsOf(f: FontKey, cap: number, s: string) { this.mc.font = fontCSS(f, cap / capRatio(f)); const xs: number[] = []; for (let i = 0; i <= s.length; i++) xs.push(this.mc.measureText(s.slice(0, i)).width); return xs; }
 
@@ -326,6 +329,7 @@ class MissionEffect implements Effect {
   }
 
   private drawPanel(c: CanvasRenderingContext2D, z: Zone, t: number) {
+    if (this.maskMode) return;
     const P = this.pal(); if (!z.panel || t < z.t0 - 1.2) return;
     const phi = (1 - eIO(prog(t, z.t0 - 1.0, z.t0 - .45))) * 88 * Math.PI / 180;
     const y0 = z.y + 120, x0 = z.x, x1 = z.x + z.w, y1 = z.y + z.h;
@@ -450,7 +454,7 @@ class MissionEffect implements Effect {
     const vx0 = cam.cx - W / 2 / cam.zoom, vx1 = cam.cx + W / 2 / cam.zoom, vy0 = cam.cy - H / 2 / cam.zoom, vy1 = cam.cy + H / 2 / cam.zoom;
     // specks
     out.fillStyle = P.paper;
-    for (const s of this.specks) { if (s[0] < vx0 || s[0] > vx1 || s[1] < vy0 || s[1] > vy1) continue; out.globalAlpha = s[3]; out.fillRect(s[0], s[1], s[2] * 1.6, s[2] * 1.6); }
+    if (!this.maskMode) for (const s of this.specks) { if (s[0] < vx0 || s[0] > vx1 || s[1] < vy0 || s[1] > vy1) continue; out.globalAlpha = s[3]; out.fillRect(s[0], s[1], s[2] * 1.6, s[2] * 1.6); }
     out.globalAlpha = 1;
     const vis = (z: Zone) => !(z.x > vx1 || z.x + z.w < vx0 || z.y > vy1 || z.y + z.h < vy0);
     for (const z of this.zones) if (vis(z)) this.drawPanel(out, z, t);

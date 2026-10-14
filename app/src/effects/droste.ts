@@ -37,6 +37,8 @@ class DrosteEffect implements Effect {
   private lines: Line[] = []; private heroes: Word[] = [];
   private mc = document.createElement('canvas').getContext('2d')!;
 
+  private maskMode = false;
+  renderMask(t: number, out: CanvasRenderingContext2D) { this.maskMode = true; try { this.render(t, out); } finally { this.maskMode = false; } }
   async prepare(ctx: EffectContext) { this.ctx = ctx; this.p = { ...defaults(PARAMS), ...ctx.params }; this.build(); }
   setParams(p: Params) { this.p = { ...this.p, ...p }; }
   dispose() { /* nothing */ }
@@ -90,7 +92,8 @@ class DrosteEffect implements Effect {
   /** Draw one panel in panel space [0,W]×[0,H]. live = the outermost level (words reveal as sung). */
   private panel(c: CanvasRenderingContext2D, L: number, tLevel: number, tNow: number, live: boolean, depth: number) {
     const { width: W, height: H, song } = this.ctx; const a = song.analysis;
-    const sid = this.styleFor(tLevel), S = STY[sid][String(this.p.scheme) as 'night' | 'day'] ?? STY[sid].night;
+    const sid = this.styleFor(tLevel), S0 = STY[sid][String(this.p.scheme) as 'night' | 'day'] ?? STY[sid].night;
+    const S: Sty = this.maskMode ? { ...S0, bg: '#000000', bg2: '#000000', fg: '#FFFFFF', acc: '#FFFFFF', line: '#FFFFFF' } : S0;
     const orn = Number(this.p.ornament), w = this.win, u = Math.min(W, H);
     const R = rng(L * 977 + 13);
     c.fillStyle = S.bg; c.fillRect(0, 0, W, H);

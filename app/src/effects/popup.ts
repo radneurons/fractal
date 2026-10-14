@@ -39,11 +39,12 @@ void main(){
 }`;
 const FS = `#version 300 es
 precision highp float;
-uniform sampler2D uTex; uniform int uMode; uniform vec3 uL; uniform vec4 uTint; uniform float uSoft; uniform vec3 uTab0, uTab1; uniform float uT;
+uniform sampler2D uTex; uniform int uMode; uniform int uMaskMode; uniform vec3 uL; uniform vec4 uTint; uniform float uSoft; uniform vec3 uTab0, uTab1; uniform float uT;
 in vec2 vUv; in vec3 vN; in vec3 vW; out vec4 o;
 float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + 1.), f.x), f.y); }
 void main(){
+  if (uMaskMode == 1) { if (uMode == 0) { vec4 c = texture(uTex, vUv); if (c.a < .5) discard; float ink = 1. - smoothstep(.82, .93, dot(c.rgb, vec3(.299, .587, .114))); o = vec4(vec3(mix(.3, 1., ink)), 1.); } else o = vec4(0., 0., 0., 1.); return; }
   if (uMode == 0) {        // card face
     vec4 c = texture(uTex, vUv);
     if (c.a < .5) discard;
@@ -104,6 +105,8 @@ class PopupEffect implements Effect {
   private cards: Card[] = []; private white!: WebGLTexture; private pages: { t: number }[] = [];
   private chorusT: [number, number][] = [];
 
+  private maskMode = false;
+  renderMask(t: number, out: CanvasRenderingContext2D) { this.maskMode = true; try { this.render(t, out); } finally { this.maskMode = false; } }
   async prepare(ctx: EffectContext) {
     this.ctx = ctx; this.p = { ...defaults(PARAMS), ...ctx.params };
     if (!this.gl) {
@@ -221,10 +224,10 @@ class PopupEffect implements Effect {
     const asp = W / H, fov = asp >= 1 ? .62 : 1.0;
     const VP = m4.mul(m4.persp(fov, asp, .05, 30), m4.look(eye, tgt, [0, 1, 0]));
     const L = norm([-.55, 1, .45]);
-    gl.viewport(0, 0, W, H); gl.clearColor(.03, .025, .02, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.viewport(0, 0, W, H); if (this.maskMode) gl.clearColor(0, 0, 0, 1); else gl.clearColor(.03, .025, .02, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.useProgram(this.prg.p); gl.bindVertexArray(this.vao);
     const u = this.prg.u;
-    gl.uniformMatrix4fv(u.uVP, false, VP); gl.uniform3fv(u.uL, L); gl.uniform1f(u.uT, t);
+    gl.uniformMatrix4fv(u.uVP, false, VP); gl.uniform1i(u.uMaskMode, this.maskMode ? 1 : 0); gl.uniform3fv(u.uL, L); gl.uniform1f(u.uT, t);
     const T = TABLES[String(this.p.table)] ?? TABLES.walnut; gl.uniform3fv(u.uTab0, T[0]); gl.uniform3fv(u.uTab1, T[1]);
     gl.activeTexture(gl.TEXTURE0); gl.uniform1i(u.uTex, 0);
     const quad = (M: M4, mode: number, tex: WebGLTexture, tint = [1, 1, 1, 1], shadow = false) => {
@@ -249,7 +252,7 @@ class PopupEffect implements Effect {
     // shadows first (blended, no depth write)
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
     gl.uniform1f(u.uSoft, Number(this.p.shadow));
-    for (const c of visible) { const th = fold(c); quad(m4.model(c.x, .006, c.z, -(Math.PI / 2 - th), c.w, c.h), 1, c.tex, [1, 1, 1, clamp(Math.sin(th) * 1.5)], true); }
+    if (!this.maskMode) for (const c of visible) { const th = fold(c); quad(m4.model(c.x, .006, c.z, -(Math.PI / 2 - th), c.w, c.h), 1, c.tex, [1, 1, 1, clamp(Math.sin(th) * 1.5)], true); }
     gl.depthMask(true); gl.disable(gl.BLEND);
     // cards: the hinge is the bottom edge; rx rotates the card from flat (−z) to upright
     for (const c of visible) {

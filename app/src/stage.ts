@@ -4,6 +4,12 @@ import type { GlobalSettings, Params, Song } from './types';
 import type { Effect, EffectFactory } from './effects/types';
 import { clamp, eIO } from './effects/types';
 import { fontCSS } from './render/sdf';
+import { MaterialPass, DEFAULT_MATERIAL, type MaterialSettings } from './render/material';
+import { sample } from './analysis/dsp';
+
+export type BlendMode = 'screen' | 'lighter' | 'multiply' | 'overlay' | 'soft-light' | 'source-over';
+export interface OverlaySettings { effect: string; blend: BlendMode; opacity: number }
+export const DEFAULT_OVERLAY: OverlaySettings = { effect: 'off', blend: 'screen', opacity: .6 };
 
 export interface PlanSeg { start: number; end: number; effect: string }
 export type Transition = 'cut' | 'flash' | 'wipe' | 'dissolve';
@@ -28,6 +34,11 @@ export class Stage {
   transition: Transition = 'flash';
   width = 960; height = 540;
   private prepId = 0;
+  /** Hybrid: a material re-skins the words of layout effects; an overlay effect is blended on top. Both off by default. */
+  material: MaterialSettings = { ...DEFAULT_MATERIAL };
+  overlay: OverlaySettings = { ...DEFAULT_OVERLAY };
+  private matPass: MaterialPass | null = null;
+  private frameCv = document.createElement('canvas'); private maskCv = document.createElement('canvas'); private ovCv = document.createElement('canvas');
 
   constructor(canvas: HTMLCanvasElement, factories: EffectFactory[]) {
     this.canvas = canvas; this.ctx = canvas.getContext('2d', { alpha: false })!;
@@ -40,7 +51,7 @@ export class Stage {
   setSize(w: number, h: number) {
     this.width = w; this.height = h;
     this.canvas.width = w; this.canvas.height = h;
-    for (const l of this.layers) { l.width = w; l.height = h; }
+    for (const l of [...this.layers, this.frameCv, this.maskCv, this.ovCv]) { l.width = w; l.height = h; }
   }
 
   /** Prepare every effect the plan needs. Returns false if superseded by a newer call. */
@@ -48,6 +59,7 @@ export class Stage {
     const id = ++this.prepId;
     if (!this.song) return true;
     const need = new Set(this.plan.map(p => p.effect));
+    if (this.overlay.effect !== 'off' && this.factories.has(this.overlay.effect)) need.add(this.overlay.effect);
     // drop instances no longer needed (WebGL contexts are a scarce resource)
     for (const [k, v] of this.instances) if (!need.has(k)) { v.fx.dispose(); this.instances.delete(k); }
     for (const eid of need) {
@@ -75,7 +87,9 @@ export class Stage {
 
   setLiveParams(eid: string, p: Params) { this.params[eid] = { ...this.params[eid], ...p }; this.instances.get(eid)?.fx.setParams(this.params[eid]); }
   needsPrepare(eid: string) { const cur = this.instances.get(eid); return !cur || cur.key !== this.prepKey(eid); }
-  isReady() { return this.plan.every(p => this.instances.has(p.effect)); }
+  isReady() { return this.plan.every(p => this.instances.has(p.effect)) && (this.overlay.effect === 'off' || !this.factories.has(this.overlay.effect) || this.instances.has(this.overlay.effect)); }
+  /** Can this effect be re-skinned by a material? (it renders a word mask) */
+  supportsMaterial(eid: string) { const f = this.factories.get(eid); return !!f && typeof f.create().renderMask === 'function'; }
 
   segmentAt(t: number): number {
     for (let i = 0; i < this.plan.length; i++) if (t < this.plan[i].end || i === this.plan.length - 1) return i;
@@ -83,6 +97,37 @@ export class Stage {
   }
 
   render(t: number) {
+    this.renderBase(t);
+    this.applyHybrid(t);
+    this.overlays(t);
+  }
+
+  private applyHybrid(t: number) {
+    const W = this.width, H = this.height, c = this.ctx;
+    if (!this.song || !this.plan.length) return;
+    const seg = this.plan[this.segmentAt(t)], cur = this.instances.get(seg.effect);
+    const a = this.song.analysis;
+    if (this.material.id !== 'off' && cur?.fx.renderMask) {
+      if (!this.matPass) { try { this.matPass = new MaterialPass(); } catch { this.material = { ...this.material, id: 'off' }; } }
+      if (this.matPass) {
+        const fc = this.frameCv.getContext('2d')!; fc.drawImage(this.canvas, 0, 0);
+        const mc = this.maskCv.getContext('2d', { alpha: false })!; mc.setTransform(1, 0, 0, 1, 0, 0); mc.fillStyle = '#000'; mc.fillRect(0, 0, W, H);
+        cur.fx.renderMask(t, mc);
+        let lb = -9; for (const b of a.beats) { if (b <= t) lb = b; else break; }
+        const react = this.settings.reactivity / 100;
+        this.matPass.apply(this.frameCv, this.maskCv, c, t, { ...this.material, strength: this.material.strength * this.settings.intensity / 100 },
+          [sample(a.bands.bass, t) * react, sample(a.centroid, t), Math.exp(-(t - lb) * 7) * react, sample(a.loud, t)]);
+      }
+    }
+    const ov = this.overlay; const o = ov.effect !== 'off' ? this.instances.get(ov.effect) : undefined;
+    if (o && ov.opacity > 0 && ov.effect !== seg.effect) {
+      const oc = this.ovCv.getContext('2d', { alpha: false })!; oc.setTransform(1, 0, 0, 1, 0, 0);
+      o.fx.render(t, oc);
+      c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = ov.opacity; c.globalCompositeOperation = ov.blend; c.drawImage(this.ovCv, 0, 0, W, H); c.restore();
+    }
+  }
+
+  private renderBase(t: number) {
     const c = this.ctx, W = this.width, H = this.height;
     if (!this.song || !this.plan.length) { c.fillStyle = '#000'; c.fillRect(0, 0, W, H); return; }
     const i = this.segmentAt(t), seg = this.plan[i];
@@ -105,14 +150,13 @@ export class Stage {
           for (let y = 0; y <= H; y += H / 24) { const j = Math.sin(y * 0.031 + 1.7) * 18 + Math.sin(y * 0.11) * 9; c.lineTo(edge - y * 0.25 + j, y); }
           c.lineTo(0, H); c.closePath(); c.clip(); c.drawImage(this.layers[1], 0, 0); c.restore();
         }
-        this.overlays(t); return;
+        return;
       }
     }
     cur.fx.render(t, c);
     if (prev && prev.effect !== seg.effect && this.transition === 'flash' && dt >= 0 && dt < 0.3) {
       c.fillStyle = `rgba(255,255,255,${(1 - dt / 0.3) ** 2 * 0.9})`; c.fillRect(0, 0, W, H);
     }
-    this.overlays(t);
   }
 
   /** Title card at the head (when there is room before the first word). */
@@ -130,7 +174,7 @@ export class Stage {
     c.restore();
   }
 
-  dispose() { for (const v of this.instances.values()) v.fx.dispose(); this.instances.clear(); }
+  dispose() { for (const v of this.instances.values()) v.fx.dispose(); this.instances.clear(); this.matPass?.dispose(); this.matPass = null; }
 }
 
 /** Build an effect plan for Director mode from the song's sections. */

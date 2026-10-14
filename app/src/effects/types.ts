@@ -20,6 +20,8 @@ export interface Effect {
   /** live parameter updates (no re-prepare) */
   setParams(p: Params): void;
   render(t: number, out: CanvasRenderingContext2D): void;
+  /** Optional: the same frame as white words (and props) on black, for hybrid materials. */
+  renderMask?(t: number, out: CanvasRenderingContext2D): void;
   dispose(): void;
 }
 

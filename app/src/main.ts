@@ -1,6 +1,6 @@
 // Lyric Engine — app shell.
 import './style.css';
-import type { Analysis, GlobalSettings, Lyrics, Params, Song, Word, ElementKind } from './types';
+import type { Analysis, GlobalSettings, Lyrics, Params, ParamSpec, Song, Word, ElementKind } from './types';
 import { DEFAULT_SETTINGS } from './types';
 import { decodeAudio, analyzeInWorker } from './analysis/index';
 import { parseAny, buildLyrics, exportLRC, refreshLines, snapToOnsets } from './lyrics/parse';
@@ -9,7 +9,8 @@ import { ASR_MODELS, ASR_LANGS, voice16k, transcribe } from './align/index';
 import { direct, assignElements } from './director/director';
 import { loadFonts } from './render/sdf';
 import { Player } from './player';
-import { Stage, directorPlan, sizeFor, type PlanSeg, type Transition } from './stage';
+import { Stage, directorPlan, sizeFor, DEFAULT_OVERLAY, type PlanSeg, type Transition, type OverlaySettings, type BlendMode } from './stage';
+import { MATERIALS, DEFAULT_MATERIAL, type MaterialSettings } from './render/material';
 import { EFFECTS, effectById } from './effects/registry';
 import { defaults } from './effects/types';
 import { buildParams, GLOBAL_SPECS } from './ui/params';
@@ -22,7 +23,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 // ───────────────────────── state ─────────────────────────
 const LS = 'lyric-engine:v1';
-interface Saved { settings: GlobalSettings; params: Record<string, Params>; effect: string; mode: 'single' | 'director'; transition: Transition; byLabel: Record<string, string>; preview: number }
+interface Saved { hybrid?: { material: MaterialSettings; overlay: OverlaySettings }; settings: GlobalSettings; params: Record<string, Params>; effect: string; mode: 'single' | 'director'; transition: Transition; byLabel: Record<string, string>; preview: number }
 function loadSaved(): Partial<Saved> { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch { return {}; } }
 const saved = loadSaved();
 
@@ -34,6 +35,7 @@ const state = {
   transition: (saved.transition ?? 'flash') as Transition,
   byLabel: (saved.byLabel ?? {}) as Record<string, string>,
   preview: saved.preview ?? 0.6667,
+  hybrid: { material: { ...DEFAULT_MATERIAL, ...(saved.hybrid?.material ?? {}) }, overlay: { ...DEFAULT_OVERLAY, ...(saved.hybrid?.overlay ?? {}) } },
   audio: null as AudioBuffer | null,
   audioName: '',
   audioBytes: null as ArrayBuffer | null,
@@ -46,12 +48,13 @@ const state = {
   exporting: false
 };
 function persist() {
-  try { localStorage.setItem(LS, JSON.stringify({ settings: { ...state.settings, title: '', artist: '' }, params: state.params, effect: state.effect, mode: state.mode, transition: state.transition, byLabel: state.byLabel, preview: state.preview })); } catch { /* storage unavailable */ }
+  try { localStorage.setItem(LS, JSON.stringify({ settings: { ...state.settings, title: '', artist: '' }, params: state.params, effect: state.effect, mode: state.mode, transition: state.transition, byLabel: state.byLabel, preview: state.preview, hybrid: state.hybrid })); } catch { /* storage unavailable */ }
 }
 
 const player = new Player();
 const stage = new Stage($<HTMLCanvasElement>('stage'), EFFECTS);
 stage.settings = state.settings; stage.params = state.params; stage.transition = state.transition;
+stage.material = state.hybrid.material; stage.overlay = state.hybrid.overlay;
 const timeline: Timeline = new Timeline($<HTMLCanvasElement>('overview'), $<HTMLCanvasElement>('timeline'), {
   seek: t => { player.seek(t); state.dirty = true; },
   now: () => player.now(),
@@ -214,7 +217,7 @@ function buildEffectList() {
 }
 function setEffect(id: string) {
   if (!effectById(id) || state.exporting) return;
-  state.effect = id; persist(); buildEffectList(); buildEffectPanel(); replan(); schedulePrepare(0); buildDirectorPlan();
+  state.effect = id; persist(); buildEffectList(); buildEffectPanel(); replan(); schedulePrepare(0); buildDirectorPlan(); updateHybridNote();
 }
 function buildEffectPanel() {
   const f = effectById(state.effect)!;
@@ -233,6 +236,48 @@ function buildGlobalPanel() {
     if (k === 'title' || k === 'artist') scheduleSave();
     if (live) state.dirty = true; else schedulePrepare();
   });
+}
+
+// ── hybrid: material + overlay (both off by default) ──
+const BLENDS: [BlendMode, string][] = [['screen', 'Screen'], ['lighter', 'Add'], ['multiply', 'Multiply'], ['overlay', 'Overlay'], ['soft-light', 'Soft light'], ['source-over', 'Normal']];
+const materialSupport = new Map<string, boolean>();
+function supports(eid: string) { if (!materialSupport.has(eid)) materialSupport.set(eid, stage.supportsMaterial(eid)); return materialSupport.get(eid)!; }
+function buildHybridPanel() {
+  const m = state.hybrid.material, o = state.hybrid.overlay;
+  const matLabel = MATERIALS.find(x => x.id === m.id)?.label ?? 'Off';
+  const ovName = o.effect === 'off' ? 'Off' : effectById(o.effect)?.name ?? 'Off';
+  const specs: ParamSpec[] = [
+    { key: 'material', label: 'Material', group: 'Material (words)', type: 'select', options: MATERIALS.map(x => x.label), default: 'Off', help: 'Re-skin the words of the layout effect', live: true },
+    { key: 'strength', label: 'Strength', group: 'Material (words)', type: 'range', min: 0, max: 2, step: .01, default: 1, help: 'Flame height, glow, shine', live: true },
+    { key: 'backdrop', label: 'Backdrop', group: 'Material (words)', type: 'select', options: ['Layout', 'Material'], default: 'Layout', help: 'Keep the layout effect’s background, or use the material’s own (studio, paper, darkness)', live: true },
+    { key: 'tint', label: 'Tint', group: 'Material (words)', type: 'color', default: '#ffb347', help: 'Neon / stardust / chrome tint', live: true },
+    { key: 'overlay', label: 'Overlay effect', group: 'Overlay (second effect on top)', type: 'select', options: ['Off', ...EFFECTS.map(f => f.name)], default: 'Off', help: 'A second effect blended over the first', live: false },
+    { key: 'blend', label: 'Blend', group: 'Overlay (second effect on top)', type: 'select', options: BLENDS.map(b => b[1]), default: 'Screen', help: 'How the overlay mixes in (Screen and Add keep dark areas see-through)', live: true },
+    { key: 'opacity', label: 'Opacity', group: 'Overlay (second effect on top)', type: 'range', min: 0, max: 1, step: .01, default: .6, help: 'Overlay strength', live: true }
+  ];
+  const values: Params = { material: matLabel, strength: m.strength, backdrop: m.backdrop === 'material' ? 'Material' : 'Layout', tint: m.tint, overlay: ovName, blend: BLENDS.find(b => b[0] === o.blend)?.[1] ?? 'Screen', opacity: o.opacity };
+  buildParams($('hybridParams'), specs, values, (k, v) => {
+    if (k === 'material') m.id = MATERIALS.find(x => x.label === v)?.id ?? 'off';
+    else if (k === 'strength') m.strength = Number(v);
+    else if (k === 'backdrop') m.backdrop = v === 'Material' ? 'material' : 'layout';
+    else if (k === 'tint') m.tint = String(v);
+    else if (k === 'overlay') { o.effect = v === 'Off' ? 'off' : EFFECTS.find(f => f.name === v)?.id ?? 'off'; schedulePrepare(0); }
+    else if (k === 'blend') o.blend = BLENDS.find(b => b[1] === v)?.[0] ?? 'screen';
+    else if (k === 'opacity') o.opacity = Number(v);
+    persist(); state.dirty = true; updateHybridNote();
+  });
+  updateHybridNote();
+}
+function updateHybridNote() {
+  const m = state.hybrid.material, o = state.hybrid.overlay;
+  const parts: string[] = [];
+  if (m.id !== 'off') {
+    const effs = state.mode === 'director' ? [...new Set(stage.plan.map(p => p.effect))] : [state.effect];
+    const no = effs.filter(e => !supports(e)).map(e => effectById(e)?.name ?? e);
+    parts.push(no.length ? `The material shows on layout effects only; ${no.join(', ')} ${no.length > 1 ? 'are' : 'is'} drawn as usual.` : 'Material on.');
+  }
+  if (o.effect !== 'off') parts.push(o.effect === state.effect && state.mode !== 'director' ? 'The overlay is the same effect as the base — pick a different one.' : 'Overlay on: rendering costs about two effects per frame, so exports take longer.');
+  $('hybridNote').textContent = parts.join(' ');
 }
 
 const SECTION_LABELS = ['intro', 'verse', 'chorus', 'bridge', 'drop', 'breakdown', 'outro', 'speech'];
@@ -513,6 +558,7 @@ const LE = {
   /** test hook: run the post-recognition path (alignment + apply) on a given transcript */
   alignWith: (text: string, chunks: AsrChunk[]) => applyAlignment(text, chunks, 'word', 0),
   autoSync: (text: string) => runAutoSync(text),
+  setHybrid(material?: Partial<MaterialSettings>, overlay?: Partial<OverlaySettings>) { Object.assign(state.hybrid.material, material ?? {}); Object.assign(state.hybrid.overlay, overlay ?? {}); buildHybridPanel(); schedulePrepare(0); state.dirty = true; },
   assignElements: () => state.lyrics && assignElements(state.lyrics, state.analysis)
 };
 (window as unknown as { LE: typeof LE }).LE = LE;
@@ -520,7 +566,7 @@ const LE = {
 // ───────────────────────── boot ─────────────────────────
 (async () => {
   timeline.syncOffset = state.settings.syncOffsetMs / 1000;
-  buildEffectList(); buildEffectPanel(); buildGlobalPanel(); buildDirectorPlan();
+  buildEffectList(); buildEffectPanel(); buildGlobalPanel(); buildDirectorPlan(); buildHybridPanel();
   const [w, h] = sizeFor(state.settings.aspect, state.preview); stage.setSize(w, h);
   try { await loadFonts(); } catch (e) { toast('Fonts failed to load: ' + (e as Error).message, true); }
   requestAnimationFrame(frame);

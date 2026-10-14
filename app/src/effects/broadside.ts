@@ -36,6 +36,7 @@ const PALS: Record<string, Pal> = {
   mono: { night: '#111111', vig: '#000000', bone: '#F4F4F4', paper: '#F4F4F4', ink: '#111111', warm: '#F4F4F4', coolN: '#BDBDBD', coolP: '#111111', echo: '#7A7A7A' }
 };
 
+const MASK_PAL: Pal = { night: '#000000', vig: '#000000', bone: '#FFFFFF', paper: '#000000', ink: '#FFFFFF', warm: '#FFFFFF', coolN: '#FFFFFF', coolP: '#FFFFFF', echo: '#000000' };
 const MEAS = 1000, FR = 1 / 60;
 type Ent = 'slam' | 'slide' | 'drop' | 'ghost' | 'fly' | 'wipe' | 'knocked' | 'standup' | 'tick';
 const DUR: Record<Ent, number> = { slam: 5, slide: 14, drop: 16, ghost: 14, fly: 50, wipe: 30, knocked: 5, standup: 8, tick: 0 };
@@ -417,7 +418,9 @@ class BroadsideEffect implements Effect {
   private depth(l: number) { let d = 0; while (this.levels[l].parent >= 0) { l = this.levels[l].parent; d++; } return d; }
 
   // ───────────── drawing ─────────────
-  private pal(): Pal { return PALS[String(this.p.palette)] ?? PALS.classic; }
+  private maskMode = false;
+  private pal(): Pal { return this.maskMode ? MASK_PAL : PALS[String(this.p.palette)] ?? PALS.classic; }
+  renderMask(t: number, out: CanvasRenderingContext2D) { this.maskMode = true; try { this.render(t, out); } finally { this.maskMode = false; } }
   private fg(world: 'night' | 'paper') { const P = this.pal(); return world === 'night' ? P.bone : P.ink; }
   private bg(world: 'night' | 'paper') { const P = this.pal(); return world === 'night' ? P.night : P.paper; }
   private tokColor(tk: Tok) {
@@ -466,7 +469,7 @@ class BroadsideEffect implements Effect {
     const s0 = this.tokStart(tk); if (t < s0) return;
     const fill = fillOverride ?? this.tokColor(tk), night = tk.block.world === 'night';
     c.save(); c.translate(tk.x, tk.y); if (tk.rot) c.rotate(tk.rot);
-    if (night && !fillOverride) { c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 4 * tk.cap / 120; c.shadowOffsetX = 3 * tk.cap / 120; c.shadowOffsetY = 3 * tk.cap / 120; }
+    if (night && !fillOverride && !this.maskMode) { c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 4 * tk.cap / 120; c.shadowOffsetX = 3 * tk.cap / 120; c.shadowOffsetY = 3 * tk.cap / 120; }
     const W = tk.w, cap = tk.cap, p = clamp((t - s0) / Math.max(FR, tk.t - s0));
     let per: Parameters<BroadsideEffect['drawLetters']>[4] = null;
     if (tk.comp === 'waves' && t > tk.t) { const k = clamp(1 - (t - tk.t - 2) / 1.2); per = i => ({ dy: Math.sin(t * 5.2 + i * 1.1) * cap * .06 * k }); }
@@ -702,6 +705,7 @@ class BroadsideEffect implements Effect {
     c.restore();
   }
   private paperLines(c: CanvasRenderingContext2D, base: DOMMatrix, world: 'night' | 'paper', t: number) {
+    if (this.maskMode) return;
     if (world !== 'paper') return;
     const { width: W, height: H } = this.ctx;
     c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = 'rgba(21,19,15,.04)';
@@ -717,6 +721,7 @@ class BroadsideEffect implements Effect {
 
   private background(c: CanvasRenderingContext2D, world: 'night' | 'paper', t: number) {
     const { width: W, height: H } = this.ctx; const P = this.pal();
+    if (this.maskMode) { c.fillStyle = '#000'; c.fillRect(0, 0, W, H); return; }
     if (world === 'night') {
       const g = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .25, W / 2, H / 2, Math.max(W, H) * .62);
       const bass = sample(this.ctx.song.analysis.bands.bass, t) * Number(this.p.pulse) * this.ctx.settings.reactivity / 100;
