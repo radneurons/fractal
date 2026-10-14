@@ -69,7 +69,7 @@ export class Stage {
     const f = this.factories.get(eid)!; const p = this.params[eid] ?? {};
     const nonLive = f.params.filter(s => !s.live).map(s => `${s.key}=${p[s.key]}`).join('&');
     const s = this.settings;
-    return [this.width, this.height, s.syncOffsetMs, s.caseMode, s.seed, s.minReadMs, s.aspect, nonLive, this.songStamp].join('|');
+    return [this.width, this.height, s.syncOffsetMs, s.caseMode, s.seed, s.minReadMs, s.aspect, s.cameraEnergy, nonLive, this.songStamp].join('|');
   }
   songStamp = 0;
 

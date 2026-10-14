@@ -50,7 +50,7 @@ function persist() {
 const player = new Player();
 const stage = new Stage($<HTMLCanvasElement>('stage'), EFFECTS);
 stage.settings = state.settings; stage.params = state.params; stage.transition = state.transition;
-const timeline = new Timeline($<HTMLCanvasElement>('overview'), $<HTMLCanvasElement>('timeline'), {
+const timeline: Timeline = new Timeline($<HTMLCanvasElement>('overview'), $<HTMLCanvasElement>('timeline'), {
   seek: t => { player.seek(t); state.dirty = true; },
   now: () => player.now(),
   playing: () => player.playing,
@@ -83,18 +83,25 @@ function toast(msg: string, err = false, ms = 3500) {
 }
 
 // ───────────────────────── loading ─────────────────────────
+let loadToken = 0;
 async function loadAudioBytes(bytes: ArrayBuffer, name: string, restored?: Lyrics | null) {
+  if (state.exporting) { toast('Wait for the export to finish (or cancel it) before loading audio.', true); return; }
+  const my = ++loadToken, stale = () => my !== loadToken;
   busy(true, 'Decoding audio…', 0);
   try {
     const keep = bytes.slice(0);
     const hash = await sha256(keep).catch(() => '');
     const buf = await decodeAudio(bytes, player.ctx);
-    state.audio = buf; state.audioName = name; state.audioBytes = keep; player.setBuffer(buf);
+    if (stale()) return;
     busy(true, 'Analysing…', 0);
     const t0 = performance.now();
     const cached = hash ? await getCachedAnalysis(hash) : null;
-    state.analysis = cached ?? await analyzeInWorker(buf, (stage, p) => busy(true, `Analysing — ${stage}`, p));
-    if (!cached && hash) void putCachedAnalysis(hash, state.analysis);
+    const analysis = cached ?? await analyzeInWorker(buf, (stage, p) => { if (!stale()) busy(true, `Analysing — ${stage}`, p); });
+    if (stale()) return;
+    // commit audio and analysis together, only for the newest load
+    state.audio = buf; state.audioName = name; state.audioBytes = keep; player.setBuffer(buf);
+    state.analysis = analysis;
+    if (!cached && hash) void putCachedAnalysis(hash, analysis);
     console.info(`analysis ${cached ? '(cached) ' : ''}${((performance.now() - t0) / 1000).toFixed(2)} s`);
     player.beats = state.analysis.beats; player.downbeats = state.analysis.downbeats;
     if (!state.settings.title) state.settings.title = name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
@@ -102,6 +109,7 @@ async function loadAudioBytes(bytes: ArrayBuffer, name: string, restored?: Lyric
     if (restored) applyLyrics(state.lyricsText, restored);
     else if (state.lyricsText) applyLyrics(state.lyricsText); else { rebuildSong(true); openLyricsDialog(); }
   } catch (e) {
+    if (stale()) return;
     busy(false); toast('Could not load audio: ' + (e as Error).message, true);
   }
 }
@@ -156,7 +164,10 @@ async function loadDemo() {
 
 async function loadFile(f: File) {
   if (/\.(lrc|srt|vtt|txt)$/i.test(f.name) || f.type.startsWith('text/')) { applyLyrics(await f.text()); toast(`Lyrics loaded: ${f.name}`); }
-  else await loadAudioBytes(await f.arrayBuffer(), f.name);
+  else {
+    if (state.song) { state.lyricsText = ''; state.lyrics = null; state.settings.title = ''; state.settings.artist = ''; customPlan = null; }
+    await loadAudioBytes(await f.arrayBuffer(), f.name);
+  }
 }
 
 // ───────────────────────── plan + prepare ─────────────────────────
@@ -200,7 +211,7 @@ function buildEffectList() {
   }
 }
 function setEffect(id: string) {
-  if (!effectById(id)) return;
+  if (!effectById(id) || state.exporting) return;
   state.effect = id; persist(); buildEffectList(); buildEffectPanel(); replan(); schedulePrepare(0); buildDirectorPlan();
 }
 function buildEffectPanel() {
@@ -211,12 +222,13 @@ function buildEffectPanel() {
     if (live) { stage.setLiveParams(f.id, { [k]: v }); state.dirty = true; } else { stage.params = state.params; schedulePrepare(); }
   });
 }
-$('btnResetParams').onclick = () => { const f = effectById(state.effect)!; state.params[f.id] = defaults(f.params); stage.params = state.params; persist(); buildEffectPanel(); schedulePrepare(0); };
+$('btnResetParams').onclick = () => { const f = effectById(state.effect)!; state.params[f.id] = defaults(f.params); stage.params = state.params; stage.setLiveParams(f.id, state.params[f.id]); persist(); buildEffectPanel(); schedulePrepare(0); state.dirty = true; };
 
 function buildGlobalPanel() {
   buildParams($('globalParams'), GLOBAL_SPECS, state.settings as unknown as Params, (k, v, live) => {
     (state.settings as unknown as Params)[k] = v; persist();
     if (k === 'syncOffsetMs') timeline.syncOffset = Number(v) / 1000;
+    if (k === 'title' || k === 'artist') scheduleSave();
     if (live) state.dirty = true; else schedulePrepare();
   });
 }
@@ -293,7 +305,7 @@ function showWord(w: Word | null) {
 
 // ───────────────────────── lyrics dialog ─────────────────────────
 const dlgLyrics = $<HTMLDialogElement>('dlgLyrics');
-function openLyricsDialog() { ($('txtLyrics') as HTMLTextAreaElement).value = state.lyricsText; dlgLyrics.showModal(); }
+function openLyricsDialog() { ($('txtLyrics') as HTMLTextAreaElement).value = state.lyricsText; dlgLyrics.returnValue = ''; dlgLyrics.showModal(); }
 $('btnEditLyrics').onclick = openLyricsDialog;
 dlgLyrics.addEventListener('close', async () => {
   const v = dlgLyrics.returnValue, txt = ($('txtLyrics') as HTMLTextAreaElement).value;
@@ -311,12 +323,13 @@ const dlgExport = $<HTMLDialogElement>('dlgExport');
 $('btnExport').onclick = () => {
   if (!state.song) { toast('Load a song first.', true); return; }
   $('exNote').textContent = webCodecsAvailable() ? 'Frame-exact offline render (WebCodecs). Every frame is rendered — this can take longer than real time for heavy effects.' : 'WebCodecs is not available here: the video will be recorded in real time while the song plays.';
-  dlgExport.showModal();
+  if (state.exporting) { toast('An export is already running.', true); return; }
+  dlgExport.returnValue = ''; dlgExport.showModal();
 };
 dlgExport.addEventListener('close', () => { if (dlgExport.returnValue === 'go') void runExport(); });
 
 async function runExport(opts?: Partial<{ res: number; fps: number; start: number; len: number; mbps: number; format: 'mp4' | 'webm' }>, save = true) {
-  if (!state.song) return null;
+  if (!state.song || state.exporting) return null;
   const res = opts?.res ?? Number(($('exRes') as HTMLSelectElement).value);
   const fps = opts?.fps ?? Number(($('exFps') as HTMLSelectElement).value);
   const format = opts?.format ?? ($('exFmt') as HTMLSelectElement).value as 'mp4' | 'webm';
@@ -378,7 +391,7 @@ $('btnDemo').onclick = () => void loadDemo();
 $('btnDemo2').onclick = () => void loadDemo();
 
 window.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (document.querySelector('dialog[open]') || (e.target as HTMLElement).matches('input, textarea, select')) return;
+  if (state.exporting || document.querySelector('dialog[open]') || (e.target as HTMLElement).matches('input, textarea, select')) return;
   const a = state.analysis;
   if (e.code === 'Space') { e.preventDefault(); player.toggle(); }
   else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
@@ -394,7 +407,8 @@ window.addEventListener('dragover', (e: DragEvent) => { e.preventDefault(); $('d
 window.addEventListener('dragleave', (e: DragEvent) => { if (!e.relatedTarget) $('drop').classList.add('hidden'); });
 window.addEventListener('drop', async (e: DragEvent) => {
   e.preventDefault(); $('drop').classList.add('hidden');
-  const files = [...(e.dataTransfer?.files ?? [])].sort((a, b) => Number(/\.(lrc|srt|vtt|txt)$/i.test(b.name)) - Number(/\.(lrc|srt|vtt|txt)$/i.test(a.name)));
+  // audio first (it starts a new song), then the lyrics that go with it
+  const files = [...(e.dataTransfer?.files ?? [])].sort((a, b) => Number(/\.(lrc|srt|vtt|txt)$/i.test(a.name)) - Number(/\.(lrc|srt|vtt|txt)$/i.test(b.name)));
   for (const f of files) await loadFile(f);
 });
 void wrap;
@@ -435,6 +449,7 @@ const LE = {
 
 // ───────────────────────── boot ─────────────────────────
 (async () => {
+  timeline.syncOffset = state.settings.syncOffsetMs / 1000;
   buildEffectList(); buildEffectPanel(); buildGlobalPanel(); buildDirectorPlan();
   const [w, h] = sizeFor(state.settings.aspect, state.preview); stage.setSize(w, h);
   try { await loadFonts(); } catch (e) { toast('Fonts failed to load: ' + (e as Error).message, true); }

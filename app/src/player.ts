@@ -32,6 +32,7 @@ export class Player {
     if (!this.buf) return;
     if (this.ctx.state !== 'running') await this.ctx.resume();
     this.stopSource();
+    if (from >= this.duration - 0.05) from = 0;           // ended: play again from the top
     from = Math.max(0, Math.min(from, this.duration - 0.01));
     const s = this.ctx.createBufferSource(); s.buffer = this.buf; s.connect(this.gain);
     const when = this.ctx.currentTime + 0.03;

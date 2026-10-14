@@ -4,6 +4,7 @@ import type { Player } from '../player';
 
 export function tapSync(dlg: HTMLDialogElement, text: string, player: Player): Promise<RawLine[] | null> {
   const lines = text.split(/\r?\n/).map(l => l.replace(/\[[^\]]*\]|<[^>]*>/g, '').trim()).filter(Boolean).map(l => l.split(/\s+/));
+  if (!lines.length) return Promise.resolve(null);
   const lineBox = dlg.querySelector('#tapLines') as HTMLInputElement | null;
   let lineMode = Boolean(lineBox?.checked);
   const flat: { li: number; wi: number }[] = [];
@@ -21,8 +22,10 @@ export function tapSync(dlg: HTMLDialogElement, text: string, player: Player): P
     nextEl.textContent = lines[li + 1]?.join(' ') ?? (k >= flat.length ? 'All words tapped — press Esc or Done.' : '');
   };
   return new Promise(resolve => {
+    let done = false;
     const finish = (ok: boolean) => {
-      removeEventListener('keydown', key, true); player.pause(); dlg.close();
+      if (done) return; done = true;
+      removeEventListener('keydown', key, true); dlg.removeEventListener('close', onClose); player.pause(); if (dlg.open) dlg.close();
       if (!ok || !times.length) return resolve(null);
       if (lineMode) {
         // one tap per line: each line runs until the next tap; words are spread by syllables later
@@ -42,12 +45,21 @@ export function tapSync(dlg: HTMLDialogElement, text: string, player: Player): P
     };
     const key = (e: KeyboardEvent) => {
       if (!dlg.open) return;
-      if (e.code === 'Space') { e.preventDefault(); if (!player.playing) { void player.play(0); return; } if (times.length < flat.length) times.push(player.now()); show(); }
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!player.playing) {
+          // first Space starts the song; after a pause, carry on from where it stopped (never restart under existing taps)
+          if (!times.length) void player.play(0); else if (player.now() < player.duration - .05) void player.play(player.now());
+          return;
+        }
+        if (times.length < flat.length) times.push(player.now()); show();
+      }
       else if (e.code === 'Backspace') { e.preventDefault(); times.pop(); show(); }
       else if (e.code === 'Enter') { e.preventDefault(); const k = times.length; if (k < flat.length) { const li = flat[k].li, now = player.now(), last = times[k - 1] ?? now; let r = 0; while (k + r < flat.length && flat[k + r].li === li) r++; for (let j = 0; j < r; j++) times.push(last + (now - last) * (j + 1) / (r + 1)); } show(); }
       else if (e.code === 'Escape') { e.preventDefault(); finish(true); }
     };
-    addEventListener('keydown', key, true);
+    const onClose = () => finish(true);     // closed any other way (e.g. the browser's own Esc) still cleans up
+    addEventListener('keydown', key, true); dlg.addEventListener('close', onClose);
     (dlg.querySelector('#tapStart') as HTMLButtonElement).onclick = () => { times.length = 0; show(); void player.play(0); };
     (dlg.querySelector('#tapDone') as HTMLButtonElement).onclick = () => finish(true);
     show(); dlg.showModal();
