@@ -298,7 +298,7 @@ $('btnEditLyrics').onclick = openLyricsDialog;
 dlgLyrics.addEventListener('close', async () => {
   const v = dlgLyrics.returnValue, txt = ($('txtLyrics') as HTMLTextAreaElement).value;
   if (v === 'apply') applyLyrics(txt);
-  else if (v === 'lrc' && state.lyrics) download(new Blob([exportLRC(state.lyrics)], { type: 'text/plain' }), (state.settings.title || 'lyrics') + '.lrc');
+  else if (v === 'lrc' && state.lyrics) void download(new Blob([exportLRC(state.lyrics)], { type: 'text/plain' }), (state.settings.title || 'lyrics') + '.lrc');
   else if (v === 'tap') {
     if (!state.audio) { toast('Load the audio first.', true); return; }
     const raw = await tapSync($<HTMLDialogElement>('dlgTap'), txt, player);
@@ -336,7 +336,7 @@ async function runExport(opts?: Partial<{ res: number; fps: number; start: numbe
     const r = webCodecsAvailable() ? await exportVideo(stage.canvas, t => stage.render(t), state.audio, eo, prog, cancel) : await recordRealtime(stage.canvas, t => stage.render(t), state.audio!, eo, prog, cancel);
     busy(false);
     const name = `${(state.settings.title || 'lyric-engine').replace(/[^\w-]+/g, '_')}_${state.effect}.${r.ext}`;
-    if (save) download(r.blob, name);
+    if (save) void download(r.blob, name);
     toast(`Exported ${name} — ${(r.blob.size / 1e6).toFixed(1)} MB, ${r.videoCodec}${r.audioCodec ? ' + ' + r.audioCodec : ' (no audio encoder available)'} in ${r.seconds.toFixed(0)} s`, false, 8000);
     return r;
   } catch (e) {
@@ -348,7 +348,22 @@ async function runExport(opts?: Partial<{ res: number; fps: number; start: numbe
   }
 }
 
-function download(b: Blob, name: string) { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 30000); }
+/** Save a file. Inside a claude.ai artifact the viewer's `downloads` capability confirms the save; elsewhere a normal download. */
+type DownloadsNS = { save(r: { filename: string; data: Blob }): Promise<{ status: string }> };
+const hostClaude = (window as unknown as { claude?: { use(n: string): Promise<unknown> } }).claude;
+const downloadsP: Promise<DownloadsNS | null> = hostClaude ? hostClaude.use('downloads').then(d => d as DownloadsNS | null).catch(() => null) : Promise.resolve(null);
+async function download(b: Blob, name: string) {
+  const dl = await downloadsP;
+  if (dl) {
+    // the host only accepts known extensions: lyrics go out as .txt (still LRC inside)
+    const fname = /\.(mp4|webm|txt|json)$/i.test(name) ? name : name + '.txt';
+    try { await dl.save({ filename: fname, data: b }); toast(`Saved ${fname}`); }
+    catch (e) { const code = (e as { code?: string }).code; if (code !== 'declined') toast(code === 'rate_limited' ? 'Another save is waiting for your answer — try again in a moment.' : `Couldn't save the file (${code ?? 'unavailable'}).`, true); }
+    return;
+  }
+  if (hostClaude) { toast('Saving files is not available in this view.', true); return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+}
 
 // ───────────────────────── transport + input ─────────────────────────
 $('btnPlay').onclick = () => { player.toggle(); };

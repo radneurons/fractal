@@ -12,6 +12,8 @@ npm test             # analysis + lyrics/director tests
 
 Open `/?demo` to load the demo song straight away.
 
+**Hosted version:** the app is also published as a private claude.ai page (no install): https://claude.ai/artifact/6gE9MUiM3F4EmpwvW1GRNZ. There, saving an export or an LRC file asks for your confirmation, and lyrics are saved as `.lrc.txt`. To republish after changes: `npm run artifact` writes `dist-artifact/index.html` and `dist-artifact/files.json`, the page and its supporting files.
+
 ## Workflow
 1. **Audio**: drag a file onto the page, or use **Audio**. Any format the browser decodes. The analysis is cached per file, so the same song loads instantly next time.
 2. **Lyrics**:

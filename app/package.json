@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "fixtures": "node scripts/make-fixtures.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/test.mjs"
+    "test": "node scripts/test.mjs",
+    "artifact": "vite build && node scripts/artifact-prep.mjs"
   },
   "dependencies": {
     "mp4-muxer": "5.2.2",
