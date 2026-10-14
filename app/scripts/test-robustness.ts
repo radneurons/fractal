@@ -79,5 +79,20 @@ let seed = 777; const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) /
   check('speech word onsets', hit > .8, `${(hit * 100).toFixed(0)}% of ${starts.length} word starts within 60 ms`);
 }
 
+
+// ───────── click tracks: feature alignment, slow pulse, short clip ─────────
+{
+  const click = (bpm: number, dur: number, sr = 44100) => { const x = new Float32Array(Math.round(dur * sr)), pulses: number[] = []; for (let t = .5; t < dur - .2; t += 60 / bpm) { pulses.push(t); const i0 = Math.round(t * sr); for (let k = 0; k < sr * .03; k++) x[i0 + k] += Math.sin(2 * Math.PI * 1000 * k / sr) * Math.exp(-k / sr * 120) + Math.sin(2 * Math.PI * 60 * k / sr) * Math.exp(-k / sr * 30) * .8; } return { x, sr, pulses }; };
+  const c = click(120, 12); const a = analyze(c.x, c.sr);
+  const s60 = (t: number) => a.flux[Math.min(a.n - 1, Math.max(0, Math.round(t * 60)))];
+  const at = a.downbeats.slice(1, -1).map(d => s60(d)), early = a.downbeats.slice(1, -1).map(d => s60(d - .076));
+  const mean = (v: number[]) => v.reduce((p, q) => p + q, 0) / Math.max(1, v.length);
+  check('features aligned with onsets', mean(at) > mean(early) && mean(at) > .4, `flux at downbeats ${mean(at).toFixed(2)}, 76 ms earlier ${mean(early).toFixed(2)}`);
+  check('short music clip is not speech', a.sections.every(s2 => s2.label !== 'speech'), a.sections.map(s2 => s2.label).join(','));
+  const slow = click(50, 30), b = analyze(slow.x, slow.sr);
+  const onPulse = b.beats.filter(t => slow.pulses.some(p => Math.abs(p - t) < .05)).length / Math.max(1, b.beats.length);
+  check('very slow pulse: beats land on pulses', onPulse > .45 && Math.abs(b.bpm / 50 - Math.round(b.bpm / 50)) < .03, `bpm ${b.bpm.toFixed(1)}, ${(onPulse * 100).toFixed(0)}% of beats on a pulse`);
+}
+
 if (fails) { console.log(`${fails} failure(s)`); process.exit(1); }
 console.log('robustness: all passed');

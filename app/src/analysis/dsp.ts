@@ -63,10 +63,12 @@ function smooth(a: Float32Array, fps: number, attackMs = 15, releaseMs = 120): F
   for (let i = 0; i < a.length; i++) { const x = a[i]; const g = x > y ? ga : gr; y = g * y + (1 - g) * x; out[i] = y; }
   return out;
 }
-function toFps(a: Float32Array, srcFps: number, n: number): Float32Array {
+/** Resample a per-STFT-frame array to OUT_FPS. `lead` = seconds from a frame's first sample to the moment it represents
+ *  (WIN·ONSET_POS/SR for flux, so features line up with onset times; WIN/2/SR for energy-like features). */
+function toFps(a: Float32Array, srcFps: number, n: number, lead = 0): Float32Array {
   const out = new Float32Array(n);
   for (let i = 0; i < n; i++) {
-    const x = i / OUT_FPS * srcFps, i0 = Math.min(a.length - 1, Math.floor(x)), i1 = Math.min(a.length - 1, i0 + 1), f = x - i0;
+    const x = Math.max(0, (i / OUT_FPS - lead) * srcFps), i0 = Math.min(a.length - 1, Math.floor(x)), i1 = Math.min(a.length - 1, i0 + 1), f = x - i0;
     out[i] = a[i0] * (1 - f) + a[i1] * f;
   }
   return out;
@@ -138,8 +140,8 @@ export function analyze(monoIn: Float32Array, srIn: number, progress: Progress =
 
   // ── tempo: autocorrelation of onset envelope with a log-gaussian prior around 120 BPM ──
   const env = fluxN;
-  const minLag = Math.round(srcFps * 60 / 200), maxLag = Math.round(srcFps * 60 / 60);
-  let bestLag = Math.round(srcFps * 0.5), bestScore = -1;
+  const minLag = Math.round(srcFps * 60 / 220), maxLag = Math.round(srcFps * 60 / 40);
+  let bestLag = Math.round(srcFps * 0.5), bestScore = -Infinity;
   const scores: number[] = [];
   const meanEnv = env.reduce((a, b) => a + b, 0) / env.length;
   for (let lag = minLag; lag <= maxLag; lag++) {
@@ -215,12 +217,13 @@ export function analyze(monoIn: Float32Array, srIn: number, progress: Progress =
   // ── output arrays at 60 fps ──
   const n = Math.max(1, Math.ceil(duration * OUT_FPS));
   const rmsDb = new Float32Array(nFrames); for (let i = 0; i < nFrames; i++) rmsDb[i] = 20 * Math.log10(rms[i] + 1e-6);
-  const loud = smooth(toFps(percentileNorm(rmsDb), srcFps, n), OUT_FPS);
+  const LEAD_E = WIN / 2 / SR, LEAD_F = WIN * ONSET_POS / SR;
+  const loud = smooth(toFps(percentileNorm(rmsDb), srcFps, n, LEAD_E), OUT_FPS);
   const bandNames = ['sub', 'bass', 'lowMid', 'mid', 'highMid', 'high', 'air'] as const;
   const bands: Record<string, Float32Array> = {};
-  bandNames.forEach((nm, b) => { const db = new Float32Array(nFrames); for (let i = 0; i < nFrames; i++) db[i] = 20 * Math.log10(bandRaw[b][i] + 1e-7); bands[nm] = smooth(toFps(percentileNorm(db), srcFps, n), OUT_FPS); });
-  const centroid = smooth(toFps(percentileNorm(cent), srcFps, n), OUT_FPS, 40, 200);
-  const flux60 = toFps(fluxN, srcFps, n);
+  bandNames.forEach((nm, b) => { const db = new Float32Array(nFrames); for (let i = 0; i < nFrames; i++) db[i] = 20 * Math.log10(bandRaw[b][i] + 1e-7); bands[nm] = smooth(toFps(percentileNorm(db), srcFps, n, LEAD_E), OUT_FPS); });
+  const centroid = smooth(toFps(percentileNorm(cent), srcFps, n, LEAD_E), OUT_FPS, 40, 200);
+  const flux60 = toFps(fluxN, srcFps, n, LEAD_F);
   progress('features', 1);
 
   // ── sections (beat-synchronous chroma+mfcc, self-similarity novelty) ──
@@ -251,7 +254,7 @@ export function analyze(monoIn: Float32Array, srIn: number, progress: Progress =
   const onsets = onsetsIdx.map(onsetTime);
   progress('done', 1);
   return {
-    fps: OUT_FPS, n, duration, loud, rmsDb: toFps(rmsDb, srcFps, n), bands: bands as unknown as Analysis['bands'], centroid, flux: flux60,
+    fps: OUT_FPS, n, duration, loud, rmsDb: toFps(rmsDb, srcFps, n, LEAD_E), bands: bands as unknown as Analysis['bands'], centroid, flux: flux60,
     onsets, onsetStrength: onsetStr, bpm, bpmConfidence, beats, downbeats, meter, sections, drops, peaks, peakBuckets
   };
 }
@@ -260,6 +263,7 @@ function findSections(beatIdx: number[], chroma: Float32Array, mfcc: Float32Arra
   loud: Float32Array, duration: number, bpmConf: number, onsets: number[]): Section[] {
   const nB = beatIdx.length;
   const mk = (s: number, e: number, label: SectionLabel, cluster = 0): Section => ({ start: s, end: e, label, energy: meanLoud(loud, s, e), cluster });
+  if (bpmConf >= 0.08 && nB < 24) return [mk(0, duration, 'verse', 0)];   // a short music clip: one section, not speech
   if (nB < 24 || bpmConf < 0.08) {
     // speech or ambient: split at long pauses (no onsets for ≥ 1.2 s), at least 6 s apart
     const cuts = [0];

@@ -1,9 +1,9 @@
 // Tap sync: play the song and press Space on every word.
-import type { RawLine } from '../lyrics/parse';
+import { tokenize, type RawLine } from '../lyrics/parse';
 import type { Player } from '../player';
 
 export function tapSync(dlg: HTMLDialogElement, text: string, player: Player): Promise<RawLine[] | null> {
-  const lines = text.split(/\r?\n/).map(l => l.replace(/\[[^\]]*\]|<[^>]*>/g, '').trim()).filter(Boolean).map(l => l.split(/\s+/));
+  const lines = text.split(/\r?\n/).map(l => l.replace(/\[[^\]]*\]|<[^>]*>/g, '').trim()).filter(Boolean).map(l => tokenize(l));
   if (!lines.length) return Promise.resolve(null);
   const lineBox = dlg.querySelector('#tapLines') as HTMLInputElement | null;
   let lineMode = Boolean(lineBox?.checked);
