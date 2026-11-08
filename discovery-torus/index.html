@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Discovery Torus</title>
+<style>
+  @font-face { font-family: JB; src: url(../string-theory/fonts/JetBrainsMono-Regular.ttf); }
+  @font-face { font-family: JBB; src: url(../string-theory/fonts/JetBrainsMono-Bold.ttf); }
+  :root { --bg: #05070b; }
+  html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+  body { display: grid; place-items: center; }
+  canvas#out { display: block; }
+</style>
+</head>
+<body>
+<canvas id="out"></canvas>
+<script>
+'use strict';
+// ---------------------------------------------------------------------------
+// Discovery Torus: a code-driven rebuild of the "agent discovery dashboard"
+// clip. Every frame is a pure function of t (seconds): renderAt(t).
+//   ?capture=1   fixed 720x908 layout, no rAF loop (used by render.mjs)
+// ---------------------------------------------------------------------------
+const W = 720, H = 908;                       // design size (portrait, as the source)
+const VP = { x: 10, y: 120, w: 510, h: 496 }; // torus viewport panel
+const CAPTURE = new URLSearchParams(location.search).has('capture');
+
+// ---------- deterministic helpers -------------------------------------------
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const hash = (i) => { let x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+const noise1 = (x) => { const i = Math.floor(x), f = x - i, s = f * f * (3 - 2 * f); return hash(i) * (1 - s) + hash(i + 1) * s; };
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const fmt = (n) => Math.round(n).toLocaleString('en-US').replace(/,/g, ' ');
+
+const C = {
+  amber: '#f4b23c', teal: '#3fd6b8', purple: '#a58cff', blue: '#7fb2ff', red: '#ff4d6d',
+  ink: '#d9e2ee', dim: '#7c8796', faint: '#3a4250', panel: '#0a0e15', line: '#1d2532',
+};
+
+// ---------- canvas setup -----------------------------------------------------
+const out = document.getElementById('out');
+const ctx = out.getContext('2d');
+let DPR = 2, SCALE = 1;
+function resize() {
+  DPR = CAPTURE ? 2 : Math.min(2, window.devicePixelRatio || 1);
+  SCALE = CAPTURE ? 1 : Math.min(innerWidth / W, innerHeight / H);
+  out.width = Math.round(W * SCALE * DPR); out.height = Math.round(H * SCALE * DPR);
+  out.style.width = W * SCALE + 'px'; out.style.height = H * SCALE + 'px';
+  gl.canvas.width = Math.round(VP.w * SCALE * DPR); gl.canvas.height = Math.round(VP.h * SCALE * DPR);
+}
+
+// ---------- WebGL torus ------------------------------------------------------
+const glc = document.createElement('canvas');
+const gl = glc.getContext('webgl2', { premultipliedAlpha: false, antialias: true, preserveDrawingBuffer: true });
+
+// Shared torus maths, mirrored exactly in JS (project()) for the HUD overlays.
+const R = 1.0, r = 0.60, CAM = 4.2, FOCAL = 1.95;
+const GLSL_COMMON = `
+uniform float uT, uYaw, uTilt, uFlow, uAspect, uAmberU, uCyanU, uHairBoost;
+const float R = ${R.toFixed(3)}, r = ${r.toFixed(3)}, CAM = ${CAM.toFixed(3)}, FOCAL = ${FOCAL.toFixed(3)};
+float adist(float a, float b){ float d = mod(a - b + 3.14159265, 6.2831853) - 3.14159265; return abs(d); }
+vec3 view(vec3 p){
+  float cy = cos(uYaw), sy = sin(uYaw), ct = cos(uTilt), st = sin(uTilt);
+  p = vec3(p.x, p.y*ct - p.z*st, p.y*st + p.z*ct);      // tilt about x
+  p = vec3(p.x*cy + p.z*sy, p.y, -p.x*sy + p.z*cy);     // yaw about y
+  return p;
+}
+vec3 torusPt(float u, float v, float rr){ return vec3((R + rr*cos(v))*cos(u), rr*sin(v), (R + rr*cos(v))*sin(u)); }
+vec3 torusN(float u, float v){ return vec3(cos(v)*cos(u), sin(v), cos(v)*sin(u)); }
+vec4 clipOf(vec3 q){ float w = CAM - q.z; return vec4(q.x*FOCAL/uAspect, q.y*FOCAL, 0.0, w); }
+`;
+
+const VS = `#version 300 es
+in vec4 aA;   // u, v, radial jitter, seed
+in vec2 aB;   // kind (0 strand, 1 hair), hair extension 0..1
+${GLSL_COMMON}
+uniform float uPoint;
+out vec4 vCol;
+void main(){
+  float u = aA.x + uFlow, v = aA.y, seed = aA.w;
+  float amber = exp(-pow(adist(u, uAmberU), 2.0) / 0.22) * smoothstep(-0.6, 0.6, cos(v));
+  float cyan  = exp(-pow(adist(u, uCyanU), 2.0) / 0.18) * smoothstep(-0.2, 0.9, cos(v));
+  float rr = r * (1.0 + aA.z + 0.035*sin(3.0*u + 5.0*v + uT*1.7 + seed*6.28));
+  if (aB.x > 0.5) {                                  // radial hair, grows near the hot band
+    float len = (0.25 + 0.9*fract(seed*91.7)) * (0.55 + uHairBoost*amber + 0.6*cyan);
+    rr = r * (1.04 + aB.y*len);
+  }
+  vec3 p = view(torusPt(u, v, rr));
+  vec3 n = view(torusN(u, v));
+  float facing = clamp(0.5 + 0.5*dot(n, normalize(vec3(0.0, 0.0, CAM) - p)), 0.0, 1.0);
+  gl_Position = clipOf(p);
+  gl_PointSize = uPoint * (0.7 + 0.6*fract(seed*13.1));
+
+  vec3 base = mix(vec3(0.42, 0.62, 0.92), vec3(0.88, 0.94, 1.0), fract(seed*7.3));
+  base = mix(base, vec3(0.30, 0.85, 0.80), 0.25*step(0.82, fract(seed*3.7)));   // a few teal threads
+  vec3 col = mix(base, vec3(1.0, 0.62, 0.16), clamp(amber*1.25, 0.0, 1.0));
+  col = mix(col, vec3(0.25, 0.95, 0.85), clamp(cyan*1.1, 0.0, 1.0) * (1.0 - amber));
+  float a = (aB.x > 0.5 ? 0.5 : 0.30) * mix(0.3, 1.0, facing) * (1.0 + 1.6*amber + 1.1*cyan);
+  if (aB.x > 0.5 && aB.y > 0.5 && uPoint > 0.0) a = mix(0.15, 0.95, facing);   // tip dots
+  vCol = vec4(col, a);
+}`;
+const FS = `#version 300 es
+precision highp float;
+in vec4 vCol; out vec4 o;
+uniform float uPoint;
+void main(){
+  if (uPoint > 0.0) { vec2 d = gl_PointCoord - 0.5; if (dot(d,d) > 0.25) discard; }
+  o = vCol;
+}`;
+
+function shader(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+const prog = gl.createProgram();
+gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS));
+gl.bindAttribLocation(prog, 0, 'aA'); gl.bindAttribLocation(prog, 1, 'aB');
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+const U = {}; for (const k of ['uT','uYaw','uTilt','uFlow','uAspect','uAmberU','uCyanU','uHairBoost','uPoint']) U[k] = gl.getUniformLocation(prog, k);
+
+// Geometry: strands are long, gently curving paths over the torus surface.
+const STRANDS = 1900, SEG = 140, HAIRS = 800;
+const A = [], B = [], lineIdx = [], tipIdx = [];
+{
+  const rand = rng(7);
+  for (let s = 0; s < STRANDS; s++) {
+    const u0 = rand() * 6.283, v0 = rand() * 6.283;
+    const dir = rand() * 6.283, L = 2.0 + rand() * 6.0;
+    const bend = (rand() - 0.5) * 1.6, ph = rand() * 6.283;
+    const shell = rand() < 0.85 ? (rand() - 0.5) * 0.12 : (rand() - 0.2) * 0.45; // thick fuzzy shell
+    const seed = rand(), base = A.length / 4;
+    for (let i = 0; i <= SEG; i++) {
+      const k = i / SEG;
+      A.push(u0 + Math.cos(dir) * L * k * 0.7, v0 + Math.sin(dir) * L * k + bend * Math.sin(k * 3 + ph), shell, seed);
+      B.push(0, 0);
+      if (i) lineIdx.push(base + i - 1, base + i);
+    }
+  }
+  for (let h = 0; h < HAIRS; h++) {                  // hairs live on the outer half of the tube
+    const u = rand() * 6.283, v = (rand() - 0.5) * 1.8, seed = rand(), base = A.length / 4;
+    A.push(u, v, 0, seed, u, v, 0, seed); B.push(1, 0, 1, 1);
+    lineIdx.push(base, base + 1); tipIdx.push(base + 1);
+  }
+}
+const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+const bufA = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufA); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(A), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+const bufB = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufB); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(B), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+const ibLines = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibLines); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(lineIdx), gl.STATIC_DRAW);
+const ibTips = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibTips); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(tipIdx), gl.STATIC_DRAW);
+
+// Camera / animation state as a pure function of t.
+function scene(t) {
+  return {
+    yaw: -0.95 + 0.25 * Math.sin(t * 0.23),          // oblique view so the hole drifts
+    tilt: 1.32 + 0.08 * Math.sin(t * 0.31 + 1),
+    flow: t * 0.22,                                    // strands stream around the ring
+    amberU: t * 0.55 + 2.2,                            // hot band sweeps faster than the flow
+    cyanU: -t * 0.38 + 5.0,
+    hairBoost: 1.6 + 0.6 * Math.sin(t * 1.3),
+  };
+}
+function project(S, u, v, rr) {                       // JS twin of the vertex shader
+  let x = (R + rr * Math.cos(v)) * Math.cos(u), y = rr * Math.sin(v), z = (R + rr * Math.cos(v)) * Math.sin(u);
+  const ct = Math.cos(S.tilt), st = Math.sin(S.tilt), cy = Math.cos(S.yaw), sy = Math.sin(S.yaw);
+  [y, z] = [y * ct - z * st, y * st + z * ct];
+  [x, z] = [x * cy + z * sy, -x * sy + z * cy];
+  const w = CAM - z, aspect = VP.w / VP.h;
+  return { x: VP.x + VP.w * (0.5 + 0.5 * x * FOCAL / aspect / w), y: VP.y + VP.h * (0.5 - 0.5 * y * FOCAL / w), z };
+}
+
+function drawGL(t, S) {
+  gl.viewport(0, 0, glc.width, glc.height);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(prog); gl.bindVertexArray(vao);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE);   // additive: density = brightness
+  gl.uniform1f(U.uT, t); gl.uniform1f(U.uYaw, S.yaw); gl.uniform1f(U.uTilt, S.tilt);
+  gl.uniform1f(U.uFlow, S.flow); gl.uniform1f(U.uAspect, VP.w / VP.h);
+  gl.uniform1f(U.uAmberU, S.amberU); gl.uniform1f(U.uCyanU, S.cyanU); gl.uniform1f(U.uHairBoost, S.hairBoost);
+  gl.uniform1f(U.uPoint, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibLines); gl.drawElements(gl.LINES, lineIdx.length, gl.UNSIGNED_INT, 0);
+  gl.uniform1f(U.uPoint, 2.6 * SCALE * DPR);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibTips); gl.drawElements(gl.POINTS, tipIdx.length, gl.UNSIGNED_INT, 0);
+}
+
+// ---------- 2D HUD primitives ------------------------------------------------
+function font(px, bold) { ctx.font = `${px}px ${bold ? 'JBB' : 'JB'}, ui-monospace, monospace`; }
+function text(s, x, y, col = C.ink, px = 8, align = 'left', bold = false) { font(px, bold); ctx.fillStyle = col; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(s, x, y); }
+function panel(x, y, w, h, title) {
+  ctx.fillStyle = C.panel; ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
+  if (title) text(title, x + 8, y + 8, C.dim, 6.5);
+}
+function decode(s, k) {                                // "decrypt" text reveal
+  const n = Math.floor(s.length * clamp(k)); const g = '#%&@$*+=-';
+  return s.slice(0, n) + (n < s.length ? g[(n * 7) % g.length] : '');
+}
+
+// ---------- HUD sections -----------------------------------------------------
+const CHIPS = [
+  ['ast.diff', 280, 47, 'gray'], ['sandbox.run', 344, 47, 'teal'], ['kernel.bench', 446, 47, 'gray'], ['assert.shape', 574, 47, 'gray'],
+  ['cypher.query', 78, 66, 'gray'], ['map_elites.hop', 156, 66, 'amber'], ['mcts.select', 246, 66, 'amber'], ['sol.propose', 322, 66, 'purple'],
+  ['eval.isolate', 406, 66, 'teal'], ['meta.distill', 484, 66, 'amber'], ['sota.verify', 560, 66, 'teal'],
+  ['graph.kv', 10, 85, 'gray'], ['sol.sample_deck', 104, 85, 'purple'], ['plan.search', 232, 85, 'amber'],
+  ['sandbox.container_barrier', 328, 85, 'teal'], ['meta.lesson_extract', 488, 85, 'amber'], ['plan.guidance_sync', 584, 85, 'gray'],
+];
+const CHIP_COL = { gray: C.dim, teal: C.teal, amber: C.amber, purple: C.purple };
+function header(t) {
+  ctx.fillStyle = C.amber; ctx.fillRect(10, 6, 2, 12);
+  text('AGENT LAB / DISCOVERY ARCHITECTURE', 18, 12, C.ink, 10, 'left', true);
+  text(`GRAPH kv  |  NODES ${fmt(14280 + t * 1.2)}  |  EDGES ${fmt(68400 + t * 6)}  |  SESSIONS 100`, 710, 12, C.ink, 6.5, 'right');
+  text('PLANNER-A', 10, 30, C.amber, 12, 'left', true);
+  text('+', 106, 30, C.ink, 12, 'left', true);
+  text('PROPOSER-B', 124, 30, C.purple, 12, 'left', true);
+  text(`AGENT COGNITIVE STACK  |  ${fmt(3400 + t * 2.3)} ITERATIONS`, 226, 30, C.dim, 6.5);
+  text(`search/eval ${(64 + 3 * Math.sin(t * .7)).toFixed(1)} %`, 710, 30, C.teal, 7.5, 'right');
+  // pipeline chips: an activation token hops along the stack
+  const hot = Math.floor(t * 2.6) % CHIPS.length, hot2 = Math.floor(t * 2.6 + 6) % CHIPS.length;
+  CHIPS.forEach(([label, x, y, kind], i) => {
+    font(7); const w = ctx.measureText(label).width + 18, col = CHIP_COL[kind];
+    const on = i === hot || i === hot2, k = on ? 1 - ((t * 2.6) % 1) * .5 : 0;
+    ctx.fillStyle = on ? col + '44' : '#0c1119'; ctx.fillRect(x, y, w, 14);
+    ctx.strokeStyle = on ? col : col + '66'; ctx.lineWidth = on ? 1.2 : .8; ctx.strokeRect(x + .5, y + .5, w - 1, 13);
+    text(label, x + 9, y + 7.5, on ? '#fff' : col, 7);
+    if (on) { ctx.globalAlpha = k * .6; ctx.shadowColor = col; ctx.shadowBlur = 10; ctx.strokeRect(x, y, w, 14); ctx.shadowBlur = 0; ctx.globalAlpha = 1; }
+  });
+  ctx.fillStyle = C.line; ctx.fillRect(10, 104, 700, 1);
+  const wave = (Math.round(t * 20) % 360).toString().padStart(3, '0');
+  text(`AGENTDISCOVER  |  PLANNER + PROPOSER  |  WAVE ${wave} DEG  |  HACKS BLOCKED ${425 + Math.floor(t * .6)}`, 10, 112, C.dim, 6.5);
+  text(`CONNECTOME R 120-480  |  STRANDS ${fmt(STRANDS * 9.2)}  |  ZERO CONTEXT BLEED`, 710, 112, C.ink, 6.5, 'right');
+}
+
+function viewport(t, S) {
+  panel(VP.x, VP.y, VP.w, VP.h);
+  // faint concentric guide + axis ticks
+  const deg = [0, 85, 169, 254, 339];
+  deg.forEach((d, i) => { const y = VP.y + 30 + i * 108; ctx.fillStyle = C.faint; ctx.fillRect(VP.x + 4, y, 8, 1); text(`${d} DEG`, VP.x + 14, y, C.dim, 6); });
+  const tri = VP.y + 30 + ((t * 40) % 432); ctx.fillStyle = C.amber; ctx.beginPath(); ctx.moveTo(VP.x + 2, tri - 4); ctx.lineTo(VP.x + 7, tri); ctx.lineTo(VP.x + 2, tri + 4); ctx.fill();
+
+  // torus layers: sharp + additive bloom (two blur radii)
+  ctx.save(); ctx.beginPath(); ctx.rect(VP.x + 1, VP.y + 1, VP.w - 2, VP.h - 2); ctx.clip();
+  const bg = ctx.createRadialGradient(VP.x + VP.w * .52, VP.y + VP.h * .5, 10, VP.x + VP.w * .5, VP.y + VP.h * .5, VP.w * .55);
+  bg.addColorStop(0, '#13243a55'); bg.addColorStop(1, '#00000000'); ctx.fillStyle = bg; ctx.fillRect(VP.x, VP.y, VP.w, VP.h);
+  ctx.drawImage(glc, VP.x, VP.y, VP.w, VP.h);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.filter = 'blur(10px)'; ctx.globalAlpha = .55; ctx.drawImage(glc, VP.x, VP.y, VP.w, VP.h);
+  ctx.filter = 'blur(3px)'; ctx.globalAlpha = .45; ctx.drawImage(glc, VP.x, VP.y, VP.w, VP.h);
+  ctx.filter = 'none'; ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+
+  // magenta "anomaly" markers riding the inner surface
+  for (let i = 0; i < 4; i++) {
+    const p = project(S, 1.3 + i * 1.7 + S.flow, Math.PI + 0.6 * Math.sin(i * 2.1 + t * .4), r * .7);
+    if (p.z < 0.2) { ctx.fillStyle = `rgba(255,70,140,${.55 + .35 * Math.sin(t * 5 + i)})`; ctx.fillRect(p.x - 1.5, p.y - 5, 3, 10); }
+  }
+  // reticle tracking a point on the surface, with a leader-line annotation
+  const tgtU = Math.floor(t / 2.2) * 1.9 + 0.7;
+  const p = project(S, tgtU + S.flow, 1.0, r * 1.02), lock = ease((t % 2.2) / .5);
+  const rr = lerp(26, 7, lock);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(p.x, p.y, rr, 0, 7); ctx.stroke();
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.beginPath(); ctx.moveTo(p.x + dx * (rr + 2), p.y + dy * (rr + 2)); ctx.lineTo(p.x + dx * (rr + 7), p.y + dy * (rr + 7)); ctx.stroke(); }
+  if (lock > .95) {
+    ctx.strokeStyle = C.dim; ctx.beginPath(); ctx.moveTo(p.x + 10, p.y + 6); ctx.lineTo(p.x + 40, p.y + 30); ctx.lineTo(p.x + 70, p.y + 30); ctx.stroke();
+    text(decode(`cand-${String(620 + Math.floor(t / 2.2)).padStart(4, '0')}  LIFT +${(4 + 3 * hash(Math.floor(t / 2.2))).toFixed(1)}%`, (t % 2.2 - .5) * 3), p.x + 72, p.y + 30, C.ink, 6);
+  }
+  ctx.restore();
+
+  text(`SPIN ${((S.flow * 57.3) % 360).toFixed(1)}°   ·   AXIS LOCK`, VP.x + VP.w - 10, VP.y + 10, C.ink, 6.5, 'right');
+  // candidate card
+  const id = 620 + Math.floor(t / 2.2), cx = VP.x + 12, cy = VP.y + VP.h - 112;
+  ctx.fillStyle = '#120e05e6'; ctx.fillRect(cx, cy, 212, 30); ctx.strokeStyle = C.amber; ctx.strokeRect(cx + .5, cy + .5, 211, 29);
+  text(`CANDIDATE cand-${String(id).padStart(4, '0')}  |  SHA ${(0x9f3a + id * 977).toString(16).slice(-4)}  |  SOTA ${(0.98 + .014 * hash(id)).toFixed(3)}`, cx + 7, cy + 9, C.amber, 6.5);
+  text('PLAN: GRAPH MCTS HOP  |  PROPOSER CODE-GEN', cx + 7, cy + 21, C.ink, 6.5);
+}
+
+function sideColumn(t) {
+  const x = 528, w = 182;
+  // discovery load: three oscilloscope traces
+  panel(x, 120, w, 78, `DISCOVERY LOAD · ${Math.round(90 + 5 * Math.sin(t))} %`);
+  text((93 + 2 * Math.sin(t * 1.7)).toFixed(1), x + w - 8, 130, C.amber, 7, 'right');
+  const trace = (y, col, f) => { ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.beginPath(); for (let i = 0; i <= 160; i++) { const X = x + 8 + i, Y = y + f(i / 160); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); } ctx.stroke(); };
+  trace(146, C.amber, (k) => (Math.sin((k * 18 - t * 6)) > 0 ? -5 : 5));
+  text('CYPHER QUERIES / S', x + 8, 160, C.dim, 6); text(String(250 + Math.round(10 * Math.sin(t))), x + w - 8, 160, C.blue, 6.5, 'right');
+  trace(170, C.blue, (k) => 4 * Math.sin(k * 14 - t * 4) * (0.6 + 0.4 * Math.sin(k * 3 + t)));
+  text('HACKS BLOCKED / S', x + 8, 181, C.red, 6); text((4 + Math.sin(t * 2)).toFixed(1), x + w - 8, 181, C.red, 6.5, 'right');
+  trace(190, C.red, (k) => 3 * Math.sin(k * 9 + t * 3));
+
+  // idea diversity: 48 thin bars
+  panel(x, 202, w, 76, 'IDEA DIVERSITY BY THETA  |  48 BINS');
+  for (let i = 0; i < 48; i++) { const v = .25 + .75 * noise1(i * .35 + t * .8); ctx.fillStyle = i % 7 === Math.floor(t * 3) % 7 ? C.teal : '#2a8f86'; ctx.fillRect(x + 8, 216 + i * 1.2, v * (w - 16), .7); }
+
+  // compute split histogram
+  panel(x, 282, w, 56, 'MODEL COMPUTE SPLIT  |  2 HISTOGRAM');
+  const split = 39 + 2 * Math.sin(t * .5);
+  text(`PLANNER: ${split.toFixed(0)}%`, x + 8, 302, C.amber, 6.5); text(`PROPOSER: ${(100 - split).toFixed(0)}%`, x + w - 8, 302, C.purple, 6.5, 'right');
+  for (let i = 0; i < 16; i++) { const h = 10 + 14 * noise1(i * .7 + t * 1.4); ctx.fillStyle = i < 7 ? C.amber : C.purple; ctx.fillRect(x + 8 + i * 10.4, 334 - h, 8.4, h); }
+
+  // cycle state
+  panel(x, 342, w, 60, 'CYCLE STATE  |  SYNCHRONIZER');
+  const steps = ['01 PROPOSE', '02 GRAPH QUERY', '03 ISOLATED EVAL', '04 META DISTILL'];
+  const ph = (t * .6) % 4;
+  steps.forEach((s, i) => {
+    const y = 362 + i * 11, k = clamp(ph - i), state = k >= 1 ? 'DONE' : k > 0 ? 'SYNC' : 'WAIT';
+    text(s, x + 8, y, C.ink, 6.2);
+    ctx.fillStyle = C.faint; ctx.fillRect(x + 92, y - 2, 52, 4);
+    ctx.fillStyle = state === 'DONE' ? C.ink : C.amber; ctx.fillRect(x + 92, y - 2, 52 * (k >= 1 ? 1 : k), 4);
+    text(state, x + w - 8, y, state === 'DONE' ? C.dim : C.amber, 6, 'right');
+  });
+
+  // telemetry readout
+  panel(x, 406, w, 92, 'TELEMETRY READOUT');
+  const rows = [
+    ['YAW / PITCH', `${(128 + 8 * Math.sin(t * .23)).toFixed(1)} / ${(58 + 4 * Math.sin(t * .31)).toFixed(1)} DEG`],
+    ['GRAPH R', '120 - 480'], ['IDEA NODES', fmt(14280 + t * 1.2)], ['CYPHER EDGES', fmt(68400 + t * 6)],
+    ['HACKS BLOCKED', String(425 + Math.floor(t * .6)), C.red], ['SESSIONS', '100'],
+    ['SOTA GAIN', `+${(28.2 + t * .01).toFixed(1)}%`, C.teal], ['CYCLE / FPS', `#${145 + Math.floor(t / 4)} | 60.0`],
+  ];
+  rows.forEach(([k, v, col], i) => { text(k, x + 8, 426 + i * 8.6, C.dim, 6); text(v, x + w - 8, 426 + i * 8.6, col || C.ink, 6, 'right'); });
+
+  // sandbox pods: 8x4 flickering grid
+  panel(x, 502, w, 58, 'ISOLATED SANDBOX PODS  |  32 PODS');
+  text(`ACTIVE: ${28 + Math.floor(4 * noise1(t))}/32  |  RUN: CONTAINER  |  LEAK: 0.0%`, x + 8, 520, C.ink, 5.8);
+  const pc = [C.purple, C.teal, '#4a5466', C.amber, '#6a7486'];
+  for (let i = 0; i < 32; i++) { const c = Math.floor(hash(i * 3.1 + Math.floor(t * 3 + hash(i) * 3)) * pc.length); ctx.fillStyle = pc[c]; ctx.globalAlpha = .85; ctx.fillRect(x + 8 + (i % 8) * 21, 528 + Math.floor(i / 8) * 8, 18, 6); }
+  ctx.globalAlpha = 1;
+
+  // dispatch queue (scrolling commit log)
+  panel(x, 564, w, 52, 'DISPATCH QUEUE  |  LIVE COMMITS');
+  const q = [['plan.search', 'graph.hop'], ['sol.sample', 'mcts.push'], ['sol.code', 'sandbox.run'], ['meta.distill', 'lesson.write'], ['eval.isolate', 'score.cmp']];
+  const off = Math.floor(t * 1.5);
+  for (let i = 0; i < 3; i++) { const [a, b] = q[(off + i) % q.length]; const y = 583 + i * 8.5; text(`> ${a}  -> ${b}`, x + 8, y, C.ink, 5.8); text(`+${(hash(off + i) * 9).toFixed(1)}ms`, x + w - 8, y, i === 0 ? C.amber : C.dim, 5.8, 'right'); }
+  text('SYSTEM BUFFER', x + 8, 609, C.teal, 6); text('99.8 % VERIFIED', x + w - 8, 609, C.teal, 6, 'right');
+}
+
+function tokenFlow(t) {
+  panel(10, 622, 700, 46, 'MODEL TOKEN FLOW & COMPUTE SPEND  |  30 MIN  |  STREAM');
+  text(`${(3.3 + .1 * Math.sin(t * .8)).toFixed(2)} B TOK / MIN`, 702, 632, C.amber, 9, 'right', true);
+  const cols = [C.teal, C.amber, C.purple, C.blue];
+  cols.forEach((col, j) => {
+    ctx.strokeStyle = col + 'aa'; ctx.lineWidth = .8; ctx.beginPath();
+    for (let i = 0; i <= 690; i += 3) { const y = 646 + 3 * Math.sin(i * .03 + t * 2 + j * 1.3) * noise1(i * .01 - t * .5 + j * 4); i ? ctx.lineTo(15 + i, y) : ctx.moveTo(15 + i, y); }
+    ctx.stroke();
+  });
+  ['sol.code', 'plan.search', 'eval.isolate', 'graph.sync'].forEach((s, i) => text(s, 26 + i * 95, 661, cols[i], 6));
+}
+
+function bottom(t) {
+  // rose chart
+  panel(10, 676, 198, 210, 'DISCOVERY MERGES BY DOMAIN');
+  const cx = 109, cy = 788, n = 8, hot = Math.floor(t / 1.1) % n;
+  for (let i = 0; i < n; i++) {
+    const a0 = -Math.PI / 2 + i * Math.PI * 2 / n + .03, a1 = a0 + Math.PI * 2 / n - .06;
+    const k = i === hot ? ease(((t / 1.1) % 1) * 3) : 0;
+    const rad = 34 + 28 * noise1(i * 1.9 + t * .15) + 14 * k;
+    ctx.fillStyle = i === hot ? C.amber : ['#3b3460', '#2f4a6a', '#4a4f5a', '#245a5a', '#2b3f66', '#4a4f5a', '#3a4458', '#26545a'][i];
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(a0) * 22, cy + Math.sin(a0) * 22); ctx.arc(cx, cy, rad, a0, a1); ctx.arc(cx, cy, 22, a1, a0, true); ctx.fill();
+  }
+  ctx.strokeStyle = C.faint; ctx.beginPath(); ctx.arc(cx, cy, 82, 0, 7); ctx.stroke();
+  ctx.fillStyle = '#0a0d12'; ctx.beginPath(); ctx.arc(cx, cy, 20, 0, 7); ctx.fill(); ctx.strokeStyle = C.amber; ctx.lineWidth = 1.2; ctx.stroke();
+  text(fmt(14280 + t * 1.2).replace(' ', ''), cx, cy, C.amber, 7.5, 'center', true);
+  text('KERNEL', cx, 700, C.ink, 6.5, 'center'); text('MATH', cx, 876, C.ink, 6.5, 'center');
+  text('SYSTEMS', 18, cy, C.ink, 6.5); text('BIO', 200, cy, C.ink, 6.5, 'right');
+
+  // dumbbell benchmark chart
+  panel(214, 676, 280, 210, ''); text('BENCHMARK METRICS  |  BEFORE → AFTER', 222, 686, C.purple, 7);
+  const rows = [['ahc-heuristics', 520, 160, C.ink, '-70.4%', C.amber], ['kernel-builder', 515, 230, C.ink, '-59.8%', C.amber], ['math-extremal', 470, 265, C.ink, '-45.5%', C.amber],
+    ['reward-leakage', 260, 18, C.red, '-93.6%', C.red], ['model-spend', 560, 200, C.ink, '-68.9%', C.amber], ['sota-winrate', 240, 530, C.teal, '+28.2%', C.teal]];
+  const X0 = 318, XS = 112 / 600 * 1.0;
+  rows.forEach(([name, before, after, col, delta, dcol], i) => {
+    const y = 708 + i * 25.5, k = ease(((t + i * .15) % 4) / 1.4), a = lerp(before, after, k);
+    text(name, 226, y, C.ink, 7);
+    const xb = X0 + before * XS, xa = X0 + a * XS;
+    ctx.strokeStyle = C.faint; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X0 + Math.min(before, after) * XS, y); ctx.lineTo(X0 + Math.max(before, after) * XS, y); ctx.stroke();
+    ctx.strokeStyle = C.ink; ctx.beginPath(); ctx.arc(xb, y, 4.5, 0, 7); ctx.stroke();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(xa, y, 4.5, 0, 7); ctx.fill();
+    if (col === C.red) { ctx.strokeStyle = C.red; ctx.globalAlpha = .5; ctx.beginPath(); ctx.arc(xa, y, 7, 0, 7); ctx.stroke(); ctx.globalAlpha = 1; }
+    text(delta, 486, y, dcol, 7, 'right');
+  });
+  ctx.strokeStyle = C.faint; ctx.beginPath(); ctx.moveTo(X0, 862); ctx.lineTo(X0 + 112, 862); ctx.stroke();
+  [0, 200, 400, 600].forEach((v) => text(String(v), X0 + v * XS, 870, C.dim, 5.5, 'center'));
+
+  // pareto
+  panel(500, 676, 210, 210, 'EVALUATOR REJECTIONS  |  PARETO');
+  const bars = [['ShapeErr', 1, '#2b4a6e'], ['Timeout', .55, '#3c434f'], ['MemLeak', .33, '#26406a'], ['StateRewind', .24, C.amber], ['DataLeak', .16, '#2b4a6e'], ['TypeError', .09, '#3c434f'], ['Other', .07, '#2b4a6e']];
+  const bx = 510, bw = 24, base = 836, hb = 116, hotb = Math.floor(t / .9) % bars.length;
+  let cum = 0; const tot = bars.reduce((s, b) => s + b[1], 0), pts = [];
+  bars.forEach(([name, v, col], i) => {
+    const X = bx + i * 27, h = v * hb * (.94 + .06 * Math.sin(t * 2 + i));
+    ctx.fillStyle = i === hotb ? C.amber : col; ctx.fillRect(X, base - h, bw, h);
+    cum += v; pts.push([X + bw / 2, base - 10 - (cum / tot) * 130]);
+    ctx.save(); ctx.translate(X + bw / 2 + 2, base + 6); ctx.rotate(-Math.PI / 4); text(name, 0, 0, i === hotb ? C.ink : C.dim, 5.5, 'right'); ctx.restore();
+  });
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.beginPath(); pts.forEach(([X, Y], i) => (i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y))); ctx.stroke();
+  pts.forEach(([X, Y], i) => { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(X, Y, 2.4, 0, 7); ctx.fill(); if (i === hotb) { ctx.strokeStyle = C.amber; ctx.beginPath(); ctx.arc(X, Y, 6, 0, 7); ctx.stroke(); } });
+  text('100 %', 702, pts[6][1], C.dim, 5.5, 'right'); text('50 %', 702, 770, C.dim, 5.5, 'right');
+
+  text('SOURCE: SIMULATED TELEMETRY  |  DUAL-ENGINE CONNECTOME  |  RENDERED FROM CODE', 10, 897, C.faint, 5.5);
+}
+
+// ---------- frame ------------------------------------------------------------
+function renderAt(t) {
+  const S = scene(t);
+  drawGL(t, S);
+  ctx.setTransform(SCALE * DPR, 0, 0, SCALE * DPR, 0, 0);
+  ctx.fillStyle = '#05070b'; ctx.fillRect(0, 0, W, H);
+  header(t); viewport(t, S); sideColumn(t); tokenFlow(t); bottom(t);
+  // subtle scanline + grain for the screen-capture feel
+  ctx.globalAlpha = .035; ctx.fillStyle = '#fff';
+  for (let y = (t * 30) % 3; y < H; y += 3) ctx.fillRect(0, y, W, .5);
+  ctx.globalAlpha = 1;
+}
+window.renderAt = renderAt;
+
+resize(); addEventListener('resize', resize);
+document.fonts.load('8px JB').then(() => document.fonts.load('8px JBB')).then(() => {
+  window.ready = true;
+  if (!CAPTURE) { const t0 = performance.now(); const loop = () => { renderAt((performance.now() - t0) / 1000); requestAnimationFrame(loop); }; loop(); }
+  else renderAt(0);
+});
+</script>
+</body>
+</html>
