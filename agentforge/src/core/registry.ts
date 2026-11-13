@@ -36,7 +36,7 @@ export const itemSchema = z.discriminatedUnion('type', [
   z.object({ ...itemBase, type: z.literal('match'), pairs: z.array(z.object({ left: z.string(), right: z.string() })).min(3), errorTag: z.string().optional() }),
   z.object({ ...itemBase, type: z.literal('fill'), template: z.string(), blanks: z.array(z.object({ accept: z.array(z.string()).min(1) })).min(1), errorTag: z.string().optional() }),
   z.object({ ...itemBase, type: z.literal('short'), rubric: z.array(z.object({ concept: z.string(), any: z.array(z.string()).min(1) })).min(2), minConcepts: z.number().min(1), modelAnswer: z.string().min(30) }),
-  z.object({ ...itemBase, type: z.literal('code'), exports: z.array(z.string()).min(1), starter: z.string(), solution: z.string(), tests: z.array(z.object({ name: z.string(), code: z.string() })).min(2), errorTag: z.string().optional() }),
+  z.object({ ...itemBase, type: z.literal('code'), language: z.enum(['javascript', 'python']).optional(), exports: z.array(z.string()).min(1), starter: z.string(), solution: z.string(), tests: z.array(z.object({ name: z.string(), code: z.string() })).min(2), errorTag: z.string().optional() }),
   z.object({ ...itemBase, type: z.literal('classify'), buckets: z.array(z.string()).min(2), cards: z.array(z.object({ text: z.string(), bucket: z.string(), errorTag: z.string().optional() })).min(3) }),
 ]);
 

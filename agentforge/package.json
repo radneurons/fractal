@@ -10,9 +10,13 @@
     "typecheck": "tsc -b --pretty",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "node tests/e2e/journey.mjs"
+    "e2e": "node tests/e2e/journey.mjs",
+    "predev": "node scripts/copy-pyodide.mjs",
+    "prebuild": "node scripts/copy-pyodide.mjs",
+    "prepreview": "node scripts/copy-pyodide.mjs"
   },
   "devDependencies": {
+    "@types/node": "^22.20.5",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.169.0",
@@ -26,9 +30,11 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
     "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/lang-python": "^6.1.6",
     "@uiw/react-codemirror": "^4.23.6",
     "@xyflow/react": "^12.3.2",
     "idb-keyval": "^6.2.1",
+    "pyodide": "^0.27.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.169.0",

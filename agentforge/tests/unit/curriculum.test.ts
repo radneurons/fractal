@@ -69,7 +69,7 @@ describe('authored answer keys grade as correct', () => {
 
 describe('code items: reference solutions pass and starters fail', () => {
   for (const item of ITEMS) {
-    if (item.type !== 'code') continue;
+    if (item.type !== 'code' || item.language === 'python') continue;
     it(`${item.id} solution passes all tests`, async () => {
       const r = await runHarness(item.solution, item.exports, item.tests);
       expect(r.compileError).toBeUndefined();

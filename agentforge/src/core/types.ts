@@ -118,7 +118,9 @@ export interface CodeTest {
 }
 export interface CodeItem extends ItemBase {
   type: 'code';
-  /** Top-level names the learner's code must define; tests receive them as `m`. */
+  /** Defaults to JavaScript. Python runs in Pyodide; its tests are Python expressions that must be True. */
+  language?: 'javascript' | 'python';
+  /** Top-level names the learner's code must define; JS tests receive them as `m`. */
   exports: string[];
   starter: string;
   tests: CodeTest[];

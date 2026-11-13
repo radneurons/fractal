@@ -5,9 +5,11 @@ import { getSkill } from '@/content/skills';
 import { useLearner } from '@/store/learner';
 import { complete, providerReady, ProviderError, type CompletionResult } from '@/core/ai/provider';
 import { runInSandbox, type SandboxRun } from '@/core/runtime/sandbox';
+import { runPython } from '@/core/runtime/pySandbox';
+import type { CodeItem } from '@/core/types';
 import { CHECKS, PROMPT_TASKS, REVIEW_DIFFS } from './labData';
 import ItemView from '@/ui/ItemView';
-import { Icon, PageHeader, Tabs, TruthLabel, useToast } from '@/ui/kit';
+import { Icon, PageHeader, Seg, Tabs, TruthLabel, useToast } from '@/ui/kit';
 import { href, navigate } from '@/ui/router';
 import { TerminalSim, AgentSessionSim } from './demos/Terminal';
 import { EvalDemo, MultiAgentDemo, RagDemo } from './demos/systems';
@@ -142,17 +144,21 @@ function PromptLab() {
 
 // ───────── Code Lab
 function CodeLab() {
-  const codeItems = ITEMS.filter((i) => i.type === 'code');
+  const preferred = useLearner((s) => s.profile?.language);
+  const [lang, setLang] = useState<'all' | 'javascript' | 'python'>(preferred === 'python' ? 'python' : 'all');
+  const allCode = ITEMS.filter((i): i is CodeItem => i.type === 'code');
+  const codeItems = allCode.filter((i) => lang === 'all' || (i.language ?? 'javascript') === lang);
   const [id, setId] = useState(codeItems[0].id);
-  const item = codeItems.find((i) => i.id === id)!;
+  const item = allCode.find((i) => i.id === id)!;
   const subs = useLearner((s) => s.submissions[id] ?? []);
   return (
     <div className="lab" style={{ gridTemplateColumns: 'minmax(220px, 280px) minmax(0, 1fr) minmax(240px, 320px)' }}>
       <aside className="card stack sm" style={{ maxHeight: 640, overflow: 'auto' }}>
         <b>Exercises ({codeItems.length})</b>
+        <Seg label="Language" value={lang} onChange={(v) => { setLang(v); const first = allCode.find((i) => v === 'all' || (i.language ?? 'javascript') === v); if (first) setId(first.id); }} options={[{ id: 'all', label: 'All' }, { id: 'javascript', label: 'JavaScript' }, { id: 'python', label: 'Python' }]} />
         {codeItems.map((c) => (
           <button key={c.id} className="opt" aria-pressed={c.id === id} onClick={() => setId(c.id)} style={{ padding: '8px 10px' }}>
-            <span style={{ flex: 1 }}><span className="small"><b>{getSkill(c.skillId).title}</b></span><br /><span className="tiny faint">difficulty {c.difficulty}/5</span></span>
+            <span style={{ flex: 1 }}><span className="small"><b>{getSkill(c.skillId).title}</b></span><br /><span className="tiny faint">{c.language === 'python' ? 'Python' : 'JavaScript'} · difficulty {c.difficulty}/5</span></span>
           </button>
         ))}
       </aside>
@@ -168,17 +174,29 @@ function CodeLab() {
   );
 }
 
+const SCRATCH = {
+  javascript: '// Free JavaScript scratchpad — runs in the sandbox.\nconst words = "agents use tools in a loop".split(" ");\nconsole.log(words.map(w => w.length));',
+  python: '# Free Python scratchpad — runs in Pyodide (WebAssembly) in the sandbox.\nwords = "agents use tools in a loop".split()\nprint([len(w) for w in words])',
+};
 function Scratchpad() {
-  const [code, setCode] = useState('// Free JavaScript scratchpad — runs in the sandbox.\nconst words = "agents use tools in a loop".split(" ");\nconsole.log(words.map(w => w.length));');
+  const [lang, setLang] = useState<'javascript' | 'python'>('javascript');
+  const [code, setCode] = useState(SCRATCH.javascript);
   const [run, setRun] = useState<SandboxRun | null>(null);
+  const [busy, setBusy] = useState(false);
+  const exec = async () => {
+    setBusy(true);
+    setRun(lang === 'python' ? await runPython(code, [{ name: 'run', code: 'True' }]) : await runInSandbox(code, ['__noop'], [{ name: 'run', code: 'return true' }]));
+    setBusy(false);
+  };
   return (
     <div className="card stack sm">
       <div className="row between"><b>Scratchpad</b><TruthLabel kind="executed" /></div>
+      <Seg label="Scratchpad language" value={lang} onChange={(v) => { setLang(v); setCode(SCRATCH[v]); setRun(null); }} options={[{ id: 'javascript', label: 'JavaScript' }, { id: 'python', label: 'Python' }]} />
       <Suspense fallback={<textarea className="textarea code" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Scratchpad code" />}>
-        <CodeEditor value={code} onChange={setCode} height="160px" label="Scratchpad code" />
+        <CodeEditor key={lang} value={code} onChange={setCode} height="160px" label="Scratchpad code" language={lang} />
       </Suspense>
-      <button className="btn sm" onClick={async () => setRun(await runInSandbox(code, ['__noop'], [{ name: 'run', code: 'return true' }]))}><Icon name="play" /> Run</button>
-      {run && <div className="console">{run.compileError ? `Error: ${run.compileError}` : run.timedOut ? 'Timed out after 2s' : run.logs.join('\n') || '(no console output)'}</div>}
+      <button className="btn sm" onClick={exec} disabled={busy}><Icon name="play" /> {busy ? (lang === 'python' ? 'Running (loading Python the first time)…' : 'Running…') : 'Run'}</button>
+      {run && <div className="console">{run.compileError ? `Error: ${run.compileError}` : run.timedOut ? `Timed out after ${lang === 'python' ? 5 : 2}s` : run.logs.join('\n') || '(no output)'}</div>}
     </div>
   );
 }

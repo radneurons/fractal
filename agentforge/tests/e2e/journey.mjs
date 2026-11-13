@@ -143,7 +143,7 @@ try {
 
   await step('10. Completes a practical exercise (code runs in the sandbox)', async () => {
     await page.goto(BASE + '#/lab/code');
-    await page.getByRole('button', { name: /Variables, types & control flow/ }).click();
+    await page.getByRole('button', { name: /Variables, types & control flow.*JavaScript · difficulty 1/ }).click();
     const editor = page.locator('.cm-content').first();
     await editor.waitFor();
     await editor.click();
@@ -214,6 +214,38 @@ try {
     await page.getByRole('button', { name: 'Save comparison record' }).click();
     await expectVisible(page.getByRole('button', { name: 'Replay' }), 'saved record missing');
     await page.screenshot({ path: SHOTS + '10-compare.png' });
+  });
+
+  await step('Extra: Python runs offline in the sandbox (exercise, network blocked, timeout + recovery)', async () => {
+    await page.goto(BASE + '#/lab/code');
+    await page.getByRole('button', { name: 'Python', exact: true }).first().click();
+    await page.getByRole('button', { name: /Variables, types & control flow.*Python/ }).click();
+    const editor = page.locator('.cm-content').first();
+    await editor.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.press('Delete');
+    await page.keyboard.insertText('def count_passing(scores):\n    return sum(1 for s in scores if s >= 60)\n');
+    await page.getByRole('button', { name: 'Submit' }).click();
+    await page.getByText('3/3 tests passed').first().waitFor({ timeout: 60000 }).catch(() => { throw new Error('Python exercise did not pass'); });
+    const scratch = page.getByRole('group', { name: 'Scratchpad language' });
+    await scratch.getByRole('button', { name: 'Python' }).click();
+    await page.locator('.cm-content', { hasText: 'Free Python scratchpad' }).waitFor();
+    const pad = page.locator('.card', { hasText: 'Scratchpad' }).last().locator('.cm-content');
+    const runPad = async (codeText) => {
+      await pad.click();
+      await page.keyboard.press('Control+A');
+      await page.keyboard.press('Delete');
+      await page.keyboard.insertText(codeText);
+      await page.locator('.card', { hasText: 'Scratchpad' }).getByRole('button', { name: /^Run/ }).click();
+    };
+    await runPad('import js\ntry:\n    js.fetch("https://example.com")\n    print("NETWORK REACHABLE")\nexcept Exception:\n    print("network blocked")');
+    await page.locator('.console', { hasText: /network blocked|NETWORK REACHABLE/ }).waitFor({ timeout: 30000 });
+    if (await page.locator('.console', { hasText: 'NETWORK REACHABLE' }).count()) throw new Error('network API was reachable from Python');
+    await runPad('while True:\n    pass');
+    await page.locator('.console', { hasText: 'Timed out after 5s' }).waitFor({ timeout: 20000 }).catch(() => { throw new Error('infinite loop was not stopped'); });
+    await runPad('print(6 * 7)');
+    await page.locator('.console', { hasText: '42' }).waitFor({ timeout: 60000 }).catch(() => { throw new Error('runtime did not recover after timeout'); });
+    await page.screenshot({ path: SHOTS + '11-python.png' });
   });
 
   await step('Extra: Knowledge Universe renders 3D and has an accessible 2D view', async () => {

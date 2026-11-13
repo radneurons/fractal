@@ -40,9 +40,9 @@ export const classify = (id: string, skillId: string, difficulty: Difficulty, pr
 
 export const code = (
   id: string, skillId: string, difficulty: Difficulty, prompt: string,
-  spec: { exports: string[]; starter: string; solution: string; tests: [string, string][] },
+  spec: { exports: string[]; starter: string; solution: string; tests: [string, string][]; language?: 'javascript' | 'python' },
   explanation: string, errorTag: ErrorTag = 'incomplete', hints: string[] = [],
 ): CodeItem => ({
-  type: 'code', id, skillId, difficulty, prompt, exports: spec.exports, starter: spec.starter, solution: spec.solution,
+  type: 'code', id, skillId, difficulty, prompt, language: spec.language, exports: spec.exports, starter: spec.starter, solution: spec.solution,
   tests: spec.tests.map(([name, c]) => ({ name, code: c })), explanation, errorTag, hints,
 });

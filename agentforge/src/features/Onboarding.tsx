@@ -99,7 +99,7 @@ export default function Onboarding() {
                 <select className="select" value={lang} onChange={(e) => setLang(e.target.value as Profile['language'])}>
                   <option value="javascript">JavaScript (runs in-browser)</option>
                   <option value="typescript">TypeScript</option>
-                  <option value="python">Python (examples only — execution requires a sandbox service)</option>
+                  <option value="python">Python (runs in your browser via WebAssembly)</option>
                 </select>
               </label>
             </fieldset>

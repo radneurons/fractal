@@ -4,6 +4,7 @@ import type { CodeItem, Evidence, EvidenceSource, GradeResult, Item, Response } 
 import { ERROR_TAG_LABEL } from '@/core/types';
 import { grade, seededShuffle } from '@/core/engines/assessment';
 import { runInSandbox, type SandboxRun } from '@/core/runtime/sandbox';
+import { runPython } from '@/core/runtime/pySandbox';
 import { useLearner } from '@/store/learner';
 import { getSkill } from '@/content/skills';
 import { Icon, Markdown, TruthLabel, useToast } from './kit';
@@ -79,7 +80,7 @@ export default function ItemView({ item, source, onGraded, allowRetry = true, la
 
   const runCode = async (codeItem: CodeItem, code: string, isSubmit: boolean) => {
     setRunning(true);
-    const res = await runInSandbox(code, codeItem.exports, codeItem.tests);
+    const res = codeItem.language === 'python' ? await runPython(code, codeItem.tests) : await runInSandbox(code, codeItem.exports, codeItem.tests);
     setRun(res);
     setRunning(false);
     if (isSubmit) {
@@ -101,11 +102,11 @@ export default function ItemView({ item, source, onGraded, allowRetry = true, la
     <section className="item card" aria-label={label ?? 'Exercise'}>
       <div className="row between">
         <div className="row">
-          <span className="chip">{TYPE_LABEL[item.type]}</span>
+          <span className="chip">{TYPE_LABEL[item.type]}{item.type === 'code' ? (item.language === 'python' ? ' · Python' : ' · JavaScript') : ''}</span>
           <span className="chip">Difficulty {item.difficulty}/5</span>
           <span className="chip violet">{getSkill(item.skillId).title}</span>
         </div>
-        {item.type === 'code' ? <TruthLabel kind="executed" detail="Your code runs in an isolated Web Worker (no network, 2 s limit). Real tests decide." /> : item.type === 'short' ? <TruthLabel kind="heuristic" /> : <span className="tiny faint">Auto-graded</span>}
+        {item.type === 'code' ? <TruthLabel kind="executed" detail={item.language === 'python' ? 'Your Python runs in Pyodide (WebAssembly) in an isolated worker: no network, 5 s limit. Real tests decide.' : 'Your code runs in an isolated Web Worker (no network, 2 s limit). Real tests decide.'} /> : item.type === 'short' ? <TruthLabel kind="heuristic" /> : <span className="tiny faint">Auto-graded</span>}
       </div>
       <Markdown text={item.prompt} className="md item-prompt" />
 
@@ -411,10 +412,10 @@ function CodeArea({ item, draft, setDraft, running, run, locked, onRun, onSubmit
   return (
     <div className="stack sm">
       <Suspense fallback={<textarea className="textarea code" value={code} onChange={(e) => setDraft(e.target.value)} aria-label="Code editor" style={{ minHeight: 220 }} />}>
-        <CodeEditor value={code} onChange={setDraft} label="Code editor" />
+        <CodeEditor value={code} onChange={setDraft} label="Code editor" language={item.language} />
       </Suspense>
       <div className="row">
-        <button className="btn" onClick={() => onRun(code)} disabled={running}><Icon name="play" /> {running ? 'Running…' : 'Run tests'}</button>
+        <button className="btn" onClick={() => onRun(code)} disabled={running}><Icon name="play" /> {running ? (item.language === 'python' ? 'Running (first Python run loads the runtime)…' : 'Running…') : 'Run tests'}</button>
         <button className="btn primary" onClick={() => onSubmit(code)} disabled={running || locked}><Icon name="check" /> Submit</button>
         <button className="btn ghost sm" onClick={() => setDraft(item.starter)} disabled={running}>Reset to starter</button>
         <span className="spacer" />
