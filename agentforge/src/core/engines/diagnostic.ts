@@ -21,7 +21,8 @@ export interface DiagStep {
 export function probeItem(skillId: string, items: Item[]): Item {
   const pool = items.filter((i) => i.skillId === skillId);
   const mcqs = pool.filter((i) => i.type === 'mcq');
-  return mcqs[mcqs.length - 1] ?? pool[pool.length - 1];
+  const quick = pool.filter((i) => i.type !== 'code' && i.type !== 'short');
+  return mcqs[mcqs.length - 1] ?? quick[quick.length - 1] ?? pool[pool.length - 1];
 }
 
 /** Staircase: correct → jump 2 harder; wrong/unknown → step 1 easier (to an unasked probe). */
