@@ -3,3 +3,4 @@ dist
 *.log
 tests/e2e/screens
 public/pyodide
+*.tsbuildinfo
