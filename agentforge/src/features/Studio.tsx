@@ -2,7 +2,9 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, Background, Controls, Handle, Position, applyNodeChanges, applyEdgeChanges, type Edge, type Node, type NodeChange, type EdgeChange, type Connection, type NodeProps } from '@xyflow/react';
 import { connectionError, portsFor, runGraph, runGraphTests, validateGraph, type GNode, type Graph, type NodeKind, type RunResult } from '@/core/runtime/agentRuntime';
 import { TEMPLATES, templateById } from '@/core/runtime/templates';
-import { TOOLS } from '@/core/runtime/tools';
+import { TOOLS, getTool } from '@/core/runtime/tools';
+import { useMcp } from '@/core/mcp/session';
+import { mcpToolSpec, mcpToolId } from '@/core/mcp/tools';
 import { useLearner } from '@/store/learner';
 import { Icon, Modal, Seg, Tabs, TruthLabel, useToast } from '@/ui/kit';
 import { navigate } from '@/ui/router';
@@ -74,6 +76,8 @@ export default function Studio({ templateId }: { templateId?: string }) {
   const record = useLearner((s) => s.recordEvidence);
   const theme = useLearner((s) => s.settings.theme);
   const { toast } = useToast();
+  const mcpConn = useMcp((s) => s.conn);
+  const mcpTools = useMemo(() => (mcpConn ? mcpConn.tools.map((t) => mcpToolSpec(mcpConn, t)) : []), [mcpConn]);
   const provider = useLearner((s) => s.provider);
   const liveAvailable = providerReady(provider) && provider.provider === 'anthropic';
   const [mode, setMode] = useState<'rules' | 'live'>('rules');
@@ -198,6 +202,12 @@ export default function Studio({ templateId }: { templateId?: string }) {
           {Object.values(TOOLS).map((t) => (
             <button key={t.id} className="palette-item" onClick={() => addNode('tool', t.id)} title={t.description}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--accent-2)' }} /><span className="mono tiny">{t.id}</span>{t.impact === 'external' && <span className="chip danger" style={{ marginLeft: 'auto' }}>high impact</span>}</button>
           ))}
+          <div className="eyebrow" style={{ marginTop: 8 }}>MCP tools{mcpConn ? ` · ${mcpConn.serverName}` : ''}</div>
+          {mcpTools.length === 0 ? (
+            <button className="palette-item" onClick={() => navigate('/lab/mcp')} title="Connect a real MCP server to use its tools here"><span className="tiny faint">Connect a server in MCP Lab →</span></button>
+          ) : mcpTools.map((t) => (
+            <button key={t.id} className="palette-item" onClick={() => addNode('tool', t.id)} title={t.description}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--violet)' }} /><span className="mono tiny">{t.id}</span>{t.impact === 'external' && <span className="chip danger" style={{ marginLeft: 'auto' }}>high impact</span>}</button>
+          ))}
           <div className="tiny faint" style={{ marginTop: 8 }}>Connect right-side ports to left-side ports. The agent's square bottom port attaches tools. Select + Backspace deletes.</div>
         </aside>
 
@@ -269,6 +279,9 @@ export default function Studio({ templateId }: { templateId?: string }) {
 function Inspector({ node, update, remove }: { node: GNode; update: (p: Partial<GNode>) => void; remove: () => void }) {
   const c = node.config;
   const set = (k: string, v: unknown) => update({ config: { [k]: v } });
+  const mcpConn = useMcp((s) => s.conn);
+  const spec = node.kind === 'tool' ? getTool(c.toolId) : undefined;
+  const toolOptions = useMemo(() => [...new Set([...Object.keys(TOOLS), ...(mcpConn ? mcpConn.tools.map((t) => mcpToolId(t.name)) : []), ...(c.toolId ? [String(c.toolId)] : [])])], [mcpConn, c.toolId]);
   return (
     <div className="stack sm">
       <div className="eyebrow">{KIND_META[node.kind].label}</div>
@@ -284,8 +297,12 @@ function Inspector({ node, update, remove }: { node: GNode; update: (p: Partial<
       )}
       {node.kind === 'tool' && (
         <>
-          <label className="field">Tool<select className="select" value={c.toolId} onChange={(e) => update({ label: e.target.value, config: { toolId: e.target.value } })}>{Object.values(TOOLS).map((t) => <option key={t.id} value={t.id}>{t.id}</option>)}</select></label>
-          {TOOLS[c.toolId] && <div className="card inset tiny"><div>{TOOLS[c.toolId].description}</div><div className="mono" style={{ marginTop: 6 }}>schema: {TOOLS[c.toolId].schemaText}</div><div style={{ marginTop: 4 }}>impact: <b>{TOOLS[c.toolId].impact}</b></div></div>}
+          <label className="field">Tool<select className="select" value={c.toolId} onChange={(e) => update({ label: e.target.value, config: { toolId: e.target.value } })}>{toolOptions.map((id) => <option key={id} value={id}>{id}{getTool(id) ? '' : ' (not connected)'}</option>)}</select></label>
+          {spec ? <div className="card inset tiny"><div>{spec.description}</div><div className="mono" style={{ marginTop: 6 }}>schema: {spec.schemaText}</div><div style={{ marginTop: 4 }}>impact: <b>{spec.impact}</b>{spec.source ? <> · source: <b>{spec.source}</b></> : null}</div></div>
+            : <div className="callout warn tiny">This MCP tool's server is not connected. <a href="#/lab/mcp">Connect it in MCP Lab</a>.</div>}
+          {String(c.toolId ?? '').startsWith('mcp__') && (
+            <label className="field">Arguments template (flow mode; <code>{'{{input}}'}</code> = incoming text)<textarea className="textarea mono" style={{ minHeight: 56 }} value={c.argsTemplate ?? ''} placeholder={'{"term": "{{input}}"}'} onChange={(e) => set('argsTemplate', e.target.value)} spellCheck={false} /></label>
+          )}
           <label className="field">Retries (0–3)<input className="input" type="number" min={0} max={3} value={c.retries ?? 0} onChange={(e) => set('retries', Number(e.target.value))} /></label>
           <label className="field">Simulated failure<select className="select" value={c.failMode ?? 'never'} onChange={(e) => set('failMode', e.target.value)}><option value="never">never</option><option value="first">first attempt fails</option><option value="always">always fails</option></select></label>
         </>

@@ -1,6 +1,6 @@
 // AgentStudioRuntime — validates and executes agent workflow graphs deterministically.
 // Every highlighted node and trace line in the UI comes from the events emitted here (no decorative animation).
-import { TOOLS, extractArgs, summarizeObservation } from './tools';
+import { extractArgs, fillArgsTemplate, getTool, summarizeObservation } from './tools';
 
 export type NodeKind = 'input' | 'agent' | 'tool' | 'router' | 'condition' | 'loop' | 'validate' | 'memory' | 'approval' | 'output';
 export type PortType = 'flow' | 'tool';
@@ -119,10 +119,10 @@ export function validateGraph(g: Graph): ValidationResult {
     }
     if (n.kind === 'loop' && !(Number(n.config.max) >= 1 && Number(n.config.max) <= 20)) errors.push({ nodeId: n.id, message: `Loop “${n.label}” needs max iterations between 1 and 20.` });
     if (n.kind === 'tool') {
-      if (!TOOLS[n.config.toolId]) errors.push({ nodeId: n.id, message: `Tool node “${n.label}” has no valid tool selected.` });
+      if (!getTool(n.config.toolId)) errors.push({ nodeId: n.id, message: String(n.config.toolId ?? '').startsWith('mcp__') ? `“${n.label}” uses an MCP tool that is not connected — connect its server in Practice Lab → MCP Lab.` : `Tool node “${n.label}” has no valid tool selected.` });
       const hasIn = fe.some((e) => e.target === n.id) || toolEdges(g).some((e) => e.target === n.id);
       if (!hasIn) warnings.push({ nodeId: n.id, message: `Tool “${n.label}” is not attached to an agent or connected to the flow.` });
-      if (TOOLS[n.config.toolId]?.impact === 'external' && !upstreamHas(g, n.id, 'approval'))
+      if (getTool(n.config.toolId)?.impact === 'external' && !upstreamHas(g, n.id, 'approval'))
         errors.push({ nodeId: n.id, message: `“${n.label}” has external impact (e.g. sends email) but no Human Approval node upstream.` });
     }
     if (n.kind === 'router' && !(n.config.routes ?? []).length) warnings.push({ nodeId: n.id, message: `Router “${n.label}” has no routes; everything goes to default.` });
@@ -169,7 +169,7 @@ export interface Decision {
 export interface PolicyContext {
   goal: string;
   instructions: string;
-  tools: { nodeId: string; toolId: string }[];
+  tools: { nodeId: string; toolId: string; argsTemplate?: string }[];
   observations: Record<string, any>; // toolId → last successful result
   errors: Record<string, number>; // toolId → error count
   calls: { toolId: string; args: unknown; ok: boolean; output?: unknown }[];
@@ -188,7 +188,7 @@ export const rulePolicy: Policy = {
   live: false,
   async decide(ctx) {
     const g = ctx.goal.toLowerCase();
-    const triggered = ctx.tools.filter((t) => TOOLS[t.toolId]?.triggers.some((k) => g.includes(k)));
+    const triggered = ctx.tools.filter((t) => getTool(t.toolId)?.triggers.some((k) => g.includes(k)));
     if (ctx.config.stopWhenDone === false && ctx.calls.length > 0) {
       // Faulty-agent behaviour: keeps re-running its first tool because it has no stop condition.
       const last = ctx.calls[ctx.calls.length - 1];
@@ -197,8 +197,8 @@ export const rulePolicy: Policy = {
     }
     const pending = triggered.filter((t) => !ctx.observations[t.toolId] && (ctx.errors[t.toolId] ?? 0) < 2);
     for (const t of pending) {
-      const args = extractArgs(t.toolId, ctx.goal, ctx.observations);
-      if (args) return { type: 'call', toolNodeId: t.nodeId, toolId: t.toolId, args, rationale: `Goal mentions “${TOOLS[t.toolId].triggers.find((k) => g.includes(k))}”, which matches ${t.toolId}'s description.` };
+      const args = extractArgs(t.toolId, ctx.goal, ctx.observations) ?? (t.argsTemplate ? fillArgsTemplate(t.argsTemplate, ctx.goal) : null);
+      if (args) return { type: 'call', toolNodeId: t.nodeId, toolId: t.toolId, args, rationale: `Goal mentions “${getTool(t.toolId)!.triggers.find((k) => g.includes(k))}”, which matches ${t.toolId}'s description.` };
     }
     if (pending.length) {
       const need: Record<string, string> = { get_order: 'your order id', get_revenue: 'which quarter (Q1–Q4)', get_weather: 'which city', calculator: 'the numbers to calculate', file_lookup: 'the file path', send_email: 'the recipient email address', search_docs: 'what to search for' };
@@ -265,7 +265,13 @@ export async function runGraph(g: Graph, input: string, opts: RunOptions = {}): 
   const queue: { nodeId: string; value: string; approved: boolean }[] = [{ nodeId: start.id, value: input, approved: false }];
 
   const execTool = async (nodeId: string, toolId: string, args: Record<string, unknown>, approved: boolean) => {
-    const spec = TOOLS[toolId];
+    const spec = getTool(toolId);
+    if (!spec) {
+      const msg = `Tool ${toolId} is not available (not connected).`;
+      emit(nodeId, 'tool-error', msg);
+      toolCalls.push({ nodeId, toolId, args, ok: false, error: msg });
+      return { ok: false as const, error: msg };
+    }
     const node = byId.get(nodeId)!;
     emit(nodeId, 'tool-request', `${toolId}(${JSON.stringify(args)})`, { args });
     const parsed = spec.schema.safeParse(args);
@@ -284,7 +290,7 @@ export async function runGraph(g: Graph, input: string, opts: RunOptions = {}): 
     const retries = Math.max(0, Math.min(3, Number(node.config.retries ?? 0)));
     for (let attempt = 1; attempt <= retries + 1; attempt++) {
       try {
-        const result = spec.run(parsed.data, { failMode: opts.failModes?.[nodeId] ?? node.config.failMode ?? 'never', attempt });
+        const result = await spec.run(parsed.data, { failMode: opts.failModes?.[nodeId] ?? node.config.failMode ?? 'never', attempt });
         emit(nodeId, 'tool-response', JSON.stringify(result), { result, attempt });
         toolCalls.push({ nodeId, toolId, args, ok: true });
         estTokens += Math.ceil(JSON.stringify(result).length / 4);
@@ -379,7 +385,7 @@ export async function runGraph(g: Graph, input: string, opts: RunOptions = {}): 
         }
         case 'tool': {
           const toolId = n.config.toolId;
-          const args = extractArgs(toolId, value, {});
+          const args = extractArgs(toolId, value, {}) ?? (n.config.argsTemplate ? fillArgsTemplate(String(n.config.argsTemplate), value) : null);
           if (!args) {
             emit(nodeId, 'tool-error', `Could not derive arguments for ${toolId} from the input.`);
             forward(nodeId, 'out', `${toolId} skipped: missing arguments`, approved);
@@ -390,7 +396,7 @@ export async function runGraph(g: Graph, input: string, opts: RunOptions = {}): 
           break;
         }
         case 'agent': {
-          const tools = te.filter((e) => e.source === nodeId).map((e) => ({ nodeId: e.target, toolId: byId.get(e.target)!.config.toolId as string }));
+          const tools = te.filter((e) => e.source === nodeId).map((e) => ({ nodeId: e.target, toolId: byId.get(e.target)!.config.toolId as string, argsTemplate: byId.get(e.target)!.config.argsTemplate as string | undefined }));
           const ctx: PolicyContext = { goal: value, instructions: String(n.config.instructions ?? ''), tools, observations: {}, errors: {}, calls: [], config: n.config };
           const max = Number(n.config.maxSteps);
           let answer: string | null = null;

@@ -96,7 +96,28 @@ export interface ToolSpec {
   schemaText: string;
   impact: 'read' | 'write' | 'external';
   triggers: string[];
-  run: (args: any, opts: { failMode?: 'never' | 'always' | 'first'; attempt: number }) => unknown;
+  run: (args: any, opts: { failMode?: 'never' | 'always' | 'first'; attempt: number }) => unknown | Promise<unknown>;
+  /** JSON Schema for external tools (e.g. from an MCP server), used to describe the tool to a live model. */
+  jsonSchema?: Record<string, unknown>;
+  source?: string;
+}
+
+// ───────── External tools registered at runtime (e.g. from a connected MCP server). Ids must match ^[A-Za-z0-9_-]+$.
+export const EXTERNAL_TOOLS: Record<string, ToolSpec> = {};
+export const getTool = (id: string): ToolSpec | undefined => TOOLS[id] ?? EXTERNAL_TOOLS[id];
+export function registerExternalTools(prefix: string, specs: ToolSpec[]) {
+  for (const k of Object.keys(EXTERNAL_TOOLS)) if (k.startsWith(prefix)) delete EXTERNAL_TOOLS[k];
+  for (const s of specs) EXTERNAL_TOOLS[s.id] = s;
+}
+
+/** Fill a JSON argument template such as {"term": "{{input}}"} with the incoming text. Returns null if invalid. */
+export function fillArgsTemplate(template: string, input: string): Record<string, unknown> | null {
+  try {
+    const v = JSON.parse(template.replace(/\{\{input\}\}/g, JSON.stringify(input).slice(1, -1)));
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 export const TOOLS: Record<string, ToolSpec> = {
@@ -223,5 +244,6 @@ export function summarizeObservation(toolId: string, r: any): string {
     case 'file_lookup': return `${r.path} contains: ${String(r.content).split('\n')[0]}`;
     case 'send_email': return `email sent to ${r.to}`;
   }
+  if (r && typeof r === 'object' && typeof (r as { text?: unknown }).text === 'string') return (r as { text: string }).text;
   return JSON.stringify(r);
 }

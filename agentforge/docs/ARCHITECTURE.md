@@ -17,8 +17,9 @@ src/
       progression.ts         ranks (from mastery + projects), XP, badges
     runtime/
       harness.ts / sandbox.ts  PracticeRuntime — JS tests in an isolated Web Worker
+      pyHarness.ts / pyWorker.ts / pySandbox.ts  Python tests in Pyodide (bundled), isolated module worker
       agentRuntime.ts        AgentStudioRuntime — typed graph validation + execution + traces
-      tools.ts               deterministic tools (safe calculator parser, local search, mock APIs)
+      tools.ts               deterministic tools + registry for external (MCP) tools
       templates.ts           Studio templates and debug challenges with acceptance tests
       retrieval.ts           chunking, BM25, toy embedding, hybrid ranking, recall@k
       terminalSim.ts         in-memory shell + Git simulation
@@ -26,6 +27,11 @@ src/
     ai/
       provider.ts            AIProviderManager — optional Anthropic SDK / OpenAI calls
       mentorPrompts.ts       fixed mentor mode prompts (learner text wrapped as data)
+      livePolicy.ts          live-model agent policy (tool use) for Agent Studio
+    mcp/
+      client.ts              MCP client (official SDK, Streamable HTTP) with a JSON-RPC log
+      tools.ts               MCP tool → Studio ToolSpec (JSON Schema → Zod, impact from annotations)
+      session.ts             in-memory connection store; registers tools with the runtime
   content/                   schools, skills, items, lessons, projects, games, interviews
   store/
     learner.ts               Zustand store persisted to IndexedDB (idb-keyval)
@@ -49,11 +55,15 @@ Every graded interaction anywhere in the app calls `recordAttempt` / `recordEvid
 
 Graphs are `{nodes, edges}` with typed ports (`flow` vs `tool`). `connectionError` rejects invalid wiring at edit time; `validateGraph` checks a single input, an output, reachability, that every cycle contains a Loop node with a 1–20 limit, agent `maxSteps` 1–50, valid tools, and that external-impact tools (send_email) have a Human Approval node upstream. `runGraph` executes breadth-first with a global step budget, emits ordered trace events (`enter`, `decision`, `tool-request`, `tool-response`, `tool-error`, `state`, `branch`, `approval`, `final`, `budget`, `output`), validates tool arguments with Zod, enforces approval at runtime, supports retries and simulated failures, and runs an optional loop guard. The UI highlights nodes only from these events.
 
-Agent decisions come from `rulePolicy` — a deterministic teaching policy that matches tool description keywords and extracts arguments by rules. It is labelled **SIMULATED** everywhere. The `Policy` interface allows a live model policy to be added without changing the runtime.
+Agent decisions come from `rulePolicy` — a deterministic teaching policy that matches tool description keywords and extracts arguments by rules, labelled **SIMULATED** — or, with an Anthropic key, from `makeLivePolicy`, where a real model chooses each tool call through tool use (labelled **LIVE**). Either way the runtime validates, executes, enforces approvals and budgets, and records the trace.
+
+Tools come from `getTool(id)`: the built-in deterministic tools plus external tools registered at runtime. Connecting an MCP server in MCP Lab registers each of its tools as `mcp__<name>` with a Zod validator built from the server's JSON Schema; tools not annotated read-only get `external` impact and so require a Human Approval node. In flow mode, a tool node's `argsTemplate` (e.g. `{"term": "{{input}}"}`) builds arguments from the incoming text. A graph that references an MCP tool whose server is not connected fails validation with a pointer to MCP Lab.
 
 ## Sandbox
 
 `runInSandbox` creates a Web Worker from a Blob. Before any learner code runs, the worker deletes `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `importScripts`, `indexedDB`, `caches`, `BroadcastChannel`, `Worker`, `SharedWorker` and `navigator` from its global scope. A 2-second wall-clock timer calls `worker.terminate()`, which also stops infinite loops. Test results come back from the worker; the UI never fabricates them. The same `runHarness` function is unit-tested in Node.
+
+Python items run in a separate module worker that loads Pyodide from the app's own `pyodide/` folder (copied from `node_modules` by `scripts/copy-pyodide.mjs`; no CDN), then deletes the network, storage and worker globals before any learner code runs. The harness (`pyHarness.ts`) executes the learner source and each test in fresh namespaces and returns JSON results. A 5-second timer terminates the worker and the next run starts a fresh one. The harness is unit-tested in Node against the same Pyodide build.
 
 ## Persistence
 
@@ -69,4 +79,6 @@ A minimal hash router (works on any static host and from sub-paths). Every page 
 - `tests/unit/engines.test.ts` — mastery model edge cases, partial credit, scheduler, planner time budgets/pins/skips, diagnostic staircase, weakness hypotheses and recovery, ranks/XP.
 - `tests/unit/runtime.test.ts` — calculator safety, schema rejection, port typing, all templates' tests, faulty templates fail until fixed, cycles need loops, budgets halt, trace ordering, runtime approval enforcement, terminal sim, retrieval recall, tokenizer losslessness, harness honesty.
 - `tests/unit/projects.test.ts` — every project/debug milestone solvable and not pre-solved, game balance (every Token Commander level winnable, default config not), interview rubrics satisfiable by model answers.
-- `tests/e2e/journey.mjs` — the 13-step learner journey plus Studio fix, Universe 3D/2D, focus mode persistence, all routes, mobile overflow, WebGL fallback, clean console.
+- `tests/unit/python.test.ts` — every Python item's reference solution passes and its starter fails, in real Pyodide.
+- `tests/unit/mcp.test.ts` — starts the demo MCP server on a local port and checks initialize/discovery, the recorded JSON-RPC traffic, tool calls, resource reads, server-side validation, and MCP tools inside `runGraph` (approval enforcement, error surfacing).
+- `tests/e2e/journey.mjs` — the 13-step learner journey plus Studio fix, Comparison Lab, Python sandbox (network blocked, timeout and recovery), MCP Lab against a real server and Studio palette, Universe 3D/2D, focus mode persistence, all routes, mobile overflow, WebGL fallback, clean console.

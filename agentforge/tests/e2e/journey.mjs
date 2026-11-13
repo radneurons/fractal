@@ -25,6 +25,10 @@ await new Promise((res, rej) => {
   server.stderr.on('data', (d) => process.stderr.write(d));
 });
 
+const { startDemoServer } = await import(new URL('../../scripts/mcp-demo-server.mjs', import.meta.url).pathname);
+const MCP_PORT = 18788;
+const mcpServer = await startDemoServer(MCP_PORT);
+
 const results = [];
 const step = async (name, fn) => {
   try {
@@ -260,6 +264,21 @@ try {
     await page.getByRole('button', { name: '3D' }).click();
   });
 
+  await step('Extra: MCP Lab connects to a real MCP server, calls a tool, and Studio offers its tools', async () => {
+    await page.goto(BASE + '#/lab/mcp');
+    await page.locator('#mcp-url').fill(`http://127.0.0.1:${MCP_PORT}/mcp`);
+    await page.getByRole('button', { name: /^connect$/i }).click();
+    await expectVisible(page.getByText('agentforge-demo'), 'server info not shown');
+    await expectVisible(page.getByText('lookup_term'), 'tools not listed');
+    await page.getByLabel('Tool arguments').fill('{"term": "context window"}');
+    await page.getByRole('button', { name: /call lookup_term/i }).click();
+    await expectVisible(page.getByText(/maximum number of tokens/), 'tool result not shown');
+    await page.locator('summary', { hasText: 'tools/call' }).first().waitFor({ timeout: 5000 }).catch(() => { throw new Error('tools/call not in JSON-RPC log'); });
+    await page.screenshot({ path: SHOTS + '10-mcp-lab.png' });
+    await page.getByRole('button', { name: /use in agent studio/i }).click();
+    await expectVisible(page.locator('.palette-item', { hasText: 'mcp__lookup_term' }), 'MCP tool missing from Studio palette');
+  });
+
   await step('Extra: Focus Mode toggles and persists', async () => {
     await page.goto(BASE + '#/home');
     await page.getByRole('button', { name: 'Enter Focus Mode' }).click();
@@ -301,7 +320,8 @@ try {
   });
 
   await step('Console is clean (no errors)', async () => {
-    const relevant = consoleErrors.filter((e) => !/favicon|fonts\.g(oogleapis|static)|ERR_(NAME|INTERNET|CONNECTION|TUNNEL)|net::/i.test(e));
+    // The MCP client's optional GET for a server→client stream is answered 405 by the stateless demo server (allowed by the spec).
+    const relevant = consoleErrors.filter((e) => !/favicon|fonts\.g(oogleapis|static)|ERR_(NAME|INTERNET|CONNECTION|TUNNEL)|net::|status of 405 \(Method Not Allowed\)/i.test(e));
     if (relevant.length) throw new Error(relevant.slice(0, 5).join('\n'));
   });
 } catch {
@@ -309,6 +329,7 @@ try {
 } finally {
   await browser.close();
   stopServer();
+  mcpServer.close();
 }
 console.log(`\n${results.filter((r) => r[0] === '✓').length}/${results.length} journey steps passed`);
 process.exit(failed ? 1 : 0);

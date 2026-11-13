@@ -1,7 +1,7 @@
 // Live-model agent policy for Agent Studio. The model only *decides*; the runtime still validates,
 // executes, enforces approvals and budgets, and records the trace — exactly as with the simulated policy.
 import type { Decision, Policy, PolicyContext } from '../runtime/agentRuntime';
-import { TOOLS } from '../runtime/tools';
+import { getTool } from '../runtime/tools';
 
 export interface ToolDef {
   name: string;
@@ -29,7 +29,10 @@ export const TOOL_JSON_SCHEMAS: Record<string, Record<string, unknown>> = {
 };
 
 export function toolDefsFor(toolIds: string[]): ToolDef[] {
-  return [...new Set(toolIds)].filter((id) => TOOLS[id] && TOOL_JSON_SCHEMAS[id]).map((id) => ({ name: id, description: TOOLS[id].description, input_schema: TOOL_JSON_SCHEMAS[id] }));
+  return [...new Set(toolIds)]
+    .map((id) => ({ id, spec: getTool(id), schema: TOOL_JSON_SCHEMAS[id] ?? getTool(id)?.jsonSchema }))
+    .filter((x) => x.spec && x.schema)
+    .map((x) => ({ name: x.id, description: x.spec!.description, input_schema: x.schema! }));
 }
 
 export function buildDecisionPrompt(ctx: PolicyContext): { system: string; user: string } {

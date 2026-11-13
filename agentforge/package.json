@@ -13,7 +13,8 @@
     "e2e": "node tests/e2e/journey.mjs",
     "predev": "node scripts/copy-pyodide.mjs",
     "prebuild": "node scripts/copy-pyodide.mjs",
-    "prepreview": "node scripts/copy-pyodide.mjs"
+    "prepreview": "node scripts/copy-pyodide.mjs",
+    "mcp:demo": "node scripts/mcp-demo-server.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
@@ -31,6 +32,7 @@
     "@anthropic-ai/sdk": "^1.8.0",
     "@codemirror/lang-javascript": "^6.2.2",
     "@codemirror/lang-python": "^6.1.6",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@uiw/react-codemirror": "^4.23.6",
     "@xyflow/react": "^12.3.2",
     "idb-keyval": "^6.2.1",

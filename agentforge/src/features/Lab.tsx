@@ -14,12 +14,13 @@ import { href, navigate } from '@/ui/router';
 import { TerminalSim, AgentSessionSim } from './demos/Terminal';
 import { EvalDemo, MultiAgentDemo, RagDemo } from './demos/systems';
 import CompareLab from './CompareLab';
+import McpLab from './McpLab';
 
 const CodeEditor = lazy(() => import('@/ui/CodeEditor'));
 
-type Tab = 'prompt' | 'code' | 'api' | 'terminal' | 'review' | 'eval' | 'compare';
+type Tab = 'prompt' | 'code' | 'api' | 'terminal' | 'review' | 'eval' | 'compare' | 'mcp';
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'prompt', label: 'Prompt Lab' }, { id: 'code', label: 'Code Lab' }, { id: 'api', label: 'API Lab' }, { id: 'terminal', label: 'Terminal & Agent Session' }, { id: 'review', label: 'Review Lab' }, { id: 'eval', label: 'Eval & Systems Lab' }, { id: 'compare', label: 'AI vs AI Comparison' },
+  { id: 'prompt', label: 'Prompt Lab' }, { id: 'code', label: 'Code Lab' }, { id: 'api', label: 'API Lab' }, { id: 'terminal', label: 'Terminal & Agent Session' }, { id: 'review', label: 'Review Lab' }, { id: 'eval', label: 'Eval & Systems Lab' }, { id: 'compare', label: 'AI vs AI Comparison' }, { id: 'mcp', label: 'MCP Lab' },
 ];
 
 export default function Lab({ tab }: { tab?: Tab }) {
@@ -36,6 +37,7 @@ export default function Lab({ tab }: { tab?: Tab }) {
       {t === 'terminal' && <div className="grid g2"><div className="card"><TerminalSim height={420} /></div><div className="card"><AgentSessionSim /></div></div>}
       {t === 'review' && <ReviewLab />}
       {t === 'compare' && <CompareLab />}
+      {t === 'mcp' && <McpLab />}
       {t === 'eval' && <div className="stack"><EvalDemo /><RagDemo /><MultiAgentDemo /></div>}
     </div>
   );

@@ -174,6 +174,8 @@ a.card { color: inherit; text-decoration: none; display: block; }
 .chip.danger { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: transparent; }
 .chip.violet { color: var(--violet); background: color-mix(in srgb, var(--violet) 14%, transparent); border-color: transparent; }
 .chip.info { color: var(--info); background: color-mix(in srgb, var(--info) 13%, transparent); border-color: transparent; }
+.chip.success { color: var(--success); background: color-mix(in srgb, var(--success) 13%, transparent); border-color: transparent; }
+.card.inset.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .truth { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: .66rem; letter-spacing: .1em; font-weight: 600; padding: 3px 8px; border-radius: 5px; border: 1px solid; text-transform: uppercase; }
 .truth.executed { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, transparent); }
