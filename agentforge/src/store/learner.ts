@@ -70,6 +70,27 @@ export interface Submission {
   total: number;
 }
 
+export interface ComparisonSide {
+  label: string;
+  provider: string;
+  model: string;
+  output: string;
+  latencyMs: number;
+  usage?: { input: number; output: number };
+  error?: string;
+  checks: { name: string; ok: boolean }[];
+  scores: Record<string, number>;
+}
+export interface ComparisonRecord {
+  id: string;
+  at: number;
+  taskId: string;
+  taskTitle: string;
+  prompt: string;
+  sides: [ComparisonSide, ComparisonSide];
+  notes: string;
+}
+
 export interface AttemptInput {
   item: Item;
   result: GradeResult;
@@ -86,6 +107,8 @@ export interface LearnerState {
   profile: Profile | null;
   settings: Settings;
   provider: ProviderConfig;
+  secondary: ProviderConfig;
+  comparisons: ComparisonRecord[];
   evidence: Evidence[];
   reviews: Record<string, ReviewState>;
   lessonProgress: Record<string, LessonProgress>;
@@ -108,6 +131,9 @@ export interface LearnerState {
   setProfile: (p: Partial<Profile>) => void;
   setSettings: (s: Partial<Settings>) => void;
   setProvider: (p: Partial<ProviderConfig>) => void;
+  setSecondary: (p: Partial<ProviderConfig>) => void;
+  addComparison: (c: ComparisonRecord) => void;
+  removeComparison: (id: string) => void;
   recordAttempt: (a: AttemptInput) => { evidence: Evidence; xp: number };
   recordEvidence: (e: Omit<Evidence, 'id' | 'at'> & { at?: number }, title: string) => Evidence;
   touch: (skillId: string) => void;
@@ -141,6 +167,8 @@ const initial = () => ({
   profile: null as Profile | null,
   settings: DEFAULT_SETTINGS,
   provider: DEFAULT_PROVIDER,
+  secondary: DEFAULT_PROVIDER,
+  comparisons: [] as ComparisonRecord[],
   evidence: [] as Evidence[],
   reviews: {} as Record<string, ReviewState>,
   lessonProgress: {} as Record<string, LessonProgress>,
@@ -169,6 +197,9 @@ export const useLearner = create<LearnerState>()(
       setProfile: (p) => set((s) => ({ profile: { ...(s.profile ?? { createdAt: Date.now(), level: 'zero', path: 'power-user', minutesPerSession: 20, sessionsPerWeek: 4, language: 'javascript', onboarded: false, diagnosticDone: false }), ...p } })),
       setSettings: (p) => set((s) => ({ settings: { ...s.settings, ...p } })),
       setProvider: (p) => set((s) => ({ provider: { ...s.provider, ...p } })),
+      setSecondary: (p) => set((s) => ({ secondary: { ...s.secondary, ...p } })),
+      addComparison: (c) => set((s) => ({ comparisons: [c, ...s.comparisons].slice(0, 50) })),
+      removeComparison: (id) => set((s) => ({ comparisons: s.comparisons.filter((c) => c.id !== id) })),
 
       recordEvidence: (e, title) => {
         const ev: Evidence = { ...e, id: uid(), at: e.at ?? Date.now() };
@@ -242,7 +273,7 @@ export const useLearner = create<LearnerState>()(
       saveGraph: (id, g) => set((s) => ({ studioGraphs: { ...s.studioGraphs, [id]: g } })),
       setDiagnostic: (d) => set({ diagnostic: d }),
       setLastRoute: (r) => set({ lastRoute: r }),
-      importAll: (data) => set((s) => ({ ...s, ...sanitizeImport(data), provider: s.provider })),
+      importAll: (data) => set((s) => ({ ...s, ...sanitizeImport(data), provider: s.provider, secondary: s.secondary })),
       resetAll: () => set({ ...initial() }),
     }),
     {
@@ -261,7 +292,7 @@ export const useLearner = create<LearnerState>()(
 );
 
 function sanitizeImport(d: Partial<LearnerState>): Partial<LearnerState> {
-  const keys: (keyof LearnerState)[] = ['profile', 'settings', 'evidence', 'reviews', 'lessonProgress', 'touched', 'vault', 'activity', 'xp', 'pinned', 'skipped', 'projects', 'interviews', 'games', 'submissions', 'drafts', 'studioGraphs', 'diagnostic', 'studyDays'];
+  const keys: (keyof LearnerState)[] = ['profile', 'settings', 'evidence', 'reviews', 'lessonProgress', 'touched', 'vault', 'activity', 'xp', 'pinned', 'skipped', 'projects', 'interviews', 'games', 'submissions', 'drafts', 'studioGraphs', 'diagnostic', 'studyDays', 'comparisons'];
   const out: Record<string, unknown> = {};
   for (const k of keys) if (k in d) out[k] = (d as Record<string, unknown>)[k];
   if (out.evidence && !Array.isArray(out.evidence)) throw new Error('Invalid export: evidence must be an array');
@@ -271,7 +302,7 @@ function sanitizeImport(d: Partial<LearnerState>): Partial<LearnerState> {
 /** Export everything except credentials. */
 export function exportData(): string {
   const s = useLearner.getState();
-  const { provider: _p, hydrated: _h, ...rest } = s;
+  const { provider: _p, secondary: _s2, hydrated: _h, ...rest } = s;
   const data = Object.fromEntries(Object.entries(rest).filter(([, v]) => typeof v !== 'function'));
   return JSON.stringify({ app: 'agentforge', exportedAt: new Date().toISOString(), version: STORE_VERSION, data }, null, 2);
 }

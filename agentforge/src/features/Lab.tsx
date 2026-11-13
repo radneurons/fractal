@@ -11,12 +11,13 @@ import { Icon, PageHeader, Tabs, TruthLabel, useToast } from '@/ui/kit';
 import { href, navigate } from '@/ui/router';
 import { TerminalSim, AgentSessionSim } from './demos/Terminal';
 import { EvalDemo, MultiAgentDemo, RagDemo } from './demos/systems';
+import CompareLab from './CompareLab';
 
 const CodeEditor = lazy(() => import('@/ui/CodeEditor'));
 
-type Tab = 'prompt' | 'code' | 'api' | 'terminal' | 'review' | 'eval';
+type Tab = 'prompt' | 'code' | 'api' | 'terminal' | 'review' | 'eval' | 'compare';
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'prompt', label: 'Prompt Lab' }, { id: 'code', label: 'Code Lab' }, { id: 'api', label: 'API Lab' }, { id: 'terminal', label: 'Terminal & Agent Session' }, { id: 'review', label: 'Review Lab' }, { id: 'eval', label: 'Eval & Systems Lab' },
+  { id: 'prompt', label: 'Prompt Lab' }, { id: 'code', label: 'Code Lab' }, { id: 'api', label: 'API Lab' }, { id: 'terminal', label: 'Terminal & Agent Session' }, { id: 'review', label: 'Review Lab' }, { id: 'eval', label: 'Eval & Systems Lab' }, { id: 'compare', label: 'AI vs AI Comparison' },
 ];
 
 export default function Lab({ tab }: { tab?: Tab }) {
@@ -32,6 +33,7 @@ export default function Lab({ tab }: { tab?: Tab }) {
       {t === 'api' && <ApiLab />}
       {t === 'terminal' && <div className="grid g2"><div className="card"><TerminalSim height={420} /></div><div className="card"><AgentSessionSim /></div></div>}
       {t === 'review' && <ReviewLab />}
+      {t === 'compare' && <CompareLab />}
       {t === 'eval' && <div className="stack"><EvalDemo /><RagDemo /><MultiAgentDemo /></div>}
     </div>
   );

@@ -5,7 +5,7 @@ Honest inventory against `docs/MASTER_PROMPT.md` (v2). "Executed" means it reall
 ## Complete and verified (unit + e2e tests)
 
 - Onboarding (3 entry points, goal paths A–F, 20/40/60-minute budgets), adaptive staircase diagnostic (6/8/12 items), plan reveal.
-- Curriculum registry with Zod validation; 16 schools, 91 skills (DAG), 42 fully authored lessons (every school except the frontier electives has at least one), 266 items across 8 item types — each with a real grader.
+- Curriculum registry with Zod validation; 16 schools, 91 skills (DAG), 54 fully authored lessons (every school has at least one), 290 items across 8 item types — each with a real grader.
 - Mastery engine exactly as specified (weights, Beta estimate, confidence, states, "Not enough evidence"), "Why this score?" with the full evidence table and formula.
 - Weakness finder with labelled hypotheses (missing prerequisite, recurring error tag) and the "Fix this weakness" recovery sequence (note → prerequisite check → worked example → targeted item → transfer item → review).
 - Spaced review ladder, review queue, "learned once" vs "retained".
@@ -24,6 +24,8 @@ Honest inventory against `docs/MASTER_PROMPT.md` (v2). "Executed" means it reall
 - Accessibility: keyboard alternatives for every drag interaction, visible focus, live-region grading announcements, reduced motion, focus mode, text scaling, dark/light/high-contrast themes, mobile layout with bottom navigation.
 - Persistence in IndexedDB; export/import/delete.
 
+- AI vs AI Comparison Lab: one prompt run against two configurations (two models on one key, or two providers with a second key), measured latency and provider-reported token counts, deterministic per-task checks, a blind human rubric and saved, replayable records. Offline it offers practice on fictional outputs (labelled as such, not attributed to any vendor). It reports no prices and declares no winner; live runs have not been exercised against real APIs in this build environment (no keys available).
+
 ## Simulated or demonstration (clearly labelled in the UI)
 
 - By default, agent decisions in Agent Studio and the agent-loop demo come from a deterministic rule-based policy (tools, validation, budgets and traces are real). With an Anthropic key configured, the Studio's "Live Claude" switch lets a real model make each decision instead; the runtime still validates arguments, enforces approvals and budgets, and records the trace. Studio acceptance tests always use the deterministic rules so results are repeatable. The live mode is covered by unit tests with an injected model; it has not been exercised against the real API in this build environment (no key available).
@@ -37,7 +39,6 @@ Honest inventory against `docs/MASTER_PROMPT.md` (v2). "Executed" means it reall
 
 - Server-side isolated execution for Python, shell, package installation and repository-level exercises.
 - MCP Tool node connected to real MCP servers (MCP is taught conceptually and via projects).
-- Multi-provider side-by-side "AI vs AI" comparison runner (the Prompt Lab can run one provider at a time; curated comparisons are not included).
 - Cross-device sync and accounts; a calibrated knowledge-tracing model (the weighted-evidence model is the documented v1).
-- Full lessons for 49 of 91 skills (each has a corrective note, worked example and graded practice; marked "Full lesson planned").
+- Full lessons for 37 of 91 skills (each has a corrective note, worked example and graded practice; marked "Full lesson planned").
 - Captions for instructional media (there is no audio/video media in this build).

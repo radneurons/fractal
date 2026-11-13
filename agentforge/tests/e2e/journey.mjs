@@ -203,6 +203,19 @@ try {
     await expectVisible(page.getByRole('heading', { name: /Preferences, AI provider/ }), 'did not route to settings when no key is configured');
   });
 
+  await step('Extra: Comparison Lab — offline practice, blind scoring, saved record', async () => {
+    await page.goto(BASE + '#/lab/compare');
+    await page.getByRole('button', { name: /Practise the method/ }).click();
+    await expectVisible(page.getByText('Output A', { exact: true }), 'blind label missing');
+    for (const side of ['A', 'B']) for (const c of ['Correct', 'Follows instructions', 'Grounded (nothing invented)', 'Clear']) {
+      await page.getByRole('group', { name: `${c} for output ${side}` }).getByRole('button', { name: side === 'A' ? '5' : '2' }).click();
+    }
+    await expectVisible(page.getByText(/Output A · Model X/), 'names not revealed after scoring');
+    await page.getByRole('button', { name: 'Save comparison record' }).click();
+    await expectVisible(page.getByRole('button', { name: 'Replay' }), 'saved record missing');
+    await page.screenshot({ path: SHOTS + '10-compare.png' });
+  });
+
   await step('Extra: Knowledge Universe renders 3D and has an accessible 2D view', async () => {
     await page.goto(BASE + '#/universe');
     await expectVisible(page.locator('.universe canvas'), 'WebGL canvas missing');

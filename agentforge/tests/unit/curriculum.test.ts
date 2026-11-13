@@ -16,7 +16,7 @@ describe('curriculum integrity', () => {
   it('meets the v1 content budget', () => {
     expect(SCHOOLS).toHaveLength(16);
     expect(SKILLS.length).toBeGreaterThanOrEqual(90);
-    expect(LESSONS.filter((l) => l.status === 'current').length).toBeGreaterThanOrEqual(42);
+    expect(LESSONS.filter((l) => l.status === 'current').length).toBeGreaterThanOrEqual(54);
     expect(ITEMS.length).toBeGreaterThanOrEqual(200);
     expect(Object.keys(report.counts.itemTypes).sort()).toEqual(['classify', 'code', 'fill', 'match', 'mcq', 'multi', 'order', 'short']);
   });

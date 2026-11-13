@@ -153,3 +153,21 @@ describe('interview scenarios', () => {
     }
   });
 });
+
+import { AUTO_CHECKS, runChecks } from '@/features/CompareLab';
+import { PROMPT_TASKS } from '@/features/labData';
+
+describe('Comparison Lab checks', () => {
+  it('every prompt task has automatic checks', () => {
+    for (const t of PROMPT_TASKS) expect(AUTO_CHECKS[t.id]?.length, t.id).toBeGreaterThanOrEqual(2);
+  });
+  it('the authored strong output passes every check and the weak output fails at least one', () => {
+    for (const t of PROMPT_TASKS) {
+      expect(runChecks(t.id, t.strong.output).filter((c) => !c.ok), `${t.id} strong`).toEqual([]);
+      expect(runChecks(t.id, t.weak.output).some((c) => !c.ok), `${t.id} weak`).toBe(true);
+    }
+  });
+  it('empty or failed output fails every check', () => {
+    expect(runChecks('pt-extract', '').every((c) => !c.ok)).toBe(true);
+  });
+});
