@@ -128,7 +128,7 @@ function Session({ sc, onExit }: { sc: Scenario; onExit: () => void }) {
         <div className="stack">
           {phase === 'answer' && (
             <>
-              <button className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setClarify(true)}>Ask a clarifying question</button>
+              <button className="btn ghost sm" style={{ justifySelf: 'start', alignSelf: 'flex-start' }} onClick={() => setClarify(true)}>Ask a clarifying question</button>
               {clarify && <div className="callout small">Interviewer: "Assume a typical production web application with real users. Pick reasonable defaults and state your assumptions — that's part of the answer."</div>}
               <label className="field">Your answer<textarea className="textarea" style={{ minHeight: 220 }} value={answer} onChange={(e) => setAnswer(e.target.value)} /></label>
               <div className="row">

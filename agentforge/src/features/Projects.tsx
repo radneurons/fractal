@@ -65,7 +65,7 @@ function ProjectView({ p }: { p: Project }) {
   };
   return (
     <div className="stack lg">
-      <a className="btn ghost sm" href={href('/projects')} style={{ alignSelf: 'flex-start' }}><Icon name="back" /> Workshop</a>
+      <a className="btn ghost sm" href={href('/projects')} style={{ justifySelf: 'start', alignSelf: 'flex-start' }}><Icon name="back" /> Workshop</a>
       <PageHeader eyebrow={`${p.level} · ${p.guided ? 'guided project' : 'project brief'}`} title={p.title}>{p.scenario}</PageHeader>
       <div className="grid g3">
         <div className="card"><div className="card-title">Requirements</div><ul className="small" style={{ margin: 0, paddingLeft: '1.2em' }}>{p.requirements.map((r) => <li key={r}>{r}</li>)}</ul></div>

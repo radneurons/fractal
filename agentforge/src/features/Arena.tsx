@@ -19,7 +19,7 @@ export default function Arena({ gameId }: { gameId?: string }) {
     const C = COMPONENTS[game.id];
     return (
       <div className="stack">
-        <a className="btn ghost sm" href={href('/arena')} style={{ alignSelf: 'flex-start' }}><Icon name="back" /> Arena</a>
+        <a className="btn ghost sm" href={href('/arena')} style={{ justifySelf: 'start', alignSelf: 'flex-start' }}><Icon name="back" /> Arena</a>
         <PageHeader eyebrow="Challenge Arena" title={game.title}>{game.mechanic}</PageHeader>
         <div className="row tiny faint"><span><b>Scoring:</b> {game.scoring}</span><span>· Evidence → {game.skills.map((s) => getSkill(s).title).join(', ')}</span></div>
         <C />

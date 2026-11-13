@@ -57,14 +57,14 @@ function fib(i: number, n: number, r: number) {
 
 export function layout(nodes: UNode[]): Map<string, THREE.Vector3> {
   const groups = [...new Set(nodes.map((n) => n.group))];
-  const centers = new Map(groups.map((g, i) => [g, fib(i, groups.length, 34)]));
+  const centers = new Map(groups.map((g, i) => [g, fib(i, groups.length, 46)]));
   const pos = new Map<string, THREE.Vector3>();
   for (const g of groups) {
     const members = nodes.filter((n) => n.group === g);
     const c = centers.get(g)!;
     members.forEach((m, i) => {
       const r = seeded(m.id);
-      const local = fib(i, Math.max(members.length, 2), 4.2 + members.length * 0.25);
+      const local = fib(i, Math.max(members.length, 2), 3.6 + members.length * 0.22);
       pos.set(m.id, c.clone().add(local).add(new THREE.Vector3((r() - 0.5) * 1.2, (r() - 0.5) * 1.2, (r() - 0.5) * 1.2)));
     });
   }
@@ -83,7 +83,7 @@ export function createUniverse(container: HTMLElement, opts: UniverseOptions) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x070b12, 0.006);
   const camera = new THREE.PerspectiveCamera(50, width() / height(), 0.1, 1200);
-  const dist = opts.cameraDistance ?? 92;
+  const dist = opts.cameraDistance ?? 118;
   camera.position.set(0, dist * 0.32, dist);
 
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -172,7 +172,8 @@ export function createUniverse(container: HTMLElement, opts: UniverseOptions) {
     if (!a || !b) continue;
     ePos.push(a.x, a.y, a.z, b.x, b.y, b.z);
     const onPath = hl.has(e.from) && hl.has(e.to);
-    const c = onPath ? new THREE.Color(0x5fe3c0) : new THREE.Color(0x30476a);
+    const sameGroup = opts.nodes[idx.get(e.from)!]?.group === opts.nodes[idx.get(e.to)!]?.group;
+    const c = onPath ? new THREE.Color(0x5fe3c0) : sameGroup ? new THREE.Color(0x3a5680) : new THREE.Color(0x1d2b42);
     eCol.push(c.r, c.g, c.b, c.r, c.g, c.b);
   }
   edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(ePos, 3));

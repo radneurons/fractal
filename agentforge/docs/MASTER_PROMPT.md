@@ -133,14 +133,14 @@ Command palette (`Ctrl/⌘ K`) searches lessons, skills, games, vault.
 ## 5. Curriculum
 
 ### 5.1 Structure
-`School (16) → Skill (graph node, ~6 per school) → Lesson (0..n per skill) → Items`.
+`School (16) → Skill (graph node, 4–8 per school) → Lesson (0..n per skill) → Items`.
 The **skill graph** is complete across all 16 schools so the Universe and Planner always have real structure. Each skill has: id, title, school, summary, prerequisites (DAG), difficulty, `remediation` note (≤ 150 words, authored), `workedExample`, and ≥ 2 assessment items so the system can always test, remediate and re-test with a *different* item.
 
 ### 5.2 Authored-depth budget for v1
 | Asset | v1 target | Rule |
 |---|---|---|
 | Schools mapped | 16 | All navigable |
-| Skills | ~96 | Every skill has summary + remediation + ≥ 2 items |
+| Skills | ~90 | Every skill has summary + remediation + ≥ 2 items |
 | Fully authored lessons | 30 | Full 14-part lesson structure (§5.3) |
 | Assessment items | ≥ 200 | Every item: key, explanation, skill mapping, error tag per distractor |
 | Practical exercises | 25 | Executed (JS tests) or deterministic graders |

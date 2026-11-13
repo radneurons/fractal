@@ -182,8 +182,8 @@ export const ARCHITECTURE_FORGE: AFLevel[] = [
 export interface TBCLevel { id: string; title: string; scenario: string; targetQuality: number; budget: number; requests: number }
 export const TOKEN_COMMANDER: TBCLevel[] = [
   { id: 'tb1', title: 'Level 1 · FAQ bot', scenario: 'Answer product FAQs for 10,000 requests/day.', targetQuality: 80, budget: 40, requests: 10000 },
-  { id: 'tb2', title: 'Level 2 · Contract analysis', scenario: 'Analyse contracts — hard reasoning, 500 requests/day.', targetQuality: 88, budget: 60, requests: 500 },
-  { id: 'tb3', title: 'Level 3 · High-volume extraction', scenario: 'Extract fields from 200,000 short documents/day.', targetQuality: 85, budget: 120, requests: 200000 },
+  { id: 'tb2', title: 'Level 2 · Contract analysis', scenario: 'Analyse contracts — hard reasoning needs the strongest model, 500 requests/day, on a tight budget.', targetQuality: 88, budget: 10, requests: 500 },
+  { id: 'tb3', title: 'Level 3 · High-volume extraction', scenario: 'Extract fields from 200,000 short documents/day. Easy task, enormous volume.', targetQuality: 72, budget: 40, requests: 200000 },
 ];
 export interface Knobs { tier: 'small' | 'medium' | 'large'; k: number; compress: boolean; cache: boolean; maxOut: number }
 /** Transparent teaching model. Not real prices — illustrative numbers so trade-offs are visible. */

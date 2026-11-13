@@ -71,7 +71,7 @@ export function rankCandidates(inp: PlanInput): Candidate[] {
     }
     if (e.state === 'in-progress') {
       p += 1;
-      reason ||= 'Continue where you left off';
+      reason ||= 'Started — keep going';
     }
     if (e.state === 'practiced') {
       p += 0.6;

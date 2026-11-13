@@ -30,7 +30,8 @@ export function findWeaknesses(skills: Skill[], est: Record<string, SkillEstimat
     const errs = errorCounts(evidence, s.id, since);
     const recurring = errs.find((x) => x.count >= 3);
     const weak = e.state === 'remediation';
-    const failedRecently = evidence.some((x) => x.skillId === s.id && x.score < 0.7 && x.at >= since) && e.mastery < 0.6;
+    // Diagnostic misses (including honest "I don't know") only place you; they don't flag a weakness on their own.
+    const failedRecently = evidence.some((x) => x.skillId === s.id && x.score < 0.7 && x.at >= since && x.source !== 'diagnostic') && e.mastery < 0.6;
     if (!weak && !recurring && !failedRecently) continue;
 
     const reasons: string[] = [];

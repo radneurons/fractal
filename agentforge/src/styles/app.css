@@ -390,3 +390,5 @@ table.t td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical
 .react-flow { --xy-background-color: var(--bg-2); --xy-background-color-default: var(--bg-2); --xy-edge-stroke: var(--border-strong); --xy-controls-button-background-color: var(--surface-2); --xy-controls-button-color: var(--text); --xy-controls-button-border-color: var(--border); }
 .react-flow__edge-text { font-family: var(--font-mono); }
 @media (max-width: 600px) { .hide-sm { display: none !important; } .topbar { gap: 4px; padding: 8px 10px; } .topbar .icon-btn { width: 34px; height: 34px; } }
+.lesson-layout > nav { min-width: 0; }
+.select { font-size: .92rem; }

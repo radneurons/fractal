@@ -141,7 +141,7 @@ export const STATE_LABEL: Record<SkillState, string> = {
 export const STATE_ICON: Record<SkillState, string> = {
   'locked-soft': '○',
   ready: '◇',
-  'in-progress': '◐',
+  'in-progress': '▸',
   practiced: '◆',
   mastered: '★',
   'review-due': '↻',

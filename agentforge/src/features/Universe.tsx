@@ -26,7 +26,8 @@ export default function Universe() {
   const labels = useRef<HTMLDivElement>(null);
   const api = useRef<ReturnType<typeof createUniverse> | null>(null);
 
-  const colors = useMemo(() => Object.fromEntries(SKILLS.map((s) => [s.id, STATE_COLOR[est[s.id].state]])), [est]);
+  // Not-yet-reachable skills take a muted tint of their school's hue so clusters stay distinguishable.
+  const colors = useMemo(() => Object.fromEntries(SKILLS.map((s) => [s.id, est[s.id].state === 'locked-soft' ? `hsl(${schoolById(s.schoolId).hue} 28% 40%)` : STATE_COLOR[est[s.id].state]])), [est]);
 
   useEffect(() => {
     if (view !== '3d' || !host.current) return;
@@ -82,7 +83,7 @@ export default function Universe() {
         {view === '3d' && (
           <div className="uni-legend glass" aria-label="Legend">
             {(Object.keys(STATE_COLOR) as SkillState[]).map((s) => (
-              <div key={s} className="row tiny" style={{ gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: STATE_COLOR[s] }} />{STATE_ICON[s]} {STATE_LABEL[s]}</div>
+              <div key={s} className="row tiny" style={{ gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: s === 'locked-soft' ? 'linear-gradient(135deg, hsl(168 28% 40%), hsl(325 28% 40%))' : STATE_COLOR[s] }} />{STATE_ICON[s]} {STATE_LABEL[s]}</div>
             ))}
             <div className="tiny faint" style={{ marginTop: 6 }}>Drag to orbit · scroll to zoom · click a star</div>
           </div>

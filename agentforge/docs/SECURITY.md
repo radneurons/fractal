@@ -1,0 +1,24 @@
+# Security & privacy notes
+
+## Threat model (client-only app)
+
+| Asset / risk | Control |
+|---|---|
+| Learner code execution | Runs only in a dedicated Web Worker: no DOM; network, storage and worker-spawning globals removed before learner code loads; 2 s wall-clock kill via `terminate()`; output capped at 200 log lines. Python/shell/package installation are **not** offered — they need an isolated server-side sandbox (CPU/memory/network/filesystem limits), which this build does not include. |
+| Simulated terminal | Pure in-memory state machine. Destructive commands (`rm`, `git push`) are refused with an explanation. Nothing touches the real filesystem. |
+| Agent Studio tools | All tools are local and deterministic (safe shunting-yard calculator — no `eval`; local knowledge base; mock order/weather/revenue data; virtual files with `..` and absolute paths denied; simulated outbox). External-impact tools require a Human Approval node at validation time **and** are denied at runtime without approval on the path. |
+| API keys | Optional, user-entered, stored in IndexedDB only, sent only to the chosen provider, excluded from exports, removable. Risk explained in Settings; backend proxy documented for shared deployments (docs/PROVIDERS.md). |
+| Prompt injection into the mentor | Mentor system prompt is fixed per mode; lesson/learner text is wrapped in `<context>`, `<question>` or `<learner_work>` tags and declared to be data; the mentor has no tools. Interview model-grading wraps the answer in `<answer>` tags and asks for JSON only; parse failures fall back to the heuristic. |
+| Rendering untrusted text | No `dangerouslySetInnerHTML`. A minimal Markdown renderer builds React elements; links are limited to `http(s)` and open with `rel="noreferrer noopener"`. |
+| Injection exercises | Harmless, sandboxed scenarios with fake addresses (`*.test`); nothing is sent anywhere. |
+| Learner data | Local by default (IndexedDB). JSON/Markdown export and full delete in Settings. Imports accept only known keys. |
+
+## External network requests
+
+- Google Fonts stylesheet (Inter, Space Grotesk, JetBrains Mono). The app falls back to system fonts if blocked. Self-host the fonts to remove this request.
+- Provider APIs only when you connect one.
+
+## Known limitations
+
+- Answer keys ship in the client bundle; a determined learner can read them. Assessments are for learning, not certification.
+- Heuristic short-answer and interview grading checks for key concepts with keywords; it can miss correct answers phrased differently and is labelled as such.

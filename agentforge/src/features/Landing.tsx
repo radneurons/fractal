@@ -24,7 +24,7 @@ export default function Landing() {
       autoRotate: !settings.reducedMotion && !settings.focusMode,
       reducedMotion: settings.reducedMotion,
       interactive: false,
-      cameraDistance: 104,
+      cameraDistance: 132,
     });
     return () => u.dispose();
   }, [gl, settings.reducedMotion, settings.focusMode]);

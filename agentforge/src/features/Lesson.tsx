@@ -95,7 +95,7 @@ export default function Lesson({ lessonId }: { lessonId: string }) {
   return (
     <div className="lesson-layout">
       <nav className="lesson-steps" aria-label="Lesson steps">
-        <a className="btn ghost sm" href={href(`/academy/${lesson.schoolId}`)} style={{ marginBottom: 8, justifyContent: 'flex-start' }}><Icon name="back" /> {school.title}</a>
+        <a className="btn ghost sm" href={href(`/academy/${lesson.schoolId}`)} style={{ marginBottom: 8, justifyContent: 'flex-start', whiteSpace: 'normal', textAlign: 'left' }}><Icon name="back" /> {school.title}</a>
         {steps.map((s, idx) => (
           <button key={s.i} onClick={() => go(s.i)} aria-current={s.i === step ? 'step' : undefined} className={idx < pos || progress?.completed ? 'done' : ''}>
             <span className="b">{idx < pos || progress?.completed ? '✓' : idx + 1}</span><span className="t">{s.n}</span>
