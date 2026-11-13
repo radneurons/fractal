@@ -16,13 +16,17 @@ describe('curriculum integrity', () => {
   it('meets the v1 content budget', () => {
     expect(SCHOOLS).toHaveLength(16);
     expect(SKILLS.length).toBeGreaterThanOrEqual(90);
-    expect(LESSONS.filter((l) => l.status === 'current').length).toBeGreaterThanOrEqual(54);
+    expect(LESSONS.filter((l) => l.status === 'current').length).toBeGreaterThanOrEqual(91);
     expect(ITEMS.length).toBeGreaterThanOrEqual(200);
     expect(Object.keys(report.counts.itemTypes).sort()).toEqual(['classify', 'code', 'fill', 'match', 'mcq', 'multi', 'order', 'short']);
   });
   it('every school has skills and every skill has ≥2 items', () => {
     for (const s of SCHOOLS) expect(SKILLS.some((k) => k.schoolId === s.id)).toBe(true);
     for (const k of SKILLS) expect(itemsForSkill(k.id).length).toBeGreaterThanOrEqual(2);
+  });
+  it('every skill has a full lesson', () => {
+    const covered = new Set(LESSONS.map((l) => l.skillIds[0]));
+    expect(SKILLS.filter((s) => !covered.has(s.id)).map((s) => s.id)).toEqual([]);
   });
   it('lesson skills have ≥4 items so remediation can use an unseen item', () => {
     for (const l of LESSONS) expect(itemsForSkill(l.skillIds[0]).length).toBeGreaterThanOrEqual(4);
