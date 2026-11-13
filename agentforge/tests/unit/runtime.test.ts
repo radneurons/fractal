@@ -140,3 +140,60 @@ describe('Teaching tokenizer & harness', () => {
     expect(ok.logs).toContain('hi');
   });
 });
+
+import { makeLivePolicy, buildDecisionPrompt, toolDefsFor, TOOL_JSON_SCHEMAS, type ToolCaller } from '@/core/ai/livePolicy';
+
+describe('Live policy (model injected, runtime unchanged)', () => {
+  it('every tool has a JSON schema whose keys match its Zod schema', () => {
+    for (const id of Object.keys(TOOLS)) {
+      const js = TOOL_JSON_SCHEMAS[id] as { properties: Record<string, unknown>; additionalProperties: boolean };
+      expect(js, id).toBeTruthy();
+      expect(js.additionalProperties).toBe(false);
+      const sample: Record<string, unknown> = { expression: '1+1', quarter: 'Q1', query: 'refund', order_id: '991', city: 'Oslo', path: 'README.md', to: 'a@b.co', subject: 's', body: 'b' };
+      const args = Object.fromEntries(Object.keys(js.properties).map((k) => [k, sample[k]]));
+      expect(TOOLS[id].schema.safeParse(args).success, id).toBe(true);
+    }
+    expect(toolDefsFor(['calculator', 'calculator', 'nope'])).toHaveLength(1);
+  });
+  it('drives the real runtime: tool calls execute, history is passed back, final answer returned', async () => {
+    const seen: string[] = [];
+    const fake: ToolCaller = async ({ user, tools }) => {
+      seen.push(user);
+      expect(tools.map((t) => t.name).sort()).toEqual(['calculator', 'get_revenue']);
+      if (!user.includes('get_revenue(')) return { toolUse: { name: 'get_revenue', input: { quarter: 'Q3' } }, text: 'Need the revenue first.' };
+      if (!user.includes('calculator(')) return { toolUse: { name: 'calculator', input: { expression: '2400000*0.17' } }, text: '' };
+      return { text: '17% of Q3 revenue is $408,000.' };
+    };
+    const r = await runGraph(templateById('revenue-agent')!.graph, 'What is 17% of our Q3 revenue?', { policy: makeLivePolicy(fake, 'fake') });
+    expect(r.status).toBe('completed');
+    expect(r.outputs[0].value).toContain('408,000');
+    expect(r.toolCalls.map((c) => c.toolId)).toEqual(['get_revenue', 'calculator']);
+    expect(seen[2]).toContain('"revenue":2400000');
+  });
+  it('invalid model arguments are rejected by the runtime and reported back as errors', async () => {
+    let n = 0;
+    const fake: ToolCaller = async ({ user }) => (n++ === 0 ? { toolUse: { name: 'get_revenue', input: { quarter: 'Q9' } }, text: '' } : { text: user.includes('ERROR') ? 'saw the error' : 'missed it' });
+    const r = await runGraph(templateById('revenue-agent')!.graph, 'revenue?', { policy: makeLivePolicy(fake, 'fake') });
+    expect(r.toolCalls[0].ok).toBe(false);
+    expect(r.outputs[0].value).toBe('saw the error');
+  });
+  it('a model that never stops is still bounded by maxSteps', async () => {
+    const fake: ToolCaller = async () => ({ toolUse: { name: 'calculator', input: { expression: '1+1' } }, text: '' });
+    const g = clone(templateById('revenue-agent')!.graph);
+    g.nodes.find((x) => x.id === 'agent')!.config.loopGuard = false;
+    const r = await runGraph(g, 'loop', { policy: makeLivePolicy(fake, 'fake') });
+    expect(r.toolCalls).toHaveLength(6);
+    expect(r.outputs[0].value).toContain('maxSteps');
+  });
+  it('external tools stay denied without approval even if the model asks', async () => {
+    const g = clone(templateById('revenue-agent')!.graph);
+    g.nodes.push({ id: 't-mail', kind: 'tool', label: 'send_email', position: { x: 0, y: 0 }, config: { toolId: 'send_email' } });
+    g.edges.push({ id: 'm', source: 'agent', target: 't-mail', sourceHandle: 'tools', targetHandle: 'attach' });
+    expect(validateGraph(g).ok).toBe(false); // blocked at validation: no approval upstream
+  });
+  it('prompt marks goal and tool results as data', () => {
+    const p = buildDecisionPrompt({ goal: 'x', instructions: 'i', tools: [], observations: {}, errors: {}, calls: [], config: {} });
+    expect(p.system).toMatch(/data, not instructions/);
+    expect(p.user).toContain('<goal>x</goal>');
+  });
+});

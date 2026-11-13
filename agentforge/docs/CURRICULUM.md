@@ -4,7 +4,7 @@ Curriculum version `2026.11.1` · last reviewed 2026-11-01.
 
 ## Structure
 
-`School (16) → Skill (91, prerequisite DAG) → Lesson (30 fully authored) → Items (242)`
+`School (16) → Skill (91, prerequisite DAG) → Lesson (42 fully authored) → Items (266)`
 
 | School | Skills | Authored lessons |
 |---|---|---|
@@ -13,23 +13,23 @@ Curriculum version `2026.11.1` · last reviewed 2026-11-01.
 | 3 Claude Essentials | 5 | 2 |
 | 4 Claude Code | 8 | 6 |
 | 5 OpenAI Codex | 6 | 3 |
-| 6 Programming for AI Builders | 7 | — |
-| 7 AI APIs & App Development | 6 | — |
+| 6 Programming for AI Builders | 7 | 2 |
+| 7 AI APIs & App Development | 6 | 2 |
 | 8 Agent Engineering Fundamentals | 6 | 3 |
 | 9 Tool Calling, MCP & Integrations | 5 | 2 |
 | 10 Context, Memory & RAG | 6 | 1 |
-| 11 Advanced Agent Architecture | 5 | — |
-| 12 Evals, Debugging & Reliability | 5 | — |
+| 11 Advanced Agent Architecture | 5 | 2 |
+| 12 Evals, Debugging & Reliability | 5 | 2 |
 | 13 AI Security & Trust | 5 | 1 |
-| 14 AI Product Engineering | 4 | — |
-| 15 Professional AI Engineering | 4 | — |
+| 14 AI Product Engineering | 4 | 2 |
+| 15 Professional AI Engineering | 4 | 2 |
 | 16 Frontier & Specialized Topics | 4 | — |
 
 Every skill — including those without a full lesson — has a summary, an authored corrective note (`remediation`), a worked example and at least two graded items, so every Universe node and Academy entry leads somewhere real. Skills without a full lesson are marked "Full lesson planned" in the UI.
 
 ## Item bank
 
-242 items: 115 multiple choice, 42 multi-select, 18 ordering, 13 matching, 11 fill-in-the-blank, 18 classification (drag or select-and-place), 13 short explanations (keyword-rubric heuristic, labelled as such), 12 code (real tests in the sandbox).
+266 items: 129 multiple choice, 42 multi-select, 20 ordering, 13 matching, 11 fill-in-the-blank, 24 classification (drag or select-and-place), 14 short explanations (keyword-rubric heuristic, labelled as such), 13 code (real tests in the sandbox).
 
 Additional graded activities outside the item bank: 9 project milestone code tasks (test-graded), 3 Debug-the-Agent levels, 8 Agent Studio templates (4 debugging challenges) with acceptance tests, 5 Prompt Lab tasks, 3 Review Lab diffs, the API Lab, 30 game levels, 9 Brain Gym puzzles and 23 interview scenarios.
 

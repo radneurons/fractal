@@ -3,8 +3,9 @@ import { FOUNDATION_ITEMS } from './foundations';
 import { CODING_ITEMS } from './coding';
 import { AGENT_ITEMS } from './agents';
 import { ADVANCED_ITEMS } from './advanced';
+import { EXPANSION_ITEMS } from './expansion';
 
-export const ITEMS: Item[] = [...FOUNDATION_ITEMS, ...CODING_ITEMS, ...AGENT_ITEMS, ...ADVANCED_ITEMS];
+export const ITEMS: Item[] = [...FOUNDATION_ITEMS, ...CODING_ITEMS, ...AGENT_ITEMS, ...ADVANCED_ITEMS, ...EXPANSION_ITEMS];
 export const itemById = new Map(ITEMS.map((i) => [i.id, i]));
 export const getItem = (id: string) => {
   const it = itemById.get(id);

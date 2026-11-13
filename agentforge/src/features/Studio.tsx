@@ -4,8 +4,10 @@ import { connectionError, portsFor, runGraph, runGraphTests, validateGraph, type
 import { TEMPLATES, templateById } from '@/core/runtime/templates';
 import { TOOLS } from '@/core/runtime/tools';
 import { useLearner } from '@/store/learner';
-import { Icon, Modal, Tabs, TruthLabel, useToast } from '@/ui/kit';
+import { Icon, Modal, Seg, Tabs, TruthLabel, useToast } from '@/ui/kit';
 import { navigate } from '@/ui/router';
+import { callWithTools, providerReady } from '@/core/ai/provider';
+import { makeLivePolicy } from '@/core/ai/livePolicy';
 
 const KIND_META: Record<NodeKind, { label: string; group: string; color: string; desc: string }> = {
   input: { label: 'User Input', group: 'Input', color: 'var(--info)', desc: 'Entry point: the user request.' },
@@ -72,6 +74,10 @@ export default function Studio({ templateId }: { templateId?: string }) {
   const record = useLearner((s) => s.recordEvidence);
   const theme = useLearner((s) => s.settings.theme);
   const { toast } = useToast();
+  const provider = useLearner((s) => s.provider);
+  const liveAvailable = providerReady(provider) && provider.provider === 'anthropic';
+  const [mode, setMode] = useState<'rules' | 'live'>('rules');
+  const live = mode === 'live' && liveAvailable;
   const [graph, setGraph] = useState<Graph>(() => structuredClone(saved ?? tpl.graph));
   const [sel, setSel] = useState<string | null>(null);
   const [panel, setPanel] = useState<'inspect' | 'run' | 'tests' | 'check'>('run');
@@ -81,6 +87,7 @@ export default function Studio({ templateId }: { templateId?: string }) {
   const [tests, setTests] = useState<Awaited<ReturnType<typeof runGraphTests>> | null>(null);
   const [approval, setApproval] = useState<{ label: string; value: string; resolve: (b: boolean) => void } | null>(null);
   const [running, setRunning] = useState(false);
+  const [runLive, setRunLive] = useState(false);
   const measured = useRef<Record<string, { width: number; height: number }>>({});
   const [, setMeasureTick] = useState(0);
 
@@ -141,7 +148,9 @@ export default function Studio({ templateId }: { templateId?: string }) {
   const doRun = async () => {
     setRunning(true);
     setPanel('run');
-    const r = await runGraph(graph, input, { approve });
+    const policy = live ? makeLivePolicy((req) => callWithTools(provider, req), provider.model || 'Claude') : undefined;
+    const r = await runGraph(graph, input, { approve, policy });
+    setRunLive(live);
     setRun(r);
     setCursor(r.trace.length - 1);
     setRunning(false);
@@ -166,7 +175,10 @@ export default function Studio({ templateId }: { templateId?: string }) {
           </select>
           <span className="chip">{tpl.level}</span>
           <TruthLabel kind="executed" detail="The graph really executes: tools run, schemas validate, budgets stop runs." />
-          <TruthLabel kind="simulated" detail="Agent decisions come from a deterministic rule-based policy (keyword tool matching), not a live model." />
+          {live
+            ? <TruthLabel kind="live" detail={`Agent decisions come from ${provider.model || 'your Claude model'}. Tools, validation, approvals and budgets are still enforced by the runtime. Each agent step is one API call billed to your key.`} />
+            : <TruthLabel kind="simulated" detail="Agent decisions come from a deterministic rule-based policy (keyword tool matching), not a live model." />}
+          <Seg label="Who makes the agent's decisions" value={live ? 'live' : 'rules'} onChange={(m) => { if (m === 'live' && !liveAvailable) { toast('Connect an Anthropic key in Settings to use live decisions'); navigate('/settings'); return; } setMode(m); }} options={[{ id: 'rules', label: 'Teaching rules' }, { id: 'live', label: 'Live Claude' }]} />
         </div>
         <div className="row">
           <button className="btn ghost sm" onClick={() => { setGraph(structuredClone(tpl.graph)); setRun(null); setTests(null); toast('Template reset'); }}><Icon name="refresh" /> Reset</button>
@@ -204,7 +216,7 @@ export default function Studio({ templateId }: { templateId?: string }) {
               {!run && <div className="tiny faint">Press Run. Every highlighted node and trace line comes from a real execution event.</div>}
               {run && (
                 <>
-                  <div className="row"><span className={`chip ${run.status === 'completed' ? 'accent' : 'danger'}`}>{run.status}</span><span className="chip">{run.stats.steps} steps</span><span className="chip">{run.stats.toolCalls} tool calls</span><span className="chip" title="Estimated from characters ÷ 4">~{run.stats.estTokens} tok</span></div>
+                  <div className="row"><span className={`chip ${run.status === 'completed' ? 'accent' : 'danger'}`}>{run.status}</span><span className="chip">{run.stats.steps} steps</span><span className="chip">{run.stats.toolCalls} tool calls</span><span className="chip" title="Estimated from characters ÷ 4">~{run.stats.estTokens} tok</span><span className={`chip ${runLive ? 'info' : 'violet'}`}>{runLive ? 'decisions: live model' : 'decisions: teaching rules'}</span></div>
                   {run.outputs.map((o) => <div key={o.nodeId} className="callout small"><b>{graph.nodes.find((n) => n.id === o.nodeId)?.label}:</b> {o.value}</div>)}
                   <label className="field">Replay ({cursor + 1}/{run.trace.length})<input type="range" min={0} max={run.trace.length - 1} value={cursor} onChange={(e) => setCursor(+e.target.value)} /></label>
                   <div className="trace" style={{ maxHeight: 340, overflow: 'auto' }}>
@@ -232,7 +244,7 @@ export default function Studio({ templateId }: { templateId?: string }) {
                 );
               })}
               <button className="btn primary" onClick={doTests}>Run tests</button>
-              <div className="tiny faint">Results are recorded as evidence for: {tpl.skills.slice(0, 2).join(', ')}.</div>
+              <div className="tiny faint">Results are recorded as evidence for: {tpl.skills.slice(0, 2).join(', ')}. Tests always use the deterministic teaching rules so results are repeatable; use Run to try the same graph with Live Claude.</div>
             </div>
           )}
           {panel === 'inspect' && (selNode ? <Inspector node={selNode} update={(p) => updateNode(selNode.id, p)} remove={() => { setGraph((g) => ({ nodes: g.nodes.filter((n) => n.id !== selNode.id), edges: g.edges.filter((e) => e.source !== selNode.id && e.target !== selNode.id) })); setSel(null); }} /> : <div className="tiny faint">Select a node to edit its configuration.</div>)}

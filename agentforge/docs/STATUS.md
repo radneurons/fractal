@@ -5,7 +5,7 @@ Honest inventory against `docs/MASTER_PROMPT.md` (v2). "Executed" means it reall
 ## Complete and verified (unit + e2e tests)
 
 - Onboarding (3 entry points, goal paths A–F, 20/40/60-minute budgets), adaptive staircase diagnostic (6/8/12 items), plan reveal.
-- Curriculum registry with Zod validation; 16 schools, 91 skills (DAG), 30 fully authored lessons, 242 items across 8 item types — each with a real grader.
+- Curriculum registry with Zod validation; 16 schools, 91 skills (DAG), 42 fully authored lessons (every school except the frontier electives has at least one), 266 items across 8 item types — each with a real grader.
 - Mastery engine exactly as specified (weights, Beta estimate, confidence, states, "Not enough evidence"), "Why this score?" with the full evidence table and formula.
 - Weakness finder with labelled hypotheses (missing prerequisite, recurring error tag) and the "Fix this weakness" recovery sequence (note → prerequisite check → worked example → targeted item → transfer item → review).
 - Spaced review ladder, review queue, "learned once" vs "retained".
@@ -26,7 +26,7 @@ Honest inventory against `docs/MASTER_PROMPT.md` (v2). "Executed" means it reall
 
 ## Simulated or demonstration (clearly labelled in the UI)
 
-- Agent decisions in Agent Studio and the agent-loop demo come from a deterministic rule-based policy, not a live model (tools, validation, budgets and traces are real).
+- By default, agent decisions in Agent Studio and the agent-loop demo come from a deterministic rule-based policy (tools, validation, budgets and traces are real). With an Anthropic key configured, the Studio's "Live Claude" switch lets a real model make each decision instead; the runtime still validates arguments, enforces approvals and budgets, and records the trace. Studio acceptance tests always use the deterministic rules so results are repeatable. The live mode is covered by unit tests with an injected model; it has not been exercised against the real API in this build environment (no key available).
 - Terminal and coding-agent sessions are simulations modelled on common workflows; they show visible plans and actions, not hidden model reasoning.
 - Prompt Lab "weak vs strong" outputs, the LLM pipeline probabilities, the eval observatory outputs and Agent Rescue traces are pre-authored demonstrations (the graders over them execute for real).
 - Token Budget Commander uses an illustrative cost/quality formula (shown in the UI), not real prices.
@@ -36,9 +36,8 @@ Honest inventory against `docs/MASTER_PROMPT.md` (v2). "Executed" means it reall
 ## Not built in this version
 
 - Server-side isolated execution for Python, shell, package installation and repository-level exercises.
-- Live-model agent policy inside Agent Studio (the `Policy` interface is ready; an Anthropic tool-use policy is a natural next step).
 - MCP Tool node connected to real MCP servers (MCP is taught conceptually and via projects).
 - Multi-provider side-by-side "AI vs AI" comparison runner (the Prompt Lab can run one provider at a time; curated comparisons are not included).
 - Cross-device sync and accounts; a calibrated knowledge-tracing model (the weighted-evidence model is the documented v1).
-- Full lessons for 61 of 91 skills (each has a corrective note, worked example and graded practice; marked "Full lesson planned").
+- Full lessons for 49 of 91 skills (each has a corrective note, worked example and graded practice; marked "Full lesson planned").
 - Captions for instructional media (there is no audio/video media in this build).

@@ -193,6 +193,16 @@ try {
     await page.screenshot({ path: SHOTS + '07-studio.png' });
   });
 
+  await step('Extra: new-wave lesson renders with its demo; Live Claude needs a key', async () => {
+    await page.goto(BASE + '#/lesson/L-ev01');
+    await expectVisible(page.getByRole('heading', { name: 'Why AI systems need evals' }), 'new lesson missing');
+    await page.getByRole('button', { name: /Explore/ }).click();
+    await expectVisible(page.getByText('Evaluation observatory'), 'eval demo missing');
+    await page.goto(BASE + '#/studio/revenue-agent');
+    await page.getByRole('button', { name: 'Live Claude' }).click();
+    await expectVisible(page.getByRole('heading', { name: /Preferences, AI provider/ }), 'did not route to settings when no key is configured');
+  });
+
   await step('Extra: Knowledge Universe renders 3D and has an accessible 2D view', async () => {
     await page.goto(BASE + '#/universe');
     await expectVisible(page.locator('.universe canvas'), 'WebGL canvas missing');

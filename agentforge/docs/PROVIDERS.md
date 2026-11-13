@@ -5,6 +5,7 @@ AgentForge is fully usable offline. Connecting a provider adds:
 - **Forge Guide** free-form tutoring in nine modes (explain simply, Socratic, hint, find my mistake…)
 - **Prompt Lab** live runs of your prompt against the task material
 - **API Lab** sending your validated request for real (Anthropic)
+- **Agent Studio** "Live Claude" decisions (Anthropic only): one API call per agent step, with only the attached tools declared (strict schemas); the runtime still validates, gates and bounds everything
 - **Interview Simulator** optional rubric-based model grading (disclosed as fallible; heuristic fallback)
 
 Every live output is labelled **LIVE MODEL** with the model id. Without a provider, the app uses authored content labelled as such — it never fakes AI responses or streaming.

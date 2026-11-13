@@ -172,7 +172,7 @@ export interface PolicyContext {
   tools: { nodeId: string; toolId: string }[];
   observations: Record<string, any>; // toolId → last successful result
   errors: Record<string, number>; // toolId → error count
-  calls: { toolId: string; args: unknown; ok: boolean }[];
+  calls: { toolId: string; args: unknown; ok: boolean; output?: unknown }[];
   config: Record<string, any>;
 }
 
@@ -405,7 +405,7 @@ export async function runGraph(g: Graph, input: string, opts: RunOptions = {}): 
               break;
             }
             const r = await execTool(d.toolNodeId!, d.toolId!, d.args ?? {}, approved);
-            ctx.calls.push({ toolId: d.toolId!, args: d.args, ok: r.ok });
+            ctx.calls.push({ toolId: d.toolId!, args: d.args, ok: r.ok, output: r.ok ? r.result : r.error });
             if (r.ok) {
               ctx.observations[d.toolId!] = r.result;
               emit(nodeId, 'state', `observations.${d.toolId} = ${JSON.stringify(r.result).slice(0, 100)}`);
