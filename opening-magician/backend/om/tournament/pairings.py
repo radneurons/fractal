@@ -44,11 +44,12 @@ def round_robin(players: list[str], cycles: int = 1, reverse_colors: bool = Fals
             a, b = order[i], order[n - 1 - i]
             if bye in (a, b):
                 continue
-            # alternate colours by round; first board alternates so nobody gets a long run
+            # Berger colours: the fixed player alternates by round; on every other board the colour
+            # follows the seat, and since seats rotate each round every player alternates too.
             if i == 0:
                 pair = (a, b) if r % 2 == 0 else (b, a)
             else:
-                pair = (a, b) if (r + i) % 2 == 0 else (b, a)
+                pair = (a, b) if i % 2 == 0 else (b, a)
             rnd.append(pair)
         base.append(rnd)
         order = [order[0]] + [order[-1]] + order[1:-1]

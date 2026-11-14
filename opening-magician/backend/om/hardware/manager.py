@@ -11,6 +11,7 @@ import time
 from typing import Any, Awaitable, Callable
 
 import chess
+from ..chessx import parse_move
 
 from ..db import Database, new_id, now
 from ..events import EventBus
@@ -302,7 +303,7 @@ class Playback:
         self.boards: list[chess.Board] = [self.start.copy()]
         b = self.start.copy()
         for u in moves:
-            mv = b.parse_uci(u) if len(u) in (4, 5) and u[0] in "abcdefgh" and u[1].isdigit() else b.parse_san(u)
+            mv = parse_move(b, u)
             self.sans.append(b.san(mv))
             b.push(mv)
             self.moves.append(mv)

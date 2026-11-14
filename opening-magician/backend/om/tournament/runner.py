@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 import chess
+from ..chessx import parse_move
 import chess.engine
 
 from ..chessx import START_FEN, Score, pgn_from_moves, result_of
@@ -55,7 +56,7 @@ async def play_game(manager: EngineManager, spec: GameSpec, *, on_move: Callable
     book_plies = 0
     for mv in spec.opening_moves:
         try:
-            m = board.parse_uci(mv) if (len(mv) in (4, 5) and mv[1].isdigit()) else board.parse_san(mv)
+            m = parse_move(board, mv)
         except ValueError:
             break
         board.push(m)
@@ -143,7 +144,7 @@ async def play_game(manager: EngineManager, spec: GameSpec, *, on_move: Callable
                     termination, detail = "time_forfeit", f"{names[side]} lost on time"
                     break
                 clocks[side] += inc
-            score = Score.from_dict(line["score"]) if line else Score()
+            score = Score.from_dict(line["score"]) if (line and not line.get("no_info")) else Score()
             white_score = score if side == chess.WHITE else score.negate()
             san = board.san(chosen)
             fen_before = board.fen()

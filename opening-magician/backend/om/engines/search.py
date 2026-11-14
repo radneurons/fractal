@@ -170,15 +170,23 @@ async def adaptive_search(handle: EngineHandle, board: chess.Board, budget: Budg
     finally:
         handle.busy = False
     lines = snapshot()
+    best = None
     if not handle.closed:
         analysis.stop()
         try:
-            await asyncio.wait_for(analysis.wait(), 5)
+            best = await asyncio.wait_for(analysis.wait(), 5)
         except (asyncio.TimeoutError, chess.engine.EngineError):
             await handle.close(force=True)
             if reason not in ("cancelled",):
                 reason = "engine_failed"
         lines = snapshot() or lines
+    if not lines and best is not None and best.move in legal and reason not in ("cancelled", "engine_failed"):
+        # Some engines answer `bestmove` without a single `info` line (book hit, instant reply).
+        # The move is real, the evaluation is simply unknown — say so instead of inventing one.
+        lines = [{"multipv": 1, "move": best.move.uci(), "san": board.san(best.move), "score": Score().to_dict(),
+                  "score_white": Score().to_dict(), "depth": 0, "seldepth": None, "nodes": None, "nps": None,
+                  "time_ms": None, "hashfull": None, "tbhits": None, "pv": [best.move.uci()],
+                  "pv_san": [board.san(best.move)], "no_info": True}]
     elapsed = time.perf_counter() - t0
     depth = (lines[0].get("depth") or 0) if lines else 0
     if reason == "engine_finished":

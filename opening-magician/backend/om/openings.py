@@ -11,6 +11,7 @@ from functools import lru_cache
 from typing import Any
 
 import chess
+from .chessx import parse_move
 
 from .chessx import pos_key
 
@@ -387,7 +388,7 @@ def identify_moves(moves: list[str], start_fen: str | None = None) -> dict[str, 
     exact, passing = _name_index()
     for u in moves:
         try:
-            mv = board.parse_uci(u) if len(u) in (4, 5) and u[1].isdigit() else board.parse_san(u)
+            mv = parse_move(board, u)
         except ValueError:
             break
         board.push(mv)

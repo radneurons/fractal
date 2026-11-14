@@ -23,6 +23,7 @@ import random
 from typing import Any
 
 import chess
+from ..chessx import parse_move
 
 from ..books.store import BookStore
 from ..chessx import Score, loss_between, motifs_after, numbered, pos_key, san_line
@@ -142,7 +143,7 @@ class DiscoveryLab:
                 if t.rstrip(".").isdigit() or t in ("*", "1-0", "0-1", "1/2-1/2"):
                     continue
                 try:
-                    b.push(b.parse_uci(t) if (len(t) in (4, 5) and t[1].isdigit()) else b.parse_san(t))
+                    b.push(parse_move(b, t))
                 except ValueError as e:
                     raise ExperimentError(f"Illegal move '{t}' in the starting line: {e}")
             add(b, st.get("label") or (identify(b) or {}).get("name") or "Custom line")

@@ -270,7 +270,7 @@ class EngineManager:
                 raise EngineError(f"Executable not found: {path}")
             if not os.access(resolved, os.X_OK):
                 raise EngineError(f"File is not executable: {resolved}")
-            path = str(Path(resolved).resolve())
+            path = os.path.abspath(resolved)      # keep symlinks: launchers (venv shims, wrappers) depend on their own path
         row = {"id": new_id("eng"), "name": name or "", "path": path, "args": args or [], "kind": kind,
                "platform": platform.system(), "arch": platform.machine(), "defaults": defaults or {}, "notes": notes,
                "status": "unverified", "created_at": now(), "options": {}, "version": "", "author": ""}

@@ -65,6 +65,8 @@ class Searcher:
         self.tt: dict[object, tuple[int, int, int, chess.Move | None]] = {}
         self.killers: dict[int, list[chess.Move]] = {}
         self.noise = 0
+        self.first_iteration = False
+        self.q_limit = 40
         self.rng = random.Random(1)
 
     # -- evaluation -------------------------------------------------------
@@ -87,8 +89,10 @@ class Searcher:
 
     # -- helpers ----------------------------------------------------------
     def check_time(self) -> None:
-        if self.stop_flag.is_set():
+        if self.stop_flag.is_set() and not self.first_iteration:
             raise Stop
+        if self.first_iteration:
+            return          # depth 1 always completes, so a real (searched) move always exists
         if self.node_limit is not None and self.nodes >= self.node_limit:
             raise Stop
         if self.deadline is not None and (self.nodes & 255) == 0 and time.perf_counter() >= self.deadline:
@@ -129,7 +133,7 @@ class Searcher:
                 return stand
             alpha = max(alpha, stand)
             moves = [m for m in b.generate_legal_captures()] + [m for m in b.legal_moves if m.promotion and not b.is_capture(m)]
-            if ply > 40:
+            if ply > self.q_limit:
                 return stand
         best = stand
         for m in self.order(b, moves, None, ply):
@@ -234,7 +238,8 @@ class Engine:
             if cmd == "uci":
                 self.send(f"id name {NAME}")
                 self.send("id author Opening Magician")
-                self.send("option name MultiPV type spin default 1 min 1 max 64")
+                if not FLAGS["no_multipv"]:
+                    self.send("option name MultiPV type spin default 1 min 1 max 64")
                 self.send("option name Skill Level type spin default 20 min 0 max 20")
                 self.send("option name Hash type spin default 16 min 1 max 1024")
                 self.send("option name Move Overhead type spin default 30 min 0 max 5000")
@@ -318,6 +323,14 @@ class Engine:
                     i += 1
             else:
                 i += 1
+        if FLAGS["crash"]:
+            sys.stdout.flush()
+            import os
+            os._exit(3)
+        if FLAGS["hang"]:
+            return
+        if FLAGS["ignore_searchmoves"]:
+            searchmoves = []
         self.search.stop_flag.clear()
         self.thread = threading.Thread(target=self.think, args=(self.board.copy(), params, searchmoves, infinite), daemon=True)
         self.thread.start()
@@ -356,13 +369,15 @@ class Engine:
         if not roots:
             self.send("bestmove 0000")
             return
-        multipv = max(1, min(self.opts["MultiPV"], len(roots)))
+        multipv = max(1, min(1 if FLAGS["no_multipv"] else self.opts["MultiPV"], len(roots)))
         if skill < 20:
             multipv = max(multipv, min(4, len(roots)))
         lines: list[tuple[int, chess.Move, list[chess.Move]]] = []
         order = list(roots)
         try:
             for depth in range(1, max_depth + 1):
+                s.first_iteration = depth == 1
+                s.q_limit = depth + 8          # bounded quiescence keeps the first iteration fast
                 current: list[tuple[int, chess.Move, list[chess.Move]]] = []
                 excluded: list[chess.Move] = []
                 for pv_i in range(multipv):
@@ -394,6 +409,7 @@ class Engine:
                     break
         except Stop:
             pass
+        s.first_iteration = False
         if not lines:
             lines = [(0, roots[0], [roots[0]])]
         choice = lines[0]
@@ -411,7 +427,19 @@ class Engine:
         self.send(f"bestmove {choice[1].uci()}{ponder}")
 
 
+# Test-fixture switches (used by the automated tests to exercise failure handling):
+#   --no-multipv          do not offer MultiPV (forces restricted-root ranking)
+#   --ignore-searchmoves  search every root move regardless of `searchmoves`
+#   --hang                accept `go` but never answer (unresponsive engine)
+#   --crash               exit abruptly as soon as a search starts
+FLAGS = {"no_multipv": False, "ignore_searchmoves": False, "hang": False, "crash": False}
+
+
 def main() -> None:
+    for a in sys.argv[1:]:
+        key = a.lstrip("-").replace("-", "_")
+        if key in FLAGS:
+            FLAGS[key] = True
     Engine().loop()
 
 

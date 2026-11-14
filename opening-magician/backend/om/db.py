@@ -334,6 +334,34 @@ class Database:
                 target.close()
         return dest
 
+    def replace_with(self, src: Path) -> None:
+        """Swap the live database for another SQLite file (project restore).  The previous
+        file is kept next to it as `.before-restore` so a restore is itself reversible."""
+        with self._lock:
+            if self.path == ":memory:":
+                raise RuntimeError("Cannot restore into an in-memory database")
+            check = sqlite3.connect(str(src))
+            try:
+                ok = check.execute("PRAGMA integrity_check").fetchone()[0]
+                has = check.execute("SELECT name FROM sqlite_master WHERE name='schema_meta'").fetchone()
+            finally:
+                check.close()
+            if ok != "ok" or not has:
+                raise RuntimeError("The file is not a valid Opening Magician database")
+            self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            self._conn.close()
+            shutil.copyfile(self.path, self.path + ".before-restore")
+            for suffix in ("-wal", "-shm"):
+                Path(self.path + suffix).unlink(missing_ok=True)
+            shutil.copyfile(src, self.path)
+            self._conn = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
+            self._conn.row_factory = sqlite3.Row
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA synchronous=NORMAL")
+            self._conn.execute("PRAGMA foreign_keys=ON")
+            self._depth = 0
+            self.migrate()
+
     def integrity(self) -> str:
         return str(self.scalar("PRAGMA integrity_check"))
 
