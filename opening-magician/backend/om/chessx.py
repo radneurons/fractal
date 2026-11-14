@@ -264,16 +264,15 @@ def motifs_after(board: chess.Board, move: chess.Move) -> list[str]:
             t = b.piece_at(sq)
             if not t or t.color == mover:
                 continue
-            ray = chess.ray(move.to_square, sq)
             behind = None
             step = _direction(move.to_square, sq)
-            cur = sq + step if step else None
-            while cur is not None and 0 <= cur < 64 and cur in ray and chess.square_distance(cur, cur - step) == 1:
+            cur, prev = sq + step, sq
+            while step and 0 <= cur < 64 and chess.square_distance(cur, prev) == 1:
                 p = b.piece_at(cur)
                 if p:
                     behind = (cur, p)
                     break
-                cur += step
+                prev, cur = cur, cur + step
             if behind and behind[1].color != mover:
                 front_v, back_v = PIECE_VALUE[t.piece_type] or 10_000, PIECE_VALUE[behind[1].piece_type] or 10_000
                 if back_v > front_v and t.piece_type != chess.PAWN:
