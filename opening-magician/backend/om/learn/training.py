@@ -182,13 +182,16 @@ class Trainer:
         if not c:
             raise ValueError("Unknown card")
         board = chess.Board(c["fen"])
-        try:
-            mv = parse_move(board, move)
-        except ValueError:
-            return {"correct": False, "legal": False, "message": "That is not a legal move here."}
+        gave_up = move in ("0000", "", "skip")          # "I don't know" / blitz timeout: a recorded miss, not an illegal move
+        mv = None
+        if not gave_up:
+            try:
+                mv = parse_move(board, move)
+            except ValueError:
+                return {"correct": False, "legal": False, "message": "That is not a legal move here."}
         alts = c["line"].get("alternatives", [])
-        correct = mv.uci() == c["move_uci"]
-        also = mv.uci() in alts
+        correct = mv is not None and mv.uci() == c["move_uci"]
+        also = mv is not None and mv.uci() in alts
         q = grade(correct or also, time_ms, hints)
         early = c["due"] > now() + 60          # practising ahead of schedule
         if early and (correct or also):
@@ -200,11 +203,18 @@ class Trainer:
         self.db.update("cards", card_id, {"ease": ease, "interval_days": interval, "reps": reps, "lapses": lapses, "due": due,
                                           "last_result": "correct" if correct else "alternative" if also else "wrong"})
         self.log(mode, correct or also, time_ms, hints, card_id=card_id,
-                 detail={"played": mv.uci(), "expected": c["move_uci"], "opening": c["opening"], "epd": c["epd"]})
+                 detail={"played": mv.uci() if mv else None, "expected": c["move_uci"], "opening": c["opening"], "epd": c["epd"]})
         return {"correct": correct, "alternative": also, "legal": True, "expected": c["move_uci"], "expected_san": c["san"],
-                "played_san": board.san(mv), "note": c["note"], "quality": q, "next_due": due, "interval_days": round(interval, 2),
+                "played_san": board.san(mv) if mv else None, "note": c["note"], "quality": q, "next_due": due, "interval_days": round(interval, 2),
                 "message": "Correct." if correct else ("Also in your repertoire here." if also else
                                                        f"Your repertoire move is {c['san']}.")}
+
+    def hint(self, card_id: str) -> dict[str, Any]:
+        """First hint: which piece moves (the client counts it, and the answer is graded lower)."""
+        c = self.db.get("cards", card_id)
+        if not c:
+            raise ValueError("Unknown card")
+        return {"from": c["move_uci"][:2], "note": c["note"]}
 
     def log(self, mode: str, correct: bool, time_ms: int | None, hints: int, card_id: str | None = None,
             detail: dict[str, Any] | None = None, dimension: str | None = None) -> None:

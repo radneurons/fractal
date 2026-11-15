@@ -651,6 +651,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def tr_answer(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
         return S().trainer.answer(body["card_id"], body["move"], body.get("time_ms"), int(body.get("hints", 0)), body.get("mode", "recall"))
 
+    @app.get("/api/training/hint", dependencies=A)
+    async def tr_hint(card_id: str) -> dict[str, Any]:
+        return S().trainer.hint(card_id)
+
     @app.post("/api/training/task", dependencies=A)
     async def tr_task(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
         return S().trainer.task(body["kind"], body.get("params"))
