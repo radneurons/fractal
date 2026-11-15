@@ -200,7 +200,8 @@ export class Stage {
     body.castShadow = set.id !== "holo"; body.receiveShadow = set.id !== "holo";
     g.add(body);
     if (geo.accent) { const a = new THREE.Mesh(geo.accent, mats.accent); a.castShadow = set.id !== "holo"; g.add(a); }
-    if (sym.toLowerCase() === "n") g.rotation.y = white ? Math.PI : 0;       // knights face the opponent
+    // Knights face the opponent, turned about 50° so their profile reads clearly from either player's seat.
+    if (sym.toLowerCase() === "n") g.rotation.y = (white ? 0 : Math.PI) + 0.87;
     g.userData.height = geo.height;
     return g;
   }

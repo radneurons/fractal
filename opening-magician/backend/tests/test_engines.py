@@ -208,3 +208,17 @@ async def test_analysis_cache_deduplicates_by_position_and_engine(engines, db):
         assert cache.lookup(b, h.signature, 9, 3) is None            # deeper request is not satisfied by a shallow result
         assert cache.lookup(b, "another-engine-config", 1, 1) is None    # other configurations are never merged
         assert cache.hits == 1 and cache.misses == 2
+
+
+def test_mixed_depth_multipv_is_never_presented_as_one_ranking():
+    """A search stopped mid-iteration leaves some lines one depth behind — possibly repeating a move."""
+    from om.engines.search import coherent_lines
+    L = lambda mpv, move, depth, cp: {"multipv": mpv, "move": move, "depth": depth, "score": {"cp": cp, "mate": None, "wdl": None}}
+    complete = [[]]
+    d4 = [L(1, "b8c6", 4, 35), L(2, "e7e6", 4, 30), L(3, "b8a6", 4, 3)]
+    assert coherent_lines(d4, complete) == d4 and complete[0] == d4
+    mixed = [L(1, "b8c6", 5, 30), L(2, "b8a6", 5, 10), L(3, "b8a6", 4, 3)]       # line 3 is stale and repeats a move
+    assert coherent_lines(mixed, complete) == d4                                   # last completed iteration wins
+    fresh = [[]]
+    out = coherent_lines(mixed, fresh)                                             # no completed iteration yet: dedupe
+    assert [l["move"] for l in out] == ["b8c6", "b8a6"] and [l["multipv"] for l in out] == [1, 2] and out[1]["depth"] == 5

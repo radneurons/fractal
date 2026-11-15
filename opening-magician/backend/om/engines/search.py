@@ -95,10 +95,18 @@ async def adaptive_search(handle: EngineHandle, board: chess.Board, budget: Budg
     last_emit = 0.0
     hard_deadline = t0 + budget.max_time * 2 + 10
 
+    complete: list[list[dict[str, Any]]] = [[]]
+
     def snapshot() -> list[dict[str, Any]]:
+        """The engine's lines as one coherent ranking.
+
+        A search can be interrupted in the middle of an iteration, leaving lines 1..k at depth
+        d+1 and the rest still at depth d — possibly naming the same move twice.  Rankings are
+        only meaningful within one iteration, so the last *completed* iteration is returned
+        whenever the live set is mixed."""
         lines = [l for i, inf in enumerate(analysis.multipv) if (l := line_from_info(board, inf, i + 1))]
         lines.sort(key=lambda l: l["multipv"])
-        return lines
+        return coherent_lines(lines, complete)
 
     try:
         while True:
@@ -201,6 +209,28 @@ async def adaptive_search(handle: EngineHandle, board: chess.Board, budget: Budg
             reason = "single_legal_move"
     return {**base, "lines": lines, "stop_reason": reason, "stop_detail": STOP_REASONS.get(reason, reason),
             "elapsed": round(elapsed, 3), "depth": depth, "history": history[-40:], "complexity": round(complexity, 3)}
+
+
+def coherent_lines(lines: list[dict[str, Any]], complete: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    """Return `lines` if they form one consistent iteration (same depth, distinct first moves);
+    remember it in `complete[0]`.  Otherwise fall back to the last consistent set, or — if there
+    never was one — drop duplicated first moves, keeping the deeper entry."""
+    if not lines:
+        return complete[0]
+    depths = {l.get("depth") for l in lines}
+    moves = [l["move"] for l in lines]
+    if len(depths) == 1 and len(set(moves)) == len(moves):
+        complete[0] = lines
+        return lines
+    if complete[0] and len(complete[0]) >= len(set(moves)):
+        return complete[0]
+    best: dict[str, dict[str, Any]] = {}
+    for l in lines:
+        cur = best.get(l["move"])
+        if cur is None or (l.get("depth") or 0) > (cur.get("depth") or 0):
+            best[l["move"]] = l
+    out = sorted(best.values(), key=lambda l: Score.from_dict(l["score"]).order_key(), reverse=True)
+    return [{**l, "multipv": i + 1} for i, l in enumerate(out)]
 
 
 def _drift(recent: list[dict[str, Any]]) -> float:

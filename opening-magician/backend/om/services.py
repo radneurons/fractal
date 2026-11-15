@@ -15,7 +15,7 @@ from .db import Database, rotate_backups
 from .discovery.experiment import DiscoveryLab
 from .engines.manager import EngineError, EngineHandle, EngineManager, EngineSpec, line_from_info, seed_profiles
 from .engines.resources import ResourceManager
-from .engines.search import Budget
+from .engines.search import Budget, coherent_lines
 from .events import EventBus, bus as global_bus
 from .hardware.manager import HardwareManager, Playback
 from .jobs import JobContext, JobManager
@@ -84,6 +84,7 @@ class AnalysisHub:
         p["running"] = True
         h.busy = True
         last_emit = 0.0
+        complete: list[list[dict[str, Any]]] = [[]]
         try:
             while True:
                 try:
@@ -98,7 +99,7 @@ class AnalysisHub:
                 if now_t - last_emit < 0.1:
                     continue
                 last_emit = now_t
-                lines = [l for i, inf in enumerate(analysis.multipv) if (l := line_from_info(board, inf, i + 1))]
+                lines = coherent_lines([l for i, inf in enumerate(analysis.multipv) if (l := line_from_info(board, inf, i + 1))], complete)
                 if lines:
                     p["last"] = {"fen": board.fen(), "lines": lines, "elapsed": round(now_t - t0, 2)}
                     self.bus.publish(topic, "lines", {**p["last"], "running": True, "engine": h.name})
@@ -116,7 +117,7 @@ class AnalysisHub:
                     await asyncio.wait_for(analysis.wait(), 3)
                 except Exception:
                     await h.close(force=True)
-            lines = [l for i, inf in enumerate(analysis.multipv) if (l := line_from_info(board, inf, i + 1))]
+            lines = coherent_lines([l for i, inf in enumerate(analysis.multipv) if (l := line_from_info(board, inf, i + 1))], complete)
             if lines:
                 p["last"] = {"fen": board.fen(), "lines": lines, "elapsed": round(time.perf_counter() - t0, 2)}
             self.bus.publish(topic, "lines", {**(p["last"] or {"fen": board.fen(), "lines": []}), "running": False, "engine": h.name})

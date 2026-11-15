@@ -114,7 +114,7 @@ function Resources({ r, reload }: { r: any; reload: () => void }) {
           <Field label="Hash per engine (cap, MB)"><Num value={L.per_engine_hash_mb} min={1} step={64} onChange={(v) => put({ per_engine_hash_mb: v })} /></Field>
           <Field label="Research jobs in parallel"><Num value={r.max_parallel_jobs} min={1} onChange={(v) => put({ max_parallel_jobs: v })} /></Field>
           <Field label="Daily research budget (minutes, 0 = unlimited)"><Num value={Math.round(L.daily_research_seconds / 60)} min={0} step={10} onChange={(v) => put({ daily_research_seconds: v * 60 })} /></Field>
-          <Check checked={L.background_paused} onChange={(v) => put({ background_paused: v })} label="Pause background research" help="Interactive analysis, games and hardware keep working. Paused automatically while the robot moves." />
+          <Check checked={L.background_paused} onChange={(v) => put({ background_paused: v })} label="Pause background research" help="Interactive analysis, games and hardware keep working. Paused automatically while the robot plays game moves or playback steps." />
         </div>
         <p className="help" style={{ marginTop: 8 }}>Priority: hardware › interactive analysis and play › tournaments › research › background. Research engine time used today: {(r.research_seconds_today / 60).toFixed(1)} min.</p>
       </Panel>

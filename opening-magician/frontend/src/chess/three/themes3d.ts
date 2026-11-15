@@ -110,7 +110,8 @@ export function buildTheme(id: ThemeId, opts: { shadows: boolean; mapSize: numbe
       const plinth = mesh(new THREE.BoxGeometry(12, 1.0, 12), phys({ map: marbleTexture("#17181c", "#7a7d85", 32, 2), roughness: 0.15, clearcoat: 0.8 }), [0, -0.9, 0]);
       group.add(plinth);
       const gold = std({ color: "#d8b25a", metalness: 1, roughness: 0.2 });
-      group.add(mesh(new THREE.BoxGeometry(12.3, 0.1, 12.3), gold, [0, -0.36, 0]));
+      group.add(mesh(new THREE.BoxGeometry(9.5, 0.06, 9.5), gold, [0, -0.37, 0]));       // a thin gilded rim around the board
+      group.add(mesh(new THREE.BoxGeometry(12.2, 0.05, 12.2), gold, [0, -1.36, 0], false));  // and at the foot of the plinth
       const colMat = phys({ map: marbleTexture("#f3f0ea", "#aaa69f", 33, 2), roughness: 0.25, clearcoat: 0.4 });
       const fluted = (() => {
         const sh = new THREE.Shape();
@@ -130,7 +131,8 @@ export function buildTheme(id: ThemeId, opts: { shadows: boolean; mapSize: numbe
       const hemi = new THREE.HemisphereLight("#eaf2ff", "#c9b9a0", 1.0); group.add(hemi);
       const key = keyLight("#fff3dc", 3.4, [9, 16, 6], shadows, mapSize); group.add(key);
       return { group, key, light: phys({ map: marbleTexture("#f6f3ee", "#a09c95", 34), roughness: 0.12, clearcoat: 0.9, clearcoatRoughness: 0.08 }),
-        dark: phys({ map: marbleTexture("#23252b", "#7d818b", 35), roughness: 0.12, clearcoat: 0.9, clearcoatRoughness: 0.08 }), frame: gold,
+        dark: phys({ map: marbleTexture("#23252b", "#7d818b", 35), roughness: 0.12, clearcoat: 0.9, clearcoatRoughness: 0.08 }),
+        frame: phys({ map: marbleTexture("#15161a", "#6f737c", 36, 2), roughness: 0.14, clearcoat: 0.9, clearcoatRoughness: 0.1 }),
         background: gradientTexture([[0, "#bcd3ea"], [0.5, "#e9eef2"], [1, "#d8cdbb"]]), fog: new THREE.Fog("#dfe6ea", 40, 110),
         envIntensity: 0.9, exposure: 0.95, bloom: 0.12, animated: false, coordColor: "#3a3f4a" };
     }
