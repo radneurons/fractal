@@ -54,4 +54,4 @@ Space play/pause · ← → ±5 s · Shift+← → previous/next beat · 1–8 e
 - Headless or older browsers without H.264/AAC encoders export VP9/Opus inside MP4. Without WebCodecs, export records in real time.
 - Everything is deterministic: the same song, lyrics, settings and seed always give the same video.
 
-Build notes and progress: [PROGRESS.md](PROGRESS.md). The full build specification, reverse-engineered from this app: [`../prompts/lyric-engine-app.v2.prompt.md`](../prompts/lyric-engine-app.v2.prompt.md).
+Build notes and progress: [PROGRESS.md](PROGRESS.md). The full build specification, reverse-engineered from this app: [`../prompts/lyric-engine-app.v2.prompt.md`](../prompts/lyric-engine-app.v2.prompt.md). An extended specification with more analysis, sixteen effects, a layer compositor, modulation, live mode and an effect SDK (the additions are not built yet): [`../prompts/lyric-engine-app.v3.prompt.md`](../prompts/lyric-engine-app.v3.prompt.md).
