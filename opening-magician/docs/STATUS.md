@@ -2,7 +2,7 @@
 
 ## Verified during development
 
-* **91 automated bridge tests** pass (`backend/tests`): chess rules and draw rules; PGN round-trip with
+* **108 automated bridge tests** pass (`backend/tests`): chess rules and draw rules; PGN round-trip with
   variations, comments, NAGs and arrows; Chessnut encodings checked against the manufacturer's own
   decoding example; every clock mode including the physical-move allowance; round-robin, gauntlet,
   knockout and Swiss pairings; statistics; book formats (a Polyglot file written here is read back by
@@ -11,19 +11,33 @@
   engine and a hanging engine; resource budgets and priorities; full tournaments in five formats with
   interruption and recovery; full discovery experiments; reconciliation of hand moves; robot planning,
   execution, stop, recovery, faults and the live-motion lock; play over a simulated physical board;
-  API authentication and the read-only spectator surface.
+  API authentication and the read-only spectator surface; the preparation tools (collection import,
+  dossier, prep sheet, leak finder and cards, coverage audit, move-order search, structure and endgame
+  classification, model games, event-capped review intervals, goal repertoires, drill material, and the
+  engine-backed checks: dossier flags, practical scoring, refutation watch, book annotation).
 * **8 interface unit tests** pass (move tree, PGN export, board parsing, clock description).
 * **Browser runs** of the built application (headless Chromium, software WebGL): every view opens
   without console errors; a game was played, the Move simulator was driven through Robot Studio, an
   engine panel and ranked candidates ran, a three-engine tournament and a discovery experiment were
   created and completed from the interface, training tasks, a puzzle, the book forge, a study, the
   resource dashboard, theme switching in 3D, the spectator page and a phone-sized layout were exercised.
+  The Preparation view was driven through all ten tabs: two game collections imported, a prep sheet built,
+  leaks turned into cards and costed by the engine, a coverage audit, a practical score, a move-order
+  search, a plan quiz and guess-the-move on a model game, an event saved, a refutation watch run, a
+  book annotated and a goal repertoire built, a blindfold recital, a ten-move survival drill and the
+  endgame tables — without console errors.
 
 ## Not verified — please treat as untested
 
 * **Real Chessnut hardware.** No board was available. The Bluetooth transport (`bleak`) and both device
   profiles follow the published documentation but have never exchanged a byte with a real device.
   Work through [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md). Live robotic motion is locked until you do.
+* **Online game import** (Preparation → "By username"). The Lichess and Chess.com downloads follow the
+  sites' public documentation, and username validation is tested, but no request was sent to either
+  site during development. Importing from a PGN file is the tested path.
+* **Preparation tools on real game collections.** They were exercised with small hand-written and
+  generated collections and the bundled engine. Thresholds (what counts as a habit, a leak, an
+  only-move, an alert) are reasonable defaults, not tuned on real players' games.
 * **Third-party engines.** Only the bundled engine (and fault-injecting variants of it) were run.
   Stockfish and others use the same python-chess UCI code path, but they were not executed in the
   development environment. Expect to tune budgets: the defaults suit a slow engine.
@@ -45,6 +59,13 @@
   full ECO database. Catalogue traps are marked "authored" until an engine verifies them.
 * **Strength by Elo** uses the engine's own `UCI_Elo` when it exists; otherwise the mapping to skill level
   or depth is a rough guess and is labelled as such.
+* **Pawn structures and endgame types** are recognised by rules on pawns and material (thirteen named
+  structures, eleven endgame types). Positions that fit none are shown as "Unclassified".
+* **Findability** in practical scoring comes from human games when a games book has 20+ games for the
+  position; otherwise it is a labelled heuristic (captures, checks, development and retreats), not a
+  model of human play.
+* **Drawing-weapon / must-win repertoires** use the engine's win/draw/loss output when the engine
+  provides `UCI_ShowWDL`; the bundled engine does not, so draw rates are then estimated from the evaluation.
 * **Swiss pairing** is Dutch-style with backtracking, not a certified FIDE implementation.
 * **Novelty** always means "new to this project's books and research", never a claim about theory.
 * **Spectator clocks** tick from the last update and can drift by a fraction of a second.

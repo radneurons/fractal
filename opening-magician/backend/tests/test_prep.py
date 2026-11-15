@@ -171,6 +171,17 @@ def test_structures_from_a_book_and_plan_tasks(prep, books, db):
         prep.model_games("nonexistent")
 
 
+def test_model_games_are_found_among_imported_decisive_games(prep):
+    # a closed French that shuffles for 40+ plies keeps its pawn chain: decisive -> model game, drawn -> not
+    french = ("1. e4 e6 2. d4 d5 3. e5 c5 4. c3 Nc6 5. Nf3 Qb6 6. Be2 Nge7 7. O-O Nf5 8. Kh1 Be7 9. Kg1 O-O 10. Kh1 Kh8 "
+              "11. Kg1 Kg8 12. Kh1 Bd7 13. Kg1 Rac8 14. Kh1 Rfd8 15. Kg1 Be8 16. Kh1 Bf8 17. Kg1 Be7 18. Kh1 Bf8 19. Kg1 Be7 20. Kh1 Bf8 21. Kg1 Be7")
+    prep.import_collection("Masters", game("Alpha", "Beta", "1-0", french) + "\n" + game("Gamma", "Delta", "1/2-1/2", french), kind="reference")
+    found = prep.model_games("french_chain")
+    assert [(g["white"], g["result"]) for g in found] == [("Alpha", "1-0")]
+    assert found[0]["ply"] == 24 and classify_structure(chess.Board(found[0]["fen"])) == "french_chain"
+    assert prep.plan_task("french_chain", seed=1)["origin"] == "Alpha – Beta"
+
+
 def test_event_caps_review_intervals_as_the_date_approaches(prep, db):
     t = prep.trainer
     exch = next(o["id"] for o in openings.catalog() if o["name"] == "Ruy Lopez: Exchange Variation")

@@ -575,8 +575,10 @@ class Prep:
         if structure not in STRUCTURES:
             raise PrepError("Unknown structure")
         out = []
-        for g in self.db.all("games", "plies>=40 AND result IN ('1-0','0-1')", order="plies DESC", limit=4000,
-                             cols="id,white,black,result,opening,plies,pgn,kind"):
+        # 'result' is stored JSON-encoded, so the decisive-result filter is applied here rather than in SQL
+        for g in self.db.all("games", "plies>=40", order="plies DESC", limit=4000, cols="id,white,black,result,opening,plies,pgn,kind"):
+            if g["result"] not in ("1-0", "0-1"):
+                continue
             info = self._classify_game(g)
             if info["structure"] == structure:
                 out.append({"id": g["id"], "white": g["white"], "black": g["black"], "result": g["result"], "opening": g["opening"],

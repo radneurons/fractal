@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { api } from "./api";
 
-export type ViewId = "home" | "play" | "analysis" | "openings" | "training" | "puzzles" | "discovery" | "tournaments" | "books"
+export type ViewId = "home" | "play" | "analysis" | "openings" | "training" | "puzzles" | "discovery" | "tournaments" | "books" | "prep"
   | "studies" | "engines" | "chessnut" | "broadcast" | "settings";
 
 export type GraphicsQuality = "performance" | "balanced" | "cinematic" | "ultra";
