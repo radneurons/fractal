@@ -95,14 +95,14 @@ def sacrifices(board: chess.Board, min_pawns: int = 1) -> list[tuple[chess.Move,
         return []
     top = max(v for v, _ in outcomes.values())
     ref = _reference(board, top)
-    keep = next((k for k, (kv, _) in outcomes.items() if kv == top and board.is_capture(k)), next(iter(outcomes)))
+    keep = next((k for k, (kv, _) in outcomes.items() if kv == top and board.is_capture(k)), None)      # a recapture that was declined
     out = []
     for m, (v, taker) in outcomes.items():
         if ref - v >= min_pawns:
             b = board.copy(stack=False)
             b.push(m)
             out.append((m, {"pawns": ref - v, "balance_after": v, "accept": taker.uci() if taker else None,
-                            "accept_san": b.san(taker) if taker else None, "keeps_material": board.san(keep) if keep != m and board.is_capture(keep) else None,
+                            "accept_san": b.san(taker) if taker else None, "keeps_material": board.san(keep) if keep is not None and keep != m else None,
                             "declined_recapture": taker is None}))
     out.sort(key=lambda x: (-x[1]["pawns"], x[0].uci()))
     return out

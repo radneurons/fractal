@@ -49,6 +49,14 @@ def _at_least(budget: Budget, depth: int) -> Budget:
     return b
 
 
+def _full(budget: Budget) -> Budget:
+    """Sacrifices are exactly the positions where a search that stops early ('the best move looks stable')
+    is wrong, so gambit analysis always spends the whole budget."""
+    b = Budget.from_dict(budget.to_dict())
+    b.adaptive = False
+    return b
+
+
 def level_label(level: dict[str, Any]) -> str:
     mode = level.get("mode", "full")
     return {"elo": f"Elo {level.get('elo')}", "skill": f"Skill {level.get('skill')}", "depth": f"Depth {level.get('depth')}",
@@ -166,6 +174,7 @@ class GambitLab:
                      tick: Callable[[], None] | None = None) -> dict[str, Any]:
         """Everything about one gambit move from `board` (the position before the offer)."""
         tick = tick or (lambda: None)
+        budget = _full(budget)
         color = board.turn
         me = "white" if color else "black"
         sac = sacrifice(board, move)
@@ -188,8 +197,10 @@ class GambitLab:
         # --- the defender's choice: take it or leave it
         rows: list[dict[str, Any]] = []
         traps: list[dict[str, Any]] = []
-        accept_mv = None
+        accept_mv = shown = None
         replies: list[dict[str, Any]] = []
+        scored: dict[str, dict[str, Any]] = {}
+        takers: list[chess.Move] = []
         if not after.is_game_over():
             reply_res = await ranked_candidates(h, after, 4, budget, cancel=cancel)
             replies = reply_res["candidates"]
@@ -239,57 +250,43 @@ class GambitLab:
             if human_book_id:
                 d["human"] = self._human(human_book_id, after, takers)
 
-        # --- the accepted main line: best play by both sides, with what the defender has to find
-        line_board = after.copy(stack=False)
-        sans: list[str] = []
-        first = accept_mv or (chess.Move.from_uci(replies[0]["move"]) if replies else None)
-        comp_board = None
-        last_exp = d["expected_after_offer"]
-        if first is not None:
-            sans.append(line_board.san(first))
-            line_board.push(first)
-            for i in range(horizon):
-                if line_board.is_game_over() or (cancel is not None and cancel.is_set()):
-                    break
-                line_res = await ranked_candidates(h, line_board, 3, budget, cancel=cancel)
-                ranked = line_res["candidates"]
-                tick()
-                if not ranked:
-                    break
-                best = Score.from_dict(ranked[0]["score"])
-                best_mv = chess.Move.from_uci(ranked[0]["move"])
-                gap = ranked[1]["loss"]["expected_loss"] if len(ranked) > 1 else 1.0
-                defender = line_board.turn != color
-                only = gap >= ONLY_MOVE_GAP and line_board.legal_moves.count() > 1
-                nat = naturalness(line_board, best_mv)
-                exp_me = best.expected() if line_board.turn == color else 1 - best.expected()
-                last_exp = exp_me
-                row = {"ply": i + 2, "side": "defender" if defender else "gambiteer", "fen": line_board.fen(), "best_san": ranked[0]["san"],
-                       "gap": round(gap, 3), "only_move": only, "findability": round(nat, 2), "expected_gambiteer": round(exp_me, 3)}
-                if defender:
-                    tempting = self._tempting(line_board, {c["move"] for c in ranked})
-                    for c in ranked[1:]:
-                        mv = chess.Move.from_uci(c["move"])
-                        if c["loss"]["expected_loss"] >= TRAP_LOSS and naturalness(line_board, mv) >= 0.7:
-                            traps.append({"ply": i + 2, "san": c["san"], "loss": c["loss"]["expected_loss"], "fen": line_board.fen(),
-                                          "why": "a natural-looking move", "punish": c["pv_san"][1] if len(c["pv_san"]) > 1 else None,
-                                          "line": numbered(line_board, c["pv_san"][:7])})
-                    if tempting:
-                        extra = await self._score_moves(h, line_board, [m for m, _ in tempting], _at_least(budget, line_res.get("depth", 0)), cancel)
-                        tick()
-                        for mv, why in tempting:
-                            l = extra.get(mv.uci())
-                            if l:
-                                loss = loss_between(best, Score.from_dict(l["score"]))["expected_loss"]
-                                if loss >= TRAP_LOSS:
-                                    traps.append({"ply": i + 2, "san": line_board.san(mv), "loss": loss, "fen": line_board.fen(), "why": why,
-                                                  "punish": l["pv_san"][1] if len(l["pv_san"]) > 1 else None,
-                                                  "line": numbered(line_board, l["pv_san"][:7])})
-                rows.append(row)
-                sans.append(ranked[0]["san"])
-                line_board.push(best_mv)
-                if comp_board is None and not defender:
-                    comp_board = line_board.copy(stack=False)     # after the gambiteer's first follow-up
+        # --- follow the defender's reply with best play by both sides.  If following a line shows that the reply
+        #     the engine first liked actually loses, that reply is a trap and the next one is followed instead:
+        #     a cheap way of looking deeper exactly where a sacrifice needs it.
+        order: list[chess.Move] = []
+        for m in ([accept_mv] if accept_mv else []) + [chess.Move.from_uci(c["move"]) for c in replies] + ([shown] if shown is not None else []):
+            if m not in order and m.uci() in scored:
+                order.append(m)
+        walks: list[dict[str, Any]] = []
+        for cand in order[:3]:
+            if cancel is not None and cancel.is_set():
+                break
+            claimed = 1 - Score.from_dict(scored[cand.uci()]["score"]).expected()
+            w = await self._walk(h, after, cand, color, budget, horizon, cancel, tick)
+            w.update({"move": cand, "claimed": claimed})
+            walks.append(w)
+            if w["last_exp"] - claimed < TRAP_LOSS:
+                break                                    # the line confirmed the first impression of this reply
+        main = min(walks, key=lambda w: w["last_exp"]) if walks else None
+        sans, comp_board, line_board, last_exp = [], None, after, d["expected_after_offer"]
+        if main:
+            sans, rows, comp_board, line_board, last_exp = main["sans"], main["rows"], main["comp_board"], main["board"], main["last_exp"]
+            traps += main["traps"]
+            for w in walks:
+                san = after.san(w["move"])
+                if w is main or w["last_exp"] - main["last_exp"] < TRAP_LOSS or any(t["ply"] == 1 and t["san"] == san for t in traps):
+                    continue
+                is_bait = shown is not None and w["move"] == shown
+                traps.append({"ply": 1, "san": san, "loss": round(w["last_exp"] - main["last_exp"], 3), "fen": after.fen(),
+                              "why": ("accepting the offer" if is_bait else "the reply that looks best at first") + ", refuted only by looking further",
+                              "punish": w["sans"][1] if len(w["sans"]) > 1 else None, "line": numbered(after, w["sans"][:7])})
+                if is_bait and "accept" in d:
+                    d["accept"].update({"is_mistake": True, "text": "Taking is itself the mistake — the engine sees it only after following the line"})
+            if "accept" in d and shown is not None and main["move"] != shown and main["move"] in takers:
+                d["accept"]["better_capture"] = after.san(main["move"])
+        first_look = cost
+        if main and (main["rows"] or main["board"].is_game_over()):
+            cost = max(0.0, d["expected_before"] - last_exp)     # risk and 'where you stand after best defence' always agree
         comp = compensation(comp_board or after, color)
         end_balance = balance(line_board, color)
         d["main_line"] = numbered(after, sans)
@@ -315,13 +312,67 @@ class GambitLab:
                               f"You must find {len(only_me)} only-move(s) yourself."}
         band = next(b for b in COST_BANDS if cost <= b[0])
         d["band"], d["band_text"] = band[1], band[2]
-        d["risk"] = {"value": round(cost, 3), "text": f"Against best play this costs {round(cost * 100)} points of expected score "
-                                                       f"(the engine's choice was {ver['best_san']}); after best defence you stand at "
-                                                       f"{round(last_exp * 100)}%."}
+        d["risk"] = {"value": round(cost, 3), "first_look": round(first_look, 3),
+                     "text": f"Against the best defence found this costs {round(cost * 100)} points of expected score: "
+                             f"{round(d['expected_before'] * 100)}% before the offer ({ver['best_san']} was the engine's choice), "
+                             f"{round(last_exp * 100)}% after following the line."
+                             + (f" At first sight the engine put the price at {round(first_look * 100)} points; following the line changed that."
+                                if abs(first_look - cost) >= 0.1 else "")}
         d["value"] = round(0.5 * sting + 0.2 * comp["score"] + 0.3 * (1 - min(1.0, cost / 0.2)), 3)
         d["note"] = ("Risk and sting come from one engine at one budget and are evidence, not proof. "
+                     "Every search here uses the full budget (no early stopping). "
                      "Compensation and 'natural-looking' are board heuristics. Use the ladder to see who actually goes wrong.")
         return d
+
+    async def _walk(self, h: EngineHandle, after: chess.Board, first: chess.Move, color: bool, budget: Budget, horizon: int,
+                    cancel: asyncio.Event | None, tick: Callable[[], None]) -> dict[str, Any]:
+        """Play `first` for the defender, then the engine's best move for both sides for `horizon` plies, noting what each must find."""
+        board = after.copy(stack=False)
+        sans = [board.san(first)]
+        board.push(first)
+        rows: list[dict[str, Any]] = []
+        traps: list[dict[str, Any]] = []
+        comp_board = None
+        last_exp = (0.0 if board.is_checkmate() else 0.5) if board.is_game_over() else None
+        for i in range(horizon):
+            if board.is_game_over() or (cancel is not None and cancel.is_set()):
+                break
+            res = await ranked_candidates(h, board, 3, budget, cancel=cancel)
+            ranked = res["candidates"]
+            tick()
+            if not ranked:
+                break
+            best = Score.from_dict(ranked[0]["score"])
+            best_mv = chess.Move.from_uci(ranked[0]["move"])
+            gap = ranked[1]["loss"]["expected_loss"] if len(ranked) > 1 else 1.0
+            defender = board.turn != color
+            exp_me = best.expected() if board.turn == color else 1 - best.expected()
+            last_exp = exp_me
+            rows.append({"ply": i + 2, "side": "defender" if defender else "gambiteer", "fen": board.fen(), "best_san": ranked[0]["san"],
+                         "gap": round(gap, 3), "only_move": gap >= ONLY_MOVE_GAP and board.legal_moves.count() > 1,
+                         "findability": round(naturalness(board, best_mv), 2), "expected_gambiteer": round(exp_me, 3)})
+            if defender:
+                found = [(chess.Move.from_uci(c["move"]), c, "a natural-looking move") for c in ranked[1:]
+                         if c["loss"]["expected_loss"] >= TRAP_LOSS and naturalness(board, chess.Move.from_uci(c["move"])) >= 0.7]
+                tempting = self._tempting(board, {c["move"] for c in ranked})
+                if tempting:
+                    extra = await self._score_moves(h, board, [m for m, _ in tempting], _at_least(budget, res.get("depth", 0)), cancel)
+                    tick()
+                    for mv, why in tempting:
+                        l = extra.get(mv.uci())
+                        if l and loss_between(best, Score.from_dict(l["score"]))["expected_loss"] >= TRAP_LOSS:
+                            found.append((mv, {**l, "loss": loss_between(best, Score.from_dict(l["score"]))}, why))
+                for mv, l, why in found:
+                    traps.append({"ply": i + 2, "san": board.san(mv), "loss": l["loss"]["expected_loss"], "fen": board.fen(), "why": why,
+                                  "punish": l["pv_san"][1] if len(l["pv_san"]) > 1 else None, "line": numbered(board, l["pv_san"][:7])})
+            sans.append(ranked[0]["san"])
+            board.push(best_mv)
+            if board.is_checkmate():
+                last_exp = 0.0 if defender else 1.0
+            if comp_board is None and not defender:
+                comp_board = board.copy(stack=False)     # after the gambiteer's first follow-up
+        return {"sans": sans, "rows": rows, "traps": traps, "comp_board": comp_board, "board": board,
+                "last_exp": 0.5 if last_exp is None else last_exp}
 
     def _tempting(self, board: chess.Board, known: set[str]) -> list[tuple[chess.Move, str]]:
         """Up to two moves a human reaches for that the engine did not list: greedy captures first, then natural moves."""
@@ -384,11 +435,12 @@ class GambitLab:
         min_pawns, max_cost = max(1, int(cfg.get("min_pawns", 1))), float(cfg.get("max_cost", 0.2))
         max_results, horizon = max(1, min(12, int(cfg.get("max_results", 5)))), int(cfg.get("horizon", 8))
         book = self.books.head(cfg["book_id"]) if cfg.get("book_id") else None
-        quick = budget.scaled(0.5)
+        quick = _full(budget.scaled(0.5))
         frontier: list[tuple[chess.Board, list[chess.Move]]] = [(root, list(root.move_stack))]
         seen: set[str] = set()
         raw: list[dict[str, Any]] = []
-        stats = {"positions": 0, "sacrifices_seen": 0, "too_costly": 0}
+        stats = {"positions": 0, "sacrifices_seen": 0, "too_costly": 0, "rescued": 0}
+        doubtful: list[dict[str, Any]] = []      # too costly at first sight
         base_len = len(root.move_stack)
         async with self.engines.session(engine, "research", "Gambit Lab") as h:
             while frontier and stats["positions"] < max_positions and not cancel.is_set():
@@ -417,10 +469,7 @@ class GambitLab:
                             if not l:
                                 continue
                             loss = loss_between(best, Score.from_dict(l["score"]))["expected_loss"]
-                            if loss <= max_cost:
-                                raw.append({"board": board, "path": path, "move": mv, "sac": sac, "loss": loss})
-                            else:
-                                stats["too_costly"] += 1
+                            (raw if loss <= max_cost else doubtful).append({"board": board, "path": path, "move": mv, "sac": sac, "loss": loss})
                 progress(min(0.5, 0.5 * stats["positions"] / max_positions))
                 if len(path) - base_len >= max_ply:
                     continue
@@ -432,7 +481,11 @@ class GambitLab:
                     b.push(mv)
                     frontier.append((b, path + [mv]))
             raw.sort(key=lambda r: (r["loss"], -r["sac"]["pawns"]))
+            doubtful.sort(key=lambda r: (r["loss"], -r["sac"]["pawns"]))
             chosen = raw[:max_results]
+            second = [] if chosen else doubtful[:2]       # nothing passed at first sight: follow the two cheapest further before giving up
+            stats["too_costly"] = len(doubtful) - len(second)
+            chosen = chosen + second
             found = []
             for i, r in enumerate(chosen):
                 if cancel.is_set():
@@ -442,6 +495,7 @@ class GambitLab:
                 except GambitError:
                     continue
                 if detail["risk"]["value"] <= max_cost * 1.25:       # the full budget may disagree with the quick look
+                    stats["rescued"] += r in second
                     found.append(self._store(start_fen, r["path"], r["board"], r["move"], detail, {"origin": "search", **{k: cfg.get(k) for k in ("opening_id", "moves", "max_cost")}}))
                 else:
                     stats["too_costly"] += 1
@@ -449,7 +503,8 @@ class GambitLab:
         found.sort(key=lambda g: -(g["detail"].get("value") or 0))
         return {"found": [self._brief(g) for g in found], "ids": [g["id"] for g in found], **stats,
                 "note": f"Looked at {stats['positions']} position(s); {stats['sacrifices_seen']} sacrificial move(s) seen, "
-                        f"{stats['too_costly']} rejected as costing more than {round(max_cost * 100)} points."}
+                        f"{stats['too_costly']} rejected as costing more than {round(max_cost * 100)} points."
+                        + (f" {stats['rescued']} looked too costly at first sight and proved acceptable when the line was followed." if stats["rescued"] else "")}
 
     # ------------------------------------------------------------------ the ladder
     async def ladder(self, gid: str, gambiteer: EngineSpec, defender: EngineSpec, levels: list[dict[str, Any]], budget: Budget,
@@ -612,7 +667,8 @@ class GambitLab:
             parts.append(f"from {punished} the gambit is punished")
         if falls and not holds:
             parts.append("no tested level was safe from it")
-        return {"verdict": "; ".join(parts).capitalize() + ".", "falls_up_to": falls, "holds_from": holds, "punished_from": punished}
+        text = "; ".join(parts)
+        return {"verdict": text[0].upper() + text[1:] + ".", "falls_up_to": falls, "holds_from": holds, "punished_from": punished}
 
 
 # ---------------------------------------------------------------------------------------------- helpers

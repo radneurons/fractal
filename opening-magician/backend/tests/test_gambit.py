@@ -143,3 +143,15 @@ async def test_ladder_reports_each_level_and_a_verdict(lab, engines):
     assert stored["status"] == "tested" and stored["report"]["verdict"] == rep["verdict"] and lab.list()[0]["ladder"] == rep["verdict"]
     with pytest.raises(GambitError):
         await lab.ladder(g["id"], EngineSpec(engines.bundled_id), EngineSpec(engines.bundled_id), [], B, asyncio.Event(), lambda f: None)
+
+
+async def test_following_the_line_corrects_a_shallow_first_impression(lab, engines):
+    # At depth 2 the engine thinks grabbing the queen is Black's best reply; following that line shows the mate.
+    shallow = Budget.from_dict({**FAST, "max_depth": 2, "max_time": 12})
+    g = await lab.assess_line("e4 e5 Nf3 d6 Bc4 Bg4 Nc3 g6 Nxe5", None, EngineSpec(engines.bundled_id), shallow, asyncio.Event(), lambda f: None, horizon=4)
+    d = g["detail"]
+    trap = next(t for t in d["traps"] if t["san"] == "Bxd1")
+    assert "looking further" in trap["why"] and trap["line"].startswith("5...Bxd1 6.Bxf7+ Ke7 7.Nd5#")
+    assert d["accept"]["is_mistake"] and not d["main_line"].startswith("5...Bxd1")
+    assert d["risk"]["value"] == pytest.approx(max(0.0, d["expected_before"] - d["expected_best_defence"]), abs=0.002)   # the two always agree
+    assert "first_look" in d["risk"]

@@ -245,3 +245,8 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--bg-2); border
   .home .hero { top: 5%; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
+
+/* Gambit Lab */
+.side-list.wide { grid-template-columns: 360px minmax(0, 1fr); }
+.ladder-setup { grid-template-columns: minmax(260px, 1.3fr) 2fr; gap: 16px; align-items: start; }
+@media (max-width: 1050px) { .side-list.wide, .ladder-setup { grid-template-columns: 1fr; } }

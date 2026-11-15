@@ -28,6 +28,7 @@ therefore continues when the browser tab is closed.
 | `books/` | Transposition-aware book graph, importers/exporters, versions, proposals |
 | `learn/` | Trainer (SM-2, skills, weaknesses, tasks), puzzle lab, studies |
 | `prep/` | Preparation: game collections, dossier and prep sheet, leaks, coverage, move orders, structures, events, goal repertoires, drills, endgames (`core.py`); engine-backed checks (`engine.py`); optional online import (`online.py`) |
+| `gambit/` | Gambit Lab: material rule, exchange evaluation and compensation (`static.py`); assessment, search and the engine-level ladder (`lab.py`) |
 | `play.py` | Human-versus-engine sessions and post-game analysis |
 | `jobs.py` | Durable job scheduler with checkpoints and recovery |
 | `broadcast.py`, `package.py` | Read-only spectator state; portable project package |

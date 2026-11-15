@@ -6,7 +6,7 @@ import { Icon, Toasts } from "./ui/ui";
 const views: Record<ViewId, React.LazyExoticComponent<() => JSX.Element>> = {
   home: lazy(() => import("./views/Home")), play: lazy(() => import("./views/Play")), analysis: lazy(() => import("./views/Analysis")),
   openings: lazy(() => import("./views/Openings")), training: lazy(() => import("./views/Training")), puzzles: lazy(() => import("./views/Puzzles")),
-  discovery: lazy(() => import("./views/Discovery")), prep: lazy(() => import("./views/Prep")), tournaments: lazy(() => import("./views/Tournaments")), books: lazy(() => import("./views/Books")),
+  discovery: lazy(() => import("./views/Discovery")), prep: lazy(() => import("./views/Prep")), gambit: lazy(() => import("./views/Gambit")), tournaments: lazy(() => import("./views/Tournaments")), books: lazy(() => import("./views/Books")),
   studies: lazy(() => import("./views/Studies")), engines: lazy(() => import("./views/Engines")), chessnut: lazy(() => import("./views/Chessnut")),
   broadcast: lazy(() => import("./views/Broadcast")), settings: lazy(() => import("./views/Settings")),
 };
@@ -19,7 +19,7 @@ const NAV: { group: string; items: [ViewId, string, string][] }[] = [
     ["training", "Training", "M12 3l9 5-9 5-9-5zM6 11v5c3 3 9 3 12 0v-5"], ["puzzles", "Puzzles", "M10 3h4v3a2 2 0 104 0h3v6h-3a2 2 0 100 4h3v5H3v-5h3a2 2 0 100-4H3V6h7z"],
     ["studies", "Studies", "M5 4h11l3 3v13H5zM9 9h6M9 13h6M9 17h3"]] },
   { group: "Research", items: [
-    ["analysis", "Analysis", "M4 19V5M4 19h16M8 15l3-4 3 2 4-6"], ["prep", "Preparation", "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7zM9 12l2 2 4-4"], ["discovery", "Discovery Lab", "M10 3v6L5 19a1 1 0 001 2h12a1 1 0 001-2l-5-10V3M9 3h6M8 14h8"],
+    ["analysis", "Analysis", "M4 19V5M4 19h16M8 15l3-4 3 2 4-6"], ["prep", "Preparation", "M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7zM9 12l2 2 4-4"], ["discovery", "Discovery Lab", "M10 3v6L5 19a1 1 0 001 2h12a1 1 0 001-2l-5-10V3M9 3h6M8 14h8"], ["gambit", "Gambit Lab", "M13 2L4 14h7l-1 8 9-12h-7z"],
     ["tournaments", "Tournaments", "M7 4h10v4a5 5 0 01-10 0zM7 6H4a3 3 0 003 4M17 6h3a3 3 0 01-3 4M12 13v4M8 20h8"],
     ["books", "Book Forge", "M4 5a2 2 0 012-2h13v16H6a2 2 0 00-2 2zM4 19V5M9 8h6"]] },
   { group: "System", items: [
@@ -74,6 +74,7 @@ export default function App() {
                 <button key={id} className={`nav-item ${view === id ? "active" : ""}`} onClick={() => go(id)} title={label} aria-current={view === id}>
                   <Icon d={d} /><span>{label}</span>
                   {id === "discovery" && running.some((j) => j.kind === "experiment") && <i className="pill brass">live</i>}
+                  {id === "gambit" && running.some((j) => j.kind === "gambit") && <i className="pill brass">live</i>}
                   {id === "tournaments" && running.some((j) => j.kind === "tournament") && <i className="pill brass">live</i>}
                   {id === "chessnut" && hw?.connected && <i className={`pill ${hw.device?.simulated ? "sim" : "good"}`}>{hw.device?.simulated ? "SIM" : "on"}</i>}
                 </button>))}

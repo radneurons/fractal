@@ -44,7 +44,7 @@ const JobBar = ({ job }: { job: { busy: boolean; progress: number } }) => job.bu
 
 export default function Prep() {
   const { engines } = useStore();
-  const [tab, setTab] = useState<Tab>("opponent");
+  const [tab, setTab] = useState<Tab>(() => (useStore.getState().handoff?.moves?.length ? "practical" : "opponent"));   // a line handed over goes to the practical score
   const books = useApi<any[]>("/api/books");
   const cols = useApi<any[]>("/api/prep/collections");
   const [engine, setEngine] = useState<any>(null);

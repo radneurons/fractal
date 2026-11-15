@@ -40,6 +40,7 @@ weak. **For serious analysis register a strong engine** such as Stockfish in *En
 | **Discovery Lab** | Twelve strategies for exploring non-top moves; explorer engines generate, a stronger observer verifies; ten inspectable, re-runnable stages; seven separate explained scores per finding |
 | **Tournaments** | Round robin, gauntlet, knockout, Swiss, leagues; real clock or no-flag research budgets; standings with tie-breaks, Elo with confidence intervals, reports |
 | **Preparation** | Opponent dossier and prep sheet from their games; your own repertoire leaks turned into cards; coverage audit by frequency; human-practical scoring (only-moves, findability); move-order finder; pawn-structure plans, model games and guess-the-move; event calendar with tighter reviews and refutation alerts; drawing-weapon / must-win repertoires; blindfold and out-of-book survival drills; endgames linked to openings |
+| **Gambit Lab** | Finds and assesses sacrifices: material given up (including declined recaptures), **risk** against best defence, **sting** (only-moves and tempting moves that lose), static compensation; follows each line to correct shallow first impressions; **engine ladder** that plays the gambit against a range of defender strengths and reports which levels fall for it, with every game |
 | **Book Forge** | PGN / Polyglot / EPD / JSON / CSV import and export; transposition-aware graph; immutable versions, diff, restore; merge, filter, split, reweight; research proposals that need your approval |
 | **Training** | Spaced repetition, eight skill estimates, weakness correction, fifteen modes, ten mini-games |
 | **Puzzles** | Mined from games and research; accepted only when one move is clearly best; difficulty corrected by your results |
@@ -71,14 +72,16 @@ Read [docs/STATUS.md](docs/STATUS.md) before relying on anything hardware-relate
 ## Tests
 
 ```bash
-cd backend && ../.venv/bin/python -m pytest      # 108 tests: rules, Chessnut wire formats, clocks, pairings, engines,
+cd backend && ../.venv/bin/python -m pytest      # 125 tests: rules, Chessnut wire formats, clocks, pairings, engines,
                                                  # tournaments, discovery, hardware safety, books, database, API security,
-                                                 # preparation (dossier, leaks, coverage, move orders, structures, …)
+                                                 # preparation (dossier, leaks, coverage, move orders, structures, …),
+                                                 # gambit lab (material rule, assessment, search, engine ladder)
 cd frontend && npm test                          # move tree, PGN export, board parsing, clock description
 ```
 
 ## Documentation
 
+* [docs/GAMBITS.md](docs/GAMBITS.md) — the Gambit Lab: how sacrifices are found, scored and tested against engine levels
 * [docs/PREPARATION.md](docs/PREPARATION.md) — the ten preparation tools, what each one measures and what it does not
 * [docs/INSTALL.md](docs/INSTALL.md) — installation, engines per platform, LAN and server modes, desktop shell
 * [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the pieces fit, data model, security model
