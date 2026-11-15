@@ -67,6 +67,10 @@ the end), **held**, or **punished** it (35% or worse); whether it took the bait;
 with; and every game to open on the analysis board. The verdict reads, for example:
 *"Works up to Skill 4; from Skill 8 the defender no longer goes wrong."*
 
+A running assessment, search or ladder can be stopped; a stopped ladder keeps the levels it finished
+and says so. **Play it** on any level row starts a game in which you play the gambit yourself against
+that exact defender strength.
+
 **What the ladder is not.** Engine levels are not human ratings. A weakened engine goes wrong by
 shallow or noisy search; a human goes wrong by greed, habit and time trouble. Treat the ladder as a
 measure of how much calculation the defence requires, and use human games (the optional games book,
@@ -75,8 +79,10 @@ or the Opponent dossier) for the psychological side.
 ## From a finding to the board
 
 Every assessed gambit has buttons to analyse the line, play it against an engine, build a
-spaced-repetition deck from the main line, replay it on screen / LEDs / robot, or send it to the
-practical-score tool in Preparation.
+spaced-repetition deck from the main line, replay it on screen / LEDs / robot, send it to the
+practical-score tool in Preparation, or add its main line to one of your books as a candidate (with
+the risk, sting and ladder verdict in the comment). From the Analysis board, the "send to" menu has
+*Assess this line as a gambit*.
 
 ## API
 

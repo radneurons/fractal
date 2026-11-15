@@ -43,7 +43,8 @@ const DEFAULT: Prefs = {
 
 export type Toast = { id: number; text: string; kind: "info" | "ok" | "err" };
 export type Handoff = { fen?: string; moves?: string[]; startFen?: string; pgn?: string; title?: string; openingId?: string; bookId?: string;
-  playbackMoves?: string[]; findingId?: string; tournamentId?: string; experimentId?: string; engine?: boolean };
+  playbackMoves?: string[]; findingId?: string; tournamentId?: string; experimentId?: string; engine?: boolean;
+  strength?: any; color?: "white" | "black"; engineSpec?: any };
 
 type State = {
   view: ViewId; handoff: Handoff | null;

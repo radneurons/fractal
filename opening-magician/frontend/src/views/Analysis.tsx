@@ -130,6 +130,7 @@ export default function Analysis() {
   const sendMenu = (e: React.MouseEvent) => setMenu({ x: e.clientX, y: e.clientY, items: [
     { label: "Play against an engine from here", onClick: () => go("play", { fen: cur.fen }) },
     { label: "Explore alternatives in the Discovery Lab", onClick: () => go("discovery", { fen: cur.fen, moves, startFen: tree.root.fen }) },
+    { label: "Assess this line as a gambit (last move is the offer)", onClick: () => go("gambit", { moves, startFen: tree.root.fen === START_FEN ? undefined : tree.root.fen }) },
     { label: "Create a puzzle from this position", onClick: () => act(async () => { const r = await api.post("/api/puzzles/from-position", { fen: cur.fen, engine: rank.engine, budget: rank.budget }); toast(r.created ? "Puzzle created" : r.reason, r.created ? "ok" : "info"); }) },
     { label: "Save this line as a study", onClick: () => act(async () => { await api.post("/api/studies", { pgn: tree.toPgn(), title: opening?.name || "Analysis" }); go("studies"); }) },
     { label: "Make training cards from this line", onClick: () => act(() => api.post("/api/training/decks", { title: opening?.name || "Analysis line", start_fen: tree.root.fen === START_FEN ? null : tree.root.fen, moves, color: tree.root.fen.split(" ")[1] === "b" ? "black" : "white" }), "Deck created") },

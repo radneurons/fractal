@@ -567,6 +567,9 @@ class GambitLab:
                                    "common_mistake": mistakes.most_common(1)[0][0] if mistakes else None, "deterministic": deterministic,
                                    "samples": games})
         report = self._ladder_verdict(out_levels)
+        if cancel.is_set():
+            report["partial"] = True
+            report["verdict"] = "Stopped early — " + report["verdict"][0].lower() + report["verdict"][1:]
         report.update({"levels": out_levels, "gambiteer": gh.name, "defender_engine": self.engines.get(defender.engine_id)["name"],
                        "horizon": horizon, "games_per_level": games_per_level, "budget": budget.to_dict(), "at": now(),
                        "thresholds": {"fell": WON, "punished": LOST},

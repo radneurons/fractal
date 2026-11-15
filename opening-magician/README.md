@@ -72,7 +72,7 @@ Read [docs/STATUS.md](docs/STATUS.md) before relying on anything hardware-relate
 ## Tests
 
 ```bash
-cd backend && ../.venv/bin/python -m pytest      # 125 tests: rules, Chessnut wire formats, clocks, pairings, engines,
+cd backend && ../.venv/bin/python -m pytest      # 127 tests: rules, Chessnut wire formats, clocks, pairings, engines,
                                                  # tournaments, discovery, hardware safety, books, database, API security,
                                                  # preparation (dossier, leaks, coverage, move orders, structures, …),
                                                  # gambit lab (material rule, assessment, search, engine ladder)

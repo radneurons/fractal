@@ -15,26 +15,32 @@ const sameLevel = (a: any, b: any) => levelLabel(a) === levelLabel(b);
 
 function useJob() {
   const [state, setState] = useState<{ busy: boolean; progress: number; result: any }>({ busy: false, progress: 0, result: null });
-  const alive = useRef(true);
+  const alive = useRef(true); const jobId = useRef<string | null>(null);
   useEffect(() => () => { alive.current = false; }, []);
+  /** Resolves with the job's result, or `{ canceled: true }` when the user stopped it (partial work may have been saved). */
   const run = async (body: any): Promise<any> => {
     setState({ busy: true, progress: 0, result: null });
     try {
       const { job_id } = await api.post("/api/gambits/job", body);
+      jobId.current = job_id;
       for (;;) {
         await new Promise((r) => setTimeout(r, 700));
         if (!alive.current) return null;
         const j = await api.get(`/api/jobs/${job_id}`);
         if (j.status === "completed") { setState({ busy: false, progress: 1, result: j.result }); return j.result; }
-        if (["failed", "canceled", "cancelled"].includes(j.status)) throw new Error(j.error || `Job ${j.status}`);
+        if (j.status === "canceled") { setState({ busy: false, progress: 0, result: null }); useStore.getState().toast("Stopped", "info"); return { canceled: true }; }
+        if (j.status === "failed") throw new Error(j.error || "The job failed");
         setState((s) => ({ ...s, progress: j.progress || 0 }));
       }
     } catch (e) { setState({ busy: false, progress: 0, result: null }); useStore.getState().toast((e as Error).message, "err"); return null; }
+    finally { jobId.current = null; }
   };
-  return { ...state, run };
+  const cancel = () => { if (jobId.current) api.post(`/api/jobs/${jobId.current}/cancel`).catch(() => undefined); };
+  return { ...state, run, cancel };
 }
-const JobBar = ({ job, label = "Engine working…" }: { job: { busy: boolean; progress: number }; label?: string }) =>
-  job.busy ? <div className="row nowrap" style={{ marginTop: 8 }}><span className="muted nowrap">{label}</span><div className="grow"><Meter value={job.progress} kind="brass" /></div><span className="muted">{pct(job.progress)}</span></div> : null;
+const JobBar = ({ job, label = "Engine working…" }: { job: { busy: boolean; progress: number; cancel: () => void }; label?: string }) =>
+  job.busy ? <div className="row nowrap" style={{ marginTop: 8 }}><span className="muted nowrap">{label}</span><div className="grow"><Meter value={job.progress} kind="brass" /></div><span className="muted">{pct(job.progress)}</span>
+    <button className="btn xs" onClick={job.cancel}>Stop</button></div> : null;
 
 export default function Gambit() {
   const { engines, takeHandoff } = useStore();
@@ -44,6 +50,7 @@ export default function Gambit() {
   const [budget, setBudget] = useState({ min_time: 0.3, max_time: 2.5, min_depth: 8, max_depth: 22 });
   const [source, setSource] = useState<"known" | "line" | "search">("known");
   const [line, setLine] = useState("1.e4 e5 2.Nf3 Nc6 3.Bc4 Bc5 4.b4");
+  const books = useApi<any[]>("/api/books"); const [human, setHuman] = useState("");
   useEffect(() => { if (engines.length && !engine) setEngine({ engine_id: (engines.find((e) => e.kind === "native") || engines[0]).id, options: {}, profile_id: null }); }, [engines]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const h = takeHandoff(); if (h?.moves?.length) { setLine(GameTree.fromMoves(h.startFen, h.moves).sans().join(" ")); setSource("line"); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!sel && list.data?.length) setSel(list.data[0].id); }, [list.data]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -59,9 +66,11 @@ export default function Gambit() {
         <div className="col">
           <Panel tight>
             <Tabs value={source} onChange={setSource} items={[["known", "Known gambits"], ["line", "My line"], ["search", "Find new"]]} />
-            {source === "known" && <Known engine={engine} budget={budget} onDone={done} />}
-            {source === "line" && <OwnLine line={line} setLine={setLine} engine={engine} budget={budget} onDone={done} />}
-            {source === "search" && <Search line={line} setLine={setLine} engine={engine} budget={budget} onDone={done} />}
+            {source === "known" && <Known engine={engine} budget={budget} human={human} onDone={done} />}
+            {source === "line" && <OwnLine line={line} setLine={setLine} engine={engine} budget={budget} human={human} onDone={done} />}
+            {source === "search" && <Search line={line} setLine={setLine} engine={engine} budget={budget} human={human} onDone={done} />}
+            <Field label="Human games (optional)" help="A games book (an opponent's, or your own) shows how often real players took the bait." className="top-gap">
+              <select value={human} onChange={(e) => setHuman(e.target.value)}><option value="">none</option>{(books.data || []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
           </Panel>
           <Panel title="Assessed gambits" hint={list.data?.length ? "best practical value first" : undefined} tight>
             {[...(list.data || [])].sort((a, b) => (b.value || 0) - (a.value || 0)).map((g) => (
@@ -74,15 +83,15 @@ export default function Gambit() {
             {!list.data?.length && <div className="muted" style={{ padding: 6 }}>Nothing yet. Assess a known gambit, your own line, or let the engine look for sacrifices.</div>}
           </Panel>
         </div>
-        {sel ? <Detail key={sel} id={sel} engine={engine} budget={budget} onChanged={() => list.reload()} />
+        {sel ? <Detail key={sel} id={sel} engine={engine} budget={budget} books={books.data || []} onChanged={() => list.reload()} />
           : <div className="empty">A gambit is judged three ways here, and the three are never blended: <b>risk</b> (the price against best play), <b>sting</b> (how hard the defence is) and the <b>ladder</b> (who really goes wrong).</div>}
       </div>
     </div>
   );
 }
-type Src = { engine: any; budget: any; onDone: (id?: string) => void };
+type Src = { engine: any; budget: any; human: string; onDone: (id?: string) => void };
 
-function Known({ engine, budget, onDone }: Src) {
+function Known({ engine, budget, human, onDone }: Src) {
   const cat = useApi<any[]>("/api/gambits/catalogue");
   const job = useJob(); const [busyId, setBusyId] = useState("");
   return (
@@ -91,7 +100,7 @@ function Known({ engine, budget, onDone }: Src) {
         {(cat.data || []).map((g) => (
           <div key={g.opening_id} className="row nowrap" style={{ padding: "4px 2px", fontSize: 13 }} title={g.idea}>
             <div className="grow"><b>{g.name}</b><div className="mono muted" style={{ fontSize: 12 }}>{g.line_text} · {g.color}</div></div>
-            <button className="btn xs" disabled={!engine || job.busy} onClick={async () => { setBusyId(g.opening_id); const r = await job.run({ task: "assess", opening_id: g.opening_id, engine, budget }); if (r) onDone(r.id); }}>{job.busy && busyId === g.opening_id ? "…" : "Assess"}</button></div>))}
+            <button className="btn xs" disabled={!engine || job.busy} onClick={async () => { setBusyId(g.opening_id); const r = await job.run({ task: "assess", opening_id: g.opening_id, engine, budget, human_book_id: human || undefined }); if (r?.id) onDone(r.id); }}>{job.busy && busyId === g.opening_id ? "…" : "Assess"}</button></div>))}
       </div>
       <JobBar job={job} />
       <div className="help" style={{ marginTop: 6 }}>From the built-in opening catalogue. The move that makes the offer is located by a material rule, not by name.</div>
@@ -99,21 +108,18 @@ function Known({ engine, budget, onDone }: Src) {
   );
 }
 
-function OwnLine({ line, setLine, engine, budget, onDone }: Src & { line: string; setLine: (s: string) => void }) {
-  const books = useApi<any[]>("/api/books"); const [human, setHuman] = useState("");
+function OwnLine({ line, setLine, engine, budget, human, onDone }: Src & { line: string; setLine: (s: string) => void }) {
   const job = useJob();
   return (
     <div className="col" style={{ marginTop: 8 }}>
       <Field label="Moves up to and including the gambit move"><input type="text" value={line} onChange={(e) => setLine(e.target.value)} /></Field>
-      <Field label="Human games (optional)" help="A games book shows how often real opponents take the bait.">
-        <select value={human} onChange={(e) => setHuman(e.target.value)}><option value="">none</option>{(books.data || []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
-      <button className="btn primary" disabled={!engine || job.busy || !line.trim()} onClick={async () => { const r = await job.run({ task: "assess", moves: line, engine, budget, human_book_id: human || undefined }); if (r) onDone(r.id); }}>Assess this gambit</button>
+      <button className="btn primary" disabled={!engine || job.busy || !line.trim()} onClick={async () => { const r = await job.run({ task: "assess", moves: line, engine, budget, human_book_id: human || undefined }); if (r?.id) onDone(r.id); }}>Assess this gambit</button>
       <JobBar job={job} />
     </div>
   );
 }
 
-function Search({ line, setLine, engine, budget, onDone }: Src & { line: string; setLine: (s: string) => void }) {
+function Search({ line, setLine, engine, budget, human, onDone }: Src & { line: string; setLine: (s: string) => void }) {
   const [cfg, setCfg] = useState({ color: "white", max_ply: 6, max_positions: 12, max_cost: 15, min_pawns: 1, max_results: 4 });
   const set = (p: any) => setCfg({ ...cfg, ...p });
   const job = useJob();
@@ -129,8 +135,9 @@ function Search({ line, setLine, engine, budget, onDone }: Src & { line: string;
         <Field label="Keep the best"><Num value={cfg.max_results} min={1} max={12} onChange={(v) => set({ max_results: v })} /></Field>
       </div>
       <button className="btn primary" disabled={!engine || job.busy} onClick={async () => {
-        const r = await job.run({ task: "search", engine, budget, config: { ...cfg, max_cost: cfg.max_cost / 100, moves: line } });
-        if (r) { useStore.getState().toast(r.found.length ? `${r.found.length} gambit(s) found` : "No sacrifice within that price", r.found.length ? "ok" : "info"); onDone(r.ids[0]); }
+        const r = await job.run({ task: "search", engine, budget, config: { ...cfg, max_cost: cfg.max_cost / 100, moves: line, human_book_id: human || undefined } });
+        if (r?.canceled) onDone();
+        else if (r) { useStore.getState().toast(r.found.length ? `${r.found.length} gambit(s) found` : "No sacrifice within that price", r.found.length ? "ok" : "info"); onDone(r.ids[0]); }
       }}>Search for sacrifices</button>
       <JobBar job={job} />
       {job.result && <div className="help">{job.result.note}</div>}
@@ -140,8 +147,9 @@ function Search({ line, setLine, engine, budget, onDone }: Src & { line: string;
 }
 
 // ---------------------------------------------------------------------------------------------- one gambit
-function Detail({ id, engine, budget, onChanged }: { id: string; engine: any; budget: any; onChanged: () => void }) {
+function Detail({ id, engine, budget, books, onChanged }: { id: string; engine: any; budget: any; books: any[]; onChanged: () => void }) {
   const { go } = useStore();
+  const [book, setBook] = useState("");
   const g = useApi<any>(`/api/gambits/${id}`);
   if (!g.data) return <div className="muted">{g.error || "Loading…"}</div>;
   const d = g.data.detail, startFen = g.data.start_fen || undefined;
@@ -162,6 +170,11 @@ function Detail({ id, engine, budget, onChanged }: { id: string; engine: any; bu
               <button className="btn sm" onClick={() => act(() => api.post("/api/training/decks", { title: g.data.name, moves: full, start_fen: startFen, color: g.data.color }), "Training deck built")}>Drill the main line</button>
               <button className="btn sm" onClick={() => go("openings", { playbackMoves: full, startFen, title: g.data.name })}>Replay / send to board</button>
               <button className="btn sm" onClick={() => go("prep", { moves: full, startFen })}>Practical score</button>
+            </div>
+            <div className="row nowrap" style={{ maxWidth: 460 }}>
+              <select value={book} onChange={(e) => setBook(e.target.value)}><option value="">add the main line to a book…</option>{books.filter((b) => !["opponent", "games"].includes(b.profile)).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+              <button className="btn sm" disabled={!book} onClick={() => act(() => api.post(`/api/books/${book}/line`, { start_fen: startFen, moves: full, status: "candidate",
+                comment: `Gambit Lab: ${d.band}, risk ${Math.round(d.risk.value * 100)} pts, sting ${Math.round(d.sting.value * 100)}%${g.data.report?.verdict ? ` — ${g.data.report.verdict}` : ""}` }), "Added to the book as a candidate line")}>Add</button>
             </div>
           </div>
         </div>
@@ -240,7 +253,7 @@ function Ladder({ gambit, engine, budget, onDone }: { gambit: any; engine: any; 
           <div className="grid g2"><Field label="Games per level"><Num value={games} min={1} max={8} onChange={setGames} /></Field><Field label="Plies per game"><Num value={horizon} min={6} max={80} step={2} onChange={setHorizon} /></Field></div>
         </div>
         <div className="col">
-          <div className="label">Defender levels <span className="muted" style={{ textTransform: "none", letterSpacing: 0 }}>— {mech}</span></div>
+          <div className="label">Defender levels <span className="muted" style={{ textTransform: "none", letterSpacing: 0 }}>— suggested from {mech}; add or remove your own</span></div>
           <div className="row">{levels.map((l, i) => <button key={i} className="btn sm on" title="Remove this level" onClick={() => setLevels(levels.filter((_, k) => k !== i))}>{levelLabel(l)} ✕</button>)}
             {!levels.length && <span className="muted">No levels chosen.</span>}</div>
           <div className="row nowrap"><Select value={custom.mode} onChange={(v) => setCustom({ mode: v, value: v === "elo" ? 1500 : v === "time" ? 200 : v === "skill" ? 5 : 3 })} style={{ width: 150 }}
@@ -255,14 +268,15 @@ function Ladder({ gambit, engine, budget, onDone }: { gambit: any; engine: any; 
       </div>
       <JobBar job={job} label="Playing the games…" />
       {rep && <div style={{ marginTop: 14 }}>
-        <div className="note good" style={{ fontSize: 15 }}><b>{rep.verdict}</b></div>
+        <div className={`note ${rep.partial ? "warn" : "good"}`} style={{ fontSize: 15 }}><b>{rep.verdict}</b></div>
         <table className="t" style={{ marginTop: 8 }}><thead><tr><th>Defender</th><th>Fell for it</th><th /><th>Held</th><th>Punished it</th><th>Took the bait</th><th>Your chances at the end</th><th>Typical mistake</th><th /></tr></thead>
           <tbody>{rep.levels.map((l: any) => l.error ? <tr key={l.label}><td><b>{l.label}</b></td><td colSpan={8} className="bad-t">{l.error}</td></tr> : [
             <tr key={l.label}><td title={l.mechanism}><b>{l.label}</b>{l.approximate && <span className="muted"> ≈</span>}</td>
               <td style={{ width: 130 }}><Meter value={l.fell_rate} kind={l.fell_rate >= 0.5 ? "" : "bad"} /></td><td className="nowrap"><b>{l.fell}</b> / {l.games}</td>
               <td>{l.held}</td><td className={l.punished ? "bad-t" : ""}>{l.punished}</td><td>{l.accepted} / {l.games}</td><td>{pct(l.avg_final)}</td>
               <td className="mono">{l.common_mistake || "–"}</td>
-              <td className="right"><button className="btn xs" onClick={() => setOpen(open === l.label ? null : l.label)}>{open === l.label ? "Hide" : "Games"}</button></td></tr>,
+              <td className="right nowrap"><button className="btn xs" title="Play the gambit yourself against this level" onClick={() => go("play", { moves: gambit.line, startFen, strength: l.level, color: gambit.color, engineSpec: defender })}>Play it</button>{" "}
+                <button className="btn xs" onClick={() => setOpen(open === l.label ? null : l.label)}>{open === l.label ? "Hide" : "Games"}</button></td></tr>,
             open === l.label && <tr key={l.label + "g"}><td colSpan={9} style={{ background: "var(--panel-2)" }}>
               {l.deterministic && <div className="help">This level plays the same moves every time, so repeated games were skipped.</div>}
               {l.samples.map((s: any, i: number) => (

@@ -155,3 +155,38 @@ async def test_following_the_line_corrects_a_shallow_first_impression(lab, engin
     assert d["accept"]["is_mistake"] and not d["main_line"].startswith("5...Bxd1")
     assert d["risk"]["value"] == pytest.approx(max(0.0, d["expected_before"] - d["expected_best_defence"]), abs=0.002)   # the two always agree
     assert "first_look" in d["risk"]
+
+
+async def test_a_stopped_ladder_keeps_the_levels_it_finished(lab, engines):
+    g = await lab.assess_line("e4 e5 Nf3 d6 Bc4 Bg4 Nc3 g6 Nxe5", None, EngineSpec(engines.bundled_id), B, asyncio.Event(), lambda f: None, horizon=2)
+    stop = asyncio.Event()
+    rep = await lab.ladder(g["id"], EngineSpec(engines.bundled_id), EngineSpec(engines.bundled_id),
+                           [{"mode": "depth", "depth": 1}, {"mode": "depth", "depth": 2}, {"mode": "depth", "depth": 3}],
+                           Budget.from_dict({**FAST, "max_depth": 4, "max_time": 1.5}), stop, lambda f: stop.set() if f > 0 else None,
+                           games_per_level=1, horizon=6, seed=1)
+    assert rep["partial"] and rep["verdict"].startswith("Stopped early") and 1 <= len(rep["levels"]) < 3
+    assert lab.get(g["id"])["report"]["partial"]
+
+
+def test_gambit_routes_over_http():
+    import time
+    from test_learn_play_api import client
+    c, _ = client()
+    with c:
+        cat = c.get("/api/gambits/catalogue").json()
+        assert any(g["name"] == "King's Gambit" for g in cat) and c.get("/api/gambits").json() == []
+        eid = c.get("/api/engines").json()["engines"][0]["id"]
+        assert c.get(f"/api/gambits/levels?engine_id={eid}").json()["levels"]
+        assert c.post("/api/gambits/job", json={"task": "nonsense", "engine": {"engine_id": eid}}).status_code == 400
+        job = c.post("/api/gambits/job", json={"task": "assess", "moves": "e4 e5 f4", "engine": {"engine_id": eid}, "budget": FAST, "horizon": 2}).json()
+        for _ in range(200):
+            j = c.get(f"/api/jobs/{job['job_id']}").json()
+            if j["status"] in ("completed", "failed", "canceled"):
+                break
+            time.sleep(0.1)
+        assert j["status"] == "completed" and j["result"]["name"].startswith("King's Gambit")
+        gid = j["result"]["id"]
+        full = c.get(f"/api/gambits/{gid}").json()
+        assert full["san"] == "f4" and full["detail"]["sacrifice"]["pawns"] == 1 and c.get("/api/gambits").json()[0]["id"] == gid
+        assert c.get("/api/gambits/nope").status_code in (400, 404)
+        assert c.delete(f"/api/gambits/{gid}").json()["ok"] and c.get("/api/gambits").json() == []

@@ -2,7 +2,7 @@
 
 ## Verified during development
 
-* **125 automated bridge tests** pass (`backend/tests`): chess rules and draw rules; PGN round-trip with
+* **127 automated bridge tests** pass (`backend/tests`): chess rules and draw rules; PGN round-trip with
   variations, comments, NAGs and arrows; Chessnut encodings checked against the manufacturer's own
   decoding example; every clock mode including the physical-move allowance; round-robin, gauntlet,
   knockout and Swiss pairings; statistics; book formats (a Polyglot file written here is read back by

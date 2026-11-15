@@ -26,7 +26,8 @@ export default function Play() {
 
   useEffect(() => {
     const h = takeHandoff();
-    if (h?.fen || h?.moves) setSetup((s) => ({ ...s, start_fen: h.startFen || (h.moves ? "" : h.fen || ""), opening_moves: h.moves || [], mode: h.moves ? "opening_practice" : "position_practice" }));
+    if (h?.fen || h?.moves) setSetup((s) => ({ ...s, start_fen: h.startFen || (h.moves ? "" : h.fen || ""), opening_moves: h.moves || [], mode: h.moves ? "opening_practice" : "position_practice",
+      ...(h.strength ? { strength: h.strength } : {}), ...(h.color ? { color: h.color } : {}), ...(h.engineSpec ? { engine: h.engineSpec } : {}) }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!setup.engine && engines.length) set({ engine: { engine_id: engines[0].id, options: {}, profile_id: null } }); }, [engines]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (list.data?.active?.length && !session) setSession(list.data.active[0]); }, [list.data]); // eslint-disable-line react-hooks/exhaustive-deps
