@@ -20,6 +20,7 @@ export type AnnotationPreset = { name: string; arrowColor: string; thickness: nu
 
 export type Prefs = {
   theme: "library" | "marble" | "observatory" | "arena" | "zen" | "cosmic";
+  ui: string;                     // interface colour scheme: "auto" (matches the board theme), "system", or a scheme id from themes.ts
   boardMode: "2d" | "3d";
   pieces2d: string; pieces3d: string;
   graphics: Graphics;
@@ -33,7 +34,7 @@ export const DEFAULT_ANNOTATION: AnnotationPreset = { name: "Default", arrowColo
   highlight: 0.5, labels: true, tactical: true, durationMs: 0 };
 
 const DEFAULT: Prefs = {
-  theme: "library", boardMode: "2d", pieces2d: "staunton", pieces3d: "staunton",
+  theme: "library", ui: "auto", boardMode: "2d", pieces2d: "staunton", pieces3d: "staunton",
   graphics: { quality: "balanced", ...QUALITY_PRESETS.balanced }, focus: false, coordinates: true, legalDots: true, sound: false,
   annotation: DEFAULT_ANNOTATION,
   annotationPresets: [DEFAULT_ANNOTATION, { ...DEFAULT_ANNOTATION, name: "Lecture", arrowColor: "#e0a23a", thickness: 1.4, labels: true },

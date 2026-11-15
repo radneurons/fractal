@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { applyScheme, resolveScheme } from "./themes";
 import { api, live, useLive } from "./api";
 import { act, useStore, ViewId } from "./store";
 import { Icon, Toasts } from "./ui/ui";
@@ -34,7 +35,14 @@ export default function App() {
   const [wsOk, setWsOk] = useState(false);
   const watch = location.pathname.startsWith("/watch/");
 
-  useEffect(() => { document.documentElement.dataset.theme = prefs.theme; }, [prefs.theme]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = prefs.theme;
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const apply = () => applyScheme(resolveScheme(prefs.ui, prefs.theme, mq.matches));
+    apply();
+    mq.addEventListener("change", apply);          // "Follow my system" reacts when the OS switches
+    return () => mq.removeEventListener("change", apply);
+  }, [prefs.theme, prefs.ui]);
   useEffect(() => {
     if (watch) return;
     loadMeta(); loadEngines();

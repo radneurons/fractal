@@ -46,6 +46,7 @@ weak. **For serious analysis register a strong engine** such as Stockfish in *En
 | **Puzzles** | Mined from games and research; accepted only when one move is clearly best; difficulty corrected by your results |
 | **Studies** | Chapters as full PGN trees with comments, symbols and arrows; conversions to cards, puzzles and playback |
 | **Broadcast** | Consented, read-only spectator pages and an OBS browser-source layout |
+| **Colour schemes** | Interface colours chosen separately from the board theme: five light schemes (Daylight, Paper, Glacier, Meadow, Blossom), dark schemes, a high-contrast light/dark pair, "match the board" and "follow my system". Every text/background pair is contrast-tested |
 | **Project package** | One `.omproj` file to move everything to another computer |
 
 ## How the research loop fits together
@@ -76,7 +77,8 @@ cd backend && ../.venv/bin/python -m pytest      # 127 tests: rules, Chessnut wi
                                                  # tournaments, discovery, hardware safety, books, database, API security,
                                                  # preparation (dossier, leaks, coverage, move orders, structures, …),
                                                  # gambit lab (material rule, assessment, search, engine ladder)
-cd frontend && npm test                          # move tree, PGN export, board parsing, clock description
+cd frontend && npm test                          # move tree, PGN export, board parsing, clock description,
+                                                 # and the contrast of every colour scheme
 ```
 
 ## Documentation

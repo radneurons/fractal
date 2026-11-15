@@ -5,6 +5,7 @@ import Board from "../chess/Board";
 import { PIECE_SETS_2D, PieceIcon } from "../chess/pieces2d";
 import { PIECE_SETS_3D } from "../chess/three/pieces3d";
 import { THEMES_3D } from "../chess/three/themes3d";
+import { SCHEMES } from "../themes";
 import { act, GraphicsQuality, QUALITY_PRESETS, title, useStore } from "../store";
 import { Check, Field, Modal, Panel, Select, Tabs } from "../ui/ui";
 
@@ -25,10 +26,24 @@ export default function Settings() {
               <button className={`btn ${prefs.boardMode === "3d" ? "on" : ""}`} onClick={() => setPrefs({ boardMode: "3d" })}>3D board</button>
               <span className="help">In 3D: drag to orbit, wheel to zoom, double-click a piece to inspect it.</span></div></div>
           <div className="col gap-lg">
+            <Panel title="Interface colours" hint="independent of the board">
+              <div className="row" style={{ marginBottom: 10 }}>
+                <button className={`btn sm ${(prefs.ui || "auto") === "auto" ? "on" : ""}`} onClick={() => setPrefs({ ui: "auto" })}>Match the board theme</button>
+                <button className={`btn sm ${prefs.ui === "system" ? "on" : ""}`} onClick={() => setPrefs({ ui: "system" })} title="Daylight when your system is in light mode, otherwise the board theme's colours">Follow my system (light / dark)</button>
+              </div>
+              {(["Light", "Dark", "High contrast"] as const).map((group) => (
+                <div key={group} style={{ marginBottom: 10 }}><div className="label">{group}</div>
+                  <div className="grid g3">{SCHEMES.filter((x) => x.group === group).map((x) => (
+                    <button key={x.id} className={`scheme ${prefs.ui === x.id ? "on" : ""}`} aria-pressed={prefs.ui === x.id} onClick={() => setPrefs({ ui: x.id })}
+                      style={{ background: x.tokens.panel, color: x.tokens.ink, borderColor: x.tokens.line }}>
+                      <span className="sw"><i style={{ background: x.tokens.bg, border: `1px solid ${x.tokens.line}` }} /><i style={{ background: x.tokens.brass }} /><i style={{ background: x.tokens.emerald }} /><i style={{ background: x.tokens.ink }} /></span>
+                      <b>{x.name}</b><small style={{ color: x.tokens["ink-3"] }}>{x.note}</small></button>))}</div></div>))}
+              <p className="help">Every scheme is checked automatically: body text reaches at least 7:1 against its background and all other text at least 4.5:1 (WCAG AA); the high-contrast pair reaches 7:1 throughout. The home screen and the 3D board keep their own dark scene.</p>
+            </Panel>
             <Panel title="Environment">
               <div className="grid g2">{THEMES_3D.map((t) => (
                 <button key={t.id} className="card" style={prefs.theme === t.id ? { borderColor: "var(--brass)", background: "color-mix(in srgb, var(--brass) 12%, var(--panel))" } : undefined} onClick={() => setPrefs({ theme: t.id })}><b>{t.name}</b><small>{t.note}</small></button>))}</div>
-              <p className="help" style={{ marginTop: 8 }}>A theme changes the 3D scene, the 2D board colours and the interface accents together. Every theme keeps light and dark squares clearly apart.</p>
+              <p className="help" style={{ marginTop: 8 }}>A theme changes the 3D scene and the 2D board colours — and the interface colours too while “Match the board theme” is selected above. Every theme keeps light and dark squares clearly apart.</p>
             </Panel>
             <Panel title="2D pieces">
               <div className="grid g4">{PIECE_SETS_2D.map((s) => (

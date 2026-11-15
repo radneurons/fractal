@@ -66,7 +66,7 @@ function Graph({ root, sel, onPick, onMenu }: { root: any; sel: string; onPick: 
         {nodes.map((p) => (
           <g key={p.n.id} transform={`translate(${p.x}, ${p.y})`} style={{ cursor: "pointer" }} onClick={() => onPick(p.n)} onContextMenu={(e) => { e.preventDefault(); onMenu(p.n, e); }}>
             <rect width="60" height="24" rx="7" fill={sel === p.n.id ? "var(--brass)" : "var(--panel-2)"} stroke={STATUS_COLOR[p.n.status] || "var(--brass)"} strokeWidth={p.n.transposition_of ? 1 : 1.5} strokeDasharray={p.n.transposition_of ? "3 3" : undefined} />
-            <text x="30" y="16" textAnchor="middle" fontSize="12" fontFamily="var(--mono)" fill={sel === p.n.id ? "#1a1408" : "var(--ink)"}>{p.n.san || "start"}</text>
+            <text x="30" y="16" textAnchor="middle" fontSize="12" fontFamily="var(--mono)" fill={sel === p.n.id ? "var(--on-accent)" : "var(--ink)"}>{p.n.san || "start"}</text>
           </g>))}
       </g>
       <text x="10" y={16} fontSize="11" fill="var(--ink-3)">drag to pan · wheel to zoom · dashed blue = transposition · {nodes.length} positions · {Math.round(height)}px</text>

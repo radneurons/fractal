@@ -18,7 +18,12 @@
   the Gambit Lab (the material rule on classic gambits, static exchange evaluation, compensation,
   assessment with trap detection on Legal's trap, the correction of a shallow first impression by
   following the line, search, and a ladder in which a one-ply defender takes the queen and is mated).
-* **8 interface unit tests** pass (move tree, PGN export, board parsing, clock description).
+* **26 interface unit tests** pass (move tree, PGN export, board parsing, clock description, and — for each
+  of the 15 colour schemes — that every text/background pair the interface uses meets WCAG AA: body
+  text 7:1, all other text 4.5:1; the high-contrast pair 7:1 throughout).
+* **On-screen contrast audit**: a browser script measured every visible text node against its real
+  background on all fifteen views in ten schemes and found none below 4.5:1 (3:1 for large text).
+  Text drawn inside the board, the 3D scene and SVG diagrams is not covered by that audit.
 * **Browser runs** of the built application (headless Chromium, software WebGL): every view opens
   without console errors; a game was played, the Move simulator was driven through Robot Studio, an
   engine panel and ranked candidates ran, a three-engine tournament and a discovery experiment were
