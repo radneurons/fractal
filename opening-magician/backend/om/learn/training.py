@@ -198,6 +198,9 @@ class Trainer:
             ease, interval, reps = c["ease"], c["interval_days"], c["reps"]
         else:
             ease, interval, reps = sm2(c["ease"], c["interval_days"], c["reps"], q)
+            cap = self.event_cap(c["deck"])
+            if cap is not None:
+                interval = min(interval, cap)       # critical for an upcoming event: review more often as it nears
         lapses = c["lapses"] + (0 if (correct or also) else 1)
         due = now() + (interval * DAY if interval else 600)
         self.db.update("cards", card_id, {"ease": ease, "interval_days": interval, "reps": reps, "lapses": lapses, "due": due,
@@ -208,6 +211,14 @@ class Trainer:
                 "played_san": board.san(mv) if mv else None, "note": c["note"], "quality": q, "next_due": due, "interval_days": round(interval, 2),
                 "message": "Correct." if correct else ("Also in your repertoire here." if also else
                                                        f"Your repertoire move is {c['san']}.")}
+
+    def event_cap(self, deck: str, at: float | None = None) -> float | None:
+        """Longest review interval (days) allowed for a deck that is marked critical for an upcoming event:
+        a quarter of the days left, never less than half a day.  None when no future event uses the deck."""
+        t = at or now()
+        caps = [max(0.5, (ev["date"] - t) / DAY / 4) for ev in self.db.pref("prep_events", [])
+                if deck in ev.get("decks", []) and ev["date"] > t]
+        return min(caps) if caps else None
 
     def hint(self, card_id: str) -> dict[str, Any]:
         """First hint: which piece moves (the client counts it, and the answer is graded lower)."""

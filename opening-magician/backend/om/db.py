@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -140,16 +140,28 @@ MIGRATIONS: dict[int, str] = {
     CREATE INDEX links_src ON links(src_kind, src_id);
     CREATE INDEX links_dst ON links(dst_kind, dst_id);
     """,
+    3: """
+    CREATE TABLE collections (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, player TEXT, kind TEXT NOT NULL DEFAULT 'opponent', source TEXT,
+        stats TEXT NOT NULL DEFAULT '{}', white_book_id TEXT, black_book_id TEXT, created_at REAL NOT NULL
+    );
+    CREATE TABLE watch (
+        id TEXT PRIMARY KEY, book_id TEXT NOT NULL, epd TEXT NOT NULL, fen TEXT NOT NULL, move_uci TEXT NOT NULL,
+        san TEXT NOT NULL, line TEXT, baseline TEXT NOT NULL DEFAULT '{}', latest TEXT NOT NULL DEFAULT '{}',
+        history TEXT NOT NULL DEFAULT '[]', alert TEXT, updated_at REAL NOT NULL, UNIQUE(book_id, epd, move_uci)
+    );
+    CREATE INDEX watch_book ON watch(book_id);
+    """,
 }
 
 # Columns that hold JSON; decoded on read, encoded on write.
 JSON_COLS = {
     "args", "options", "defaults", "limits", "meta", "lines", "budget", "stats", "changes", "evidence", "config",
     "state", "report", "stages", "scores", "ranking", "solution", "alternatives", "themes", "source", "verification",
-    "tags", "refs", "line", "detail", "profile", "payload", "checkpoint", "result",
+    "tags", "refs", "line", "detail", "profile", "payload", "checkpoint", "result", "baseline", "latest", "history",
 }
 # hw_log.payload is a hex string, prefs.value handled separately, puzzles.source is JSON.
-RAW_OVERRIDES = {("hw_log", "payload"), ("books", "source"), ("books", "profile")}
+RAW_OVERRIDES = {("hw_log", "payload"), ("books", "source"), ("books", "profile"), ("watch", "line"), ("collections", "source")}
 
 
 def new_id(prefix: str = "") -> str:

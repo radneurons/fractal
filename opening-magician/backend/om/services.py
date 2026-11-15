@@ -23,6 +23,7 @@ from .learn.puzzles import PuzzleLab
 from .learn.studies import StudyManager
 from .learn.training import Trainer
 from .play import GameAnalyzer, PlayManager
+from .prep import Prep, PrepEngine
 from .tournament.manager import TournamentManager
 
 
@@ -173,6 +174,9 @@ class Services:
         self.broadcasts.register_source("play", self._bc_play)
         self.broadcasts.register_source("tournament", self._bc_tournament)
         self.broadcasts.register_source("playback", self._bc_playback)
+        self.prep = Prep(self.db, self.books, self.trainer)
+        self.prep_engine = PrepEngine(self.prep, self.engines)
+        self.jobs.register("prep", self._job_prep)
         self.jobs.register("puzzle_mining", self._job_puzzles)
         self.jobs.register("game_analysis", self._job_game_analysis)
         self.started_at = time.time()
@@ -289,6 +293,25 @@ class Services:
                                           max_puzzles=int(p.get("max_puzzles", 20)), cancel=ctx.cancel,
                                           on_progress=lambda f: ctx.checkpoint({}, f))
         return res
+
+    async def _job_prep(self, ctx: JobContext) -> dict[str, Any]:
+        """Engine-backed preparation work (dossier check, leak costs, practical scoring, watch, annotation)."""
+        p = ctx.job["payload"]
+        pe = self.prep_engine
+        engine, budget = EngineSpec.from_dict(p["engine"]), Budget.from_dict(p.get("budget"))
+        prog = lambda f: ctx.checkpoint({}, f)
+        task = p["task"]
+        if task == "dossier":
+            return await pe.check_dossier(p["collection_id"], engine, budget, ctx.cancel, prog)
+        if task == "leak_costs":
+            return await pe.leak_costs(p["collection_id"], p["book_id"], engine, budget, ctx.cancel, prog)
+        if task == "practical":
+            return await pe.practical(p["moves"], p.get("start_fen"), p.get("my_color", "white"), engine, budget, ctx.cancel, prog, p.get("human_book_id"))
+        if task == "watch":
+            return await pe.watch(p["book_id"], p.get("color", "white"), engine, budget, ctx.cancel, prog, int(p.get("max_ply", 16)), int(p.get("limit", 60)))
+        if task == "annotate":
+            return await pe.annotate(p["book_id"], p.get("color", "white"), engine, budget, ctx.cancel, prog, int(p.get("max_ply", 18)), int(p.get("limit", 150)))
+        raise ValueError(f"Unknown preparation task '{task}'")
 
     async def _job_game_analysis(self, ctx: JobContext) -> dict[str, Any]:
         p = ctx.job["payload"]

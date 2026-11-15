@@ -669,6 +669,106 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         S().trainer.log(body["mode"], bool(body["correct"]), body.get("time_ms"), int(body.get("hints", 0)), detail=body.get("detail"))
         return {"ok": True}
 
+    # ------------------------------------------------------------------ preparation
+    @app.get("/api/prep/collections", dependencies=A)
+    async def prep_collections() -> list[dict[str, Any]]:
+        return S().prep.collections()
+
+    @app.post("/api/prep/collections", dependencies=A)
+    async def prep_import(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        """Import a player's games from pasted PGN, or (optionally, online) by Lichess / Chess.com username."""
+        pgn, source = body.get("pgn") or "", "pgn"
+        if body.get("site") and body.get("username"):
+            from ..prep import online
+            pgn = await online.fetch(body["site"], body["username"], int(body.get("max_games", 300)))
+            source = f"{body['site']}: {body['username']}"
+        return S().prep.import_collection(body.get("name") or body.get("username") or body.get("player") or "Games", pgn,
+                                          player=body.get("player") or body.get("username"), kind=body.get("kind", "opponent"), source=source)
+
+    @app.delete("/api/prep/collections/{cid}", dependencies=A)
+    async def prep_collection_delete(cid: str) -> dict[str, Any]:
+        S().prep.delete_collection(cid)
+        return {"ok": True}
+
+    @app.get("/api/prep/dossier/{cid}", dependencies=A)
+    async def prep_dossier(cid: str, ref_book_id: str | None = None) -> dict[str, Any]:
+        return S().prep.dossier(cid, ref_book_id)
+
+    @app.post("/api/prep/sheet", dependencies=A)
+    async def prep_sheet(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        return S().prep.prep_sheet(body["collection_id"], body.get("my_color", "white"), body.get("my_book_id") or None)
+
+    @app.post("/api/prep/leaks", dependencies=A)
+    async def prep_leaks(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        if body.get("to_cards"):
+            return S().prep.leaks_to_cards(body["collection_id"], body["book_id"], int(body.get("min_count", 1)))
+        return S().prep.leaks(body["collection_id"], body["book_id"])
+
+    @app.post("/api/prep/coverage", dependencies=A)
+    async def prep_coverage(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        return S().prep.coverage(body["book_id"], body.get("color", "white"), body.get("source_book_id") or None, int(body.get("max_ply", 20)))
+
+    @app.post("/api/prep/move-orders", dependencies=A)
+    async def prep_move_orders(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        return S().prep.move_orders(body["moves"], body.get("start_fen"), body.get("freq_book_id") or None, body.get("me", "white"))
+
+    @app.get("/api/prep/structures", dependencies=A)
+    async def prep_structures(book_id: str, color: str = "white") -> dict[str, Any]:
+        return S().prep.structures(book_id, color)
+
+    @app.get("/api/prep/model-games", dependencies=A)
+    async def prep_model_games(structure: str) -> list[dict[str, Any]]:
+        return S().prep.model_games(structure)
+
+    @app.post("/api/prep/plan-task", dependencies=A)
+    async def prep_plan_task(body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+        return S().prep.plan_task(body.get("structure"), body.get("seed"))
+
+    @app.get("/api/prep/events", dependencies=A)
+    async def prep_events() -> list[dict[str, Any]]:
+        return S().prep.events()
+
+    @app.post("/api/prep/events", dependencies=A)
+    async def prep_event_save(body: dict[str, Any] = Body(...)) -> list[dict[str, Any]]:
+        return S().prep.save_event(body.get("name", ""), float(body["date"]), body.get("decks") or [], body.get("id"))
+
+    @app.delete("/api/prep/events/{eid}", dependencies=A)
+    async def prep_event_delete(eid: str) -> list[dict[str, Any]]:
+        return S().prep.delete_event(eid)
+
+    @app.get("/api/prep/alerts", dependencies=A)
+    async def prep_alerts(book_id: str | None = None) -> list[dict[str, Any]]:
+        return S().prep.alerts(book_id)
+
+    @app.post("/api/prep/alerts/{wid}/accept", dependencies=A)
+    async def prep_alert_accept(wid: str) -> dict[str, Any]:
+        S().prep_engine.rebase_watch(wid)
+        return {"ok": True}
+
+    @app.post("/api/prep/goal-book", dependencies=A)
+    async def prep_goal_book(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        return S().prep.goal_book(body["book_id"], body.get("color", "white"), body.get("goal", "draw"))
+
+    @app.post("/api/prep/recital", dependencies=A)
+    async def prep_recital(body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+        return S().prep.recital(body.get("book_id") or None, body.get("opening_id") or None, body.get("color", "white"), body.get("seed"))
+
+    @app.post("/api/prep/survival", dependencies=A)
+    async def prep_survival(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        return S().prep.survival_start(body["book_id"], body.get("color", "white"), body.get("seed"))
+
+    @app.get("/api/prep/endgames", dependencies=A)
+    async def prep_endgames(collection_id: str | None = None) -> dict[str, Any]:
+        return S().prep.endgames(collection_id)
+
+    @app.post("/api/prep/job", dependencies=A)
+    async def prep_job(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        """Start an engine-backed preparation task: dossier | leak_costs | practical | watch | annotate."""
+        if not body.get("engine"):
+            raise ValueError("Choose an engine")
+        job = S().jobs.submit("prep", body.get("collection_id") or body.get("book_id"), body, priority=4)
+        return {"job_id": job["id"]}
+
     # ------------------------------------------------------------------ puzzles
     @app.get("/api/puzzles", dependencies=A)
     async def pz_list(theme: str | None = None, level: str | None = None, source: str | None = None) -> dict[str, Any]:

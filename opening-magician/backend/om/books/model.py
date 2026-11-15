@@ -39,6 +39,7 @@ PROFILES = {
     "exploration": "Exploration Book — candidates that still need testing",
     "tournament_research": "Tournament Research Book — drives controlled engine experiments",
     "opponent": "Opponent-Specific Book — focused on one opponent's habits",
+    "games": "Games Book — built from a player's own games",
 }
 UNSUPPORTED = {
     ".ctg": "ChessBase CTG is a proprietary binary format. Export the book to PGN (or Polyglot .bin) from ChessBase/Fritz or a converter, then import that file.",
