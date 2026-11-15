@@ -143,7 +143,7 @@ async def adaptive_search(handle: EngineHandle, board: chess.Board, budget: Budg
                                 "order": [l["move"] for l in lines]})
             if not budget.adaptive:
                 continue
-            if len(legal) == 1 and depth >= 1:
+            if len(legal) == 1 and not root_moves and depth >= 1:     # a move singled out by root_moves still needs a real evaluation
                 reason = "single_legal_move"
                 break
             if elapsed < min_time or depth < budget.min_depth:
@@ -205,7 +205,7 @@ async def adaptive_search(handle: EngineHandle, board: chess.Board, budget: Budg
             reason = "max_depth"
         elif elapsed >= budget.max_time * 0.9:
             reason = "max_time"
-        elif len(legal) == 1:
+        elif len(legal) == 1 and not root_moves:
             reason = "single_legal_move"
     return {**base, "lines": lines, "stop_reason": reason, "stop_detail": STOP_REASONS.get(reason, reason),
             "elapsed": round(elapsed, 3), "depth": depth, "history": history[-40:], "complexity": round(complexity, 3)}

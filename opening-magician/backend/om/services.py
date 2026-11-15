@@ -24,6 +24,7 @@ from .learn.studies import StudyManager
 from .learn.training import Trainer
 from .play import GameAnalyzer, PlayManager
 from .prep import Prep, PrepEngine
+from .gambit import GambitLab
 from .tournament.manager import TournamentManager
 
 
@@ -177,6 +178,8 @@ class Services:
         self.prep = Prep(self.db, self.books, self.trainer)
         self.prep_engine = PrepEngine(self.prep, self.engines)
         self.jobs.register("prep", self._job_prep)
+        self.gambits = GambitLab(self.db, self.engines, self.books, self.play.strength_options)
+        self.jobs.register("gambit", self._job_gambit)
         self.jobs.register("puzzle_mining", self._job_puzzles)
         self.jobs.register("game_analysis", self._job_game_analysis)
         self.started_at = time.time()
@@ -312,6 +315,26 @@ class Services:
         if task == "annotate":
             return await pe.annotate(p["book_id"], p.get("color", "white"), engine, budget, ctx.cancel, prog, int(p.get("max_ply", 18)), int(p.get("limit", 150)))
         raise ValueError(f"Unknown preparation task '{task}'")
+
+    async def _job_gambit(self, ctx: JobContext) -> dict[str, Any]:
+        """Gambit Lab work: search for sacrifices, assess one line, or run the engine-level ladder."""
+        p = ctx.job["payload"]
+        lab = self.gambits
+        engine, budget = EngineSpec.from_dict(p["engine"]), Budget.from_dict(p.get("budget"))
+        prog = lambda f: ctx.checkpoint({}, f)
+        task = p["task"]
+        if task == "search":
+            return await lab.search(p.get("config") or {}, engine, budget, ctx.cancel, prog)
+        if task == "assess":
+            g = await lab.assess_line(p.get("moves") or [], p.get("start_fen"), engine, budget, ctx.cancel, prog, horizon=int(p.get("horizon", 8)),
+                                      human_book_id=p.get("human_book_id"), opening_id=p.get("opening_id"))
+            return {"id": g["id"], "name": g["name"]}
+        if task == "ladder":
+            rep = await lab.ladder(p["gambit_id"], engine, EngineSpec.from_dict(p.get("defender") or p["engine"]), p.get("levels") or [], budget,
+                                   ctx.cancel, prog, games_per_level=int(p.get("games_per_level", 2)), horizon=int(p.get("horizon", 30)),
+                                   defender_movetime_ms=p.get("defender_movetime_ms"), seed=p.get("seed"))
+            return {"id": p["gambit_id"], "verdict": rep["verdict"]}
+        raise ValueError(f"Unknown gambit task '{task}'")
 
     async def _job_game_analysis(self, ctx: JobContext) -> dict[str, Any]:
         p = ctx.job["payload"]

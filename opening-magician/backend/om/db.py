@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -151,6 +151,14 @@ MIGRATIONS: dict[int, str] = {
         history TEXT NOT NULL DEFAULT '[]', alert TEXT, updated_at REAL NOT NULL, UNIQUE(book_id, epd, move_uci)
     );
     CREATE INDEX watch_book ON watch(book_id);
+    """,
+    4: """
+    CREATE TABLE gambits (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL, start_fen TEXT, fen TEXT NOT NULL, epd TEXT NOT NULL,
+        move_uci TEXT NOT NULL, san TEXT NOT NULL, line TEXT NOT NULL DEFAULT '[]', detail TEXT NOT NULL DEFAULT '{}',
+        report TEXT NOT NULL DEFAULT '{}', config TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'assessed',
+        created_at REAL NOT NULL, updated_at REAL NOT NULL, UNIQUE(epd, move_uci)
+    );
     """,
 }
 

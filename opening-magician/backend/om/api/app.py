@@ -669,6 +669,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         S().trainer.log(body["mode"], bool(body["correct"]), body.get("time_ms"), int(body.get("hints", 0)), detail=body.get("detail"))
         return {"ok": True}
 
+    # ------------------------------------------------------------------ gambit lab
+    @app.get("/api/gambits", dependencies=A)
+    async def gambit_list() -> list[dict[str, Any]]:
+        return S().gambits.list()
+
+    @app.get("/api/gambits/catalogue", dependencies=A)
+    async def gambit_catalogue() -> list[dict[str, Any]]:
+        return S().gambits.catalogue()
+
+    @app.get("/api/gambits/levels", dependencies=A)
+    async def gambit_levels(engine_id: str) -> dict[str, Any]:
+        return S().gambits.levels_for(engine_id)
+
+    @app.post("/api/gambits/job", dependencies=A)
+    async def gambit_job(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        if body.get("task") not in ("search", "assess", "ladder") or not body.get("engine"):
+            raise HTTPException(400, "task (search | assess | ladder) and engine are required")
+        job = S().jobs.submit("gambit", body.get("gambit_id") or body["task"], body, priority=2)
+        return {"job_id": job["id"]}
+
+    @app.get("/api/gambits/{gid}", dependencies=A)
+    async def gambit_get(gid: str) -> dict[str, Any]:
+        return S().gambits.get(gid)
+
+    @app.delete("/api/gambits/{gid}", dependencies=A)
+    async def gambit_delete(gid: str) -> dict[str, Any]:
+        S().gambits.delete(gid)
+        return {"ok": True}
+
     # ------------------------------------------------------------------ preparation
     @app.get("/api/prep/collections", dependencies=A)
     async def prep_collections() -> list[dict[str, Any]]:
