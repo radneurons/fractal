@@ -78,11 +78,6 @@ export function footeBoundaries(inp: StructureInput): number[] {
     nov[i] = Math.max(0, s);
   }
   const mx = Math.max(...nov) || 1;
-  if (typeof process !== 'undefined' && process.env?.LE_DEBUG) {
-    let row = '  [novelty] ';
-    for (let i = 0; i < nB; i += 2) row += `${beats[i].toFixed(0)}:${(nov[i] / mx * 99).toFixed(0)} `;
-    console.log(row);
-  }
   const minDist = nB < 240 ? 16 : 32;
   // greedy peak picking by height
   const cand: number[] = [];
@@ -238,10 +233,6 @@ export function clusterAndLabel(
         if (oj >= 0.6 * (segs[j].end - segs[j].start) && Math.abs(segs[i].energy - segs[j].energy) < 0.12) union(i, j);
       }
     }
-  }
-  if (typeof process !== 'undefined' && process.env?.LE_DEBUG) {
-    console.log('  [structure] segments', segs.map((s) => `${s.start.toFixed(1)}:${s.energy.toFixed(2)}`).join(' '));
-    for (let i = 0; i < segs.length; i++) console.log('   sim', segs.map((_, j) => segSim(segs[i], segs[j]).toFixed(3)).join(' '));
   }
   segs.forEach((s, i) => { s.cluster = find(i); });
   // merge adjacent segments in the same cluster

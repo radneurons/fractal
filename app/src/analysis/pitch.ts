@@ -128,12 +128,16 @@ export function vibratoRate(f0: Float32Array, start: number, end: number): numbe
       const half = q < zc.length ? (zc[q] - zc[q - 1]) / FPS : Infinity;
       const ok = half >= 1 / 15 - 0.012 && half <= 1 / 9 + 0.012;
       if (!ok) {
-        const span = (zc[q - 1] - zc[a0]) / FPS;
-        if (span >= 0.4 && q - 1 - a0 >= 3) {
+        const core = (zc[q - 1] - zc[a0]) / FPS;
+        const nHalf = q - 1 - a0;
+        // the oscillation extends about half a period beyond the outer crossings (inside the valid run)
+        const hp = nHalf > 0 ? (zc[q - 1] - zc[a0]) / nHalf : 0;
+        const span = (Math.min(j - 1, zc[q - 1] + hp) - Math.max(i, zc[a0] - hp)) / FPS;
+        if (span >= 0.4 && nHalf >= 3) {
           let sq = 0, cnt = 0;
           for (let k = Math.floor(zc[a0]); k <= Math.ceil(zc[q - 1]); k++) { sq += d[k] * d[k]; cnt++; }
           const p2p = 2 * Math.SQRT2 * Math.sqrt(sq / cnt);
-          if (p2p >= 30 && span > best) { best = span; bestRate = (q - 1 - a0) / (2 * span); }
+          if (p2p >= 30 && span > best) { best = span; bestRate = nHalf / (2 * core); }
         }
         a0 = q;
       }

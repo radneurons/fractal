@@ -4,7 +4,7 @@ export function check(name: string, ok: boolean, detail = ''): void {
   if (ok) { passes++; console.log(`  ✓ ${name}${detail ? '  — ' + detail : ''}`); }
   else { fails++; console.log(`  ✗ ${name}${detail ? '  — ' + detail : ''}`); }
 }
-export function done(): never {
+export function done(): void {
   console.log(`  ${passes} passed, ${fails} failed`);
   process.exit(fails ? 1 : 0);
 }
