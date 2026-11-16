@@ -1,0 +1,5 @@
+:root { --bg: #0D0D0F; --panel: #151518; --panel2: #1C1C21; --line: #2A2A31; --text: #E9E9EE; --dim: #9A9AA6; --accent: #FF5A1F; --accent2: #FFD166; --ui-scale: 1; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: calc(13px * var(--ui-scale)) / 1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+#app { height: 100%; }
+canvas#stage { display: block; max-width: 100%; max-height: 100%; background: #000; }
