@@ -11,6 +11,7 @@ import { PromptPanel } from './panels/Prompt';
 import { BiblesPanel } from './panels/Bibles';
 import { TakesPanel } from './panels/Takes';
 import { ClaudePanel } from './panels/Claude';
+import { LivePanel } from './panels/Live';
 import { CommandBar } from './panels/CommandBar';
 import { installHotkeys } from './hotkeys';
 import { exportBlockout, importBlockout, recover, startAutosave, changeLogMarkdown } from './persist';
@@ -19,7 +20,7 @@ import { exportShotPackage } from './exporter';
 import { connectBridge, startProjectSync } from './gateway';
 import { initBaselines } from './director';
 
-const TABS: [string, string, React.FC][] = [['inspector', 'Inspector', Inspector], ['prompt', 'Prompt', PromptPanel], ['bibles', 'Bibles', BiblesPanel], ['takes', 'Takes', TakesPanel], ['claude', 'Claude', ClaudePanel]];
+const TABS: [string, string, React.FC][] = [['inspector', 'Inspector', Inspector], ['prompt', 'Prompt', PromptPanel], ['bibles', 'Bibles', BiblesPanel], ['takes', 'Takes', TakesPanel], ['claude', 'Claude', ClaudePanel], ['live', 'Live', LivePanel]];
 
 function TopBar({ openCommand }: { openCommand: () => void }) {
   const name = useStudio((s) => s.project.name), canUndo = useStudio((s) => s.history.past.length > 0), canRedo = useStudio((s) => s.history.future.length > 0), last = useStudio((s) => s.history.past[s.history.past.length - 1]?.label), theme = useStudio((s) => s.theme), savedAt = useStudio((s) => s.savedAt), pending = useStudio((s) => s.proposals.filter((p) => p.status === 'pending').length);

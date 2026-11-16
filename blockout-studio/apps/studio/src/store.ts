@@ -31,6 +31,9 @@ export interface Studio {
   say(role: ChatMsg['role'], text: string, extra?: Partial<ChatMsg>): void; notify(text: string, kind?: 'info' | 'error'): void;
 }
 let lastCoalesce = { key: '', at: 0 };
+/** Observers of locally-originated ops (collaboration rides on this). */
+export const localOpListeners = new Set<(op: Op) => void>();
+const emitOp = (op: Op) => localOpListeners.forEach((f) => f(op));
 let uid = 0; const nid = (p: string) => `${p}${Date.now().toString(36)}${(uid++).toString(36)}`;
 const snapT = (p: Project, t: number) => Math.round(Math.max(0, Math.min(p.duration, t)) * p.fps) / p.fps;
 export const cutDuration = (p: Project) => p.shots.reduce((a, s) => a + (s.end - s.start), 0);
@@ -51,17 +54,17 @@ export const useStudio = create<Studio>((set, get) => ({
     try {
       let { project, history } = get(); const now = Date.now();
       const merge = meta.coalesce && meta.coalesce === lastCoalesce.key && now - lastCoalesce.at < 1500 && history.past.length > 0;
-      if (merge) { const u = undo(project, history); project = u.project; history = { past: u.history.past, future: [] }; }
+      if (merge) { const u = undo(project, history); project = u.project; history = { past: u.history.past, future: [] }; if (u.entry) emitOp(u.entry.inverse); }
       const res = commit(project, history, op, { author: meta.author, label: meta.label ?? describeOp(op, project), at: now });
       lastCoalesce = { key: meta.coalesce ?? '', at: now };
       if (!res.entry) { if (merge) set({ project: res.project, history: res.history }); return false; }
       const log = merge ? get().changeLog.slice(0, -1) : get().changeLog;
       set({ project: res.project, history: res.history, changeLog: [...log, { at: now, label: res.entry.label, author: res.entry.author }].slice(-2000) });
-      return true;
+      emitOp(op); return true;
     } catch (e) { get().notify(e instanceof OpError ? e.message : String(e), 'error'); return false; }
   },
-  undo() { const s = get(), r = undo(s.project, s.history); if (r.entry) set({ project: r.project, history: r.history, changeLog: [...s.changeLog, { at: Date.now(), label: `Undo: ${r.entry.label}`, author: 'user' }] }); },
-  redo() { const s = get(), r = redo(s.project, s.history); if (r.entry) set({ project: r.project, history: r.history, changeLog: [...s.changeLog, { at: Date.now(), label: `Redo: ${r.entry.label}`, author: 'user' }] }); },
+  undo() { const s = get(), r = undo(s.project, s.history); if (r.entry) { set({ project: r.project, history: r.history, changeLog: [...s.changeLog, { at: Date.now(), label: `Undo: ${r.entry.label}`, author: 'user' }] }); emitOp(r.entry.inverse); } },
+  redo() { const s = get(), r = redo(s.project, s.history); if (r.entry) { set({ project: r.project, history: r.history, changeLog: [...s.changeLog, { at: Date.now(), label: `Redo: ${r.entry.label}`, author: 'user' }] }); emitOp(r.entry.op); } },
   load(p, log = []) { set({ project: p, history: emptyHistory(), changeLog: log, t: 0, playing: false, selection: null, activeShotId: p.shots[0]?.id ?? null, proposals: [], ghost: null, ghostId: null, currentTakeId: null, compareTakeId: null }); },
   setTime(t) { const s = get(), p = s.project, tt = snapT(p, t), cur = p.shots.find((x) => x.id === s.activeShotId), inside = cur && tt >= cur.start && tt < cur.end; set({ t: tt, ...(inside ? {} : { activeShotId: p.shots.find((x) => tt >= x.start && tt < x.end)?.id ?? s.activeShotId }) }); },
   step(frames) { const s = get(); set({ t: snapT(s.project, s.t + frames / s.project.fps), playing: false }); },

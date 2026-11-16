@@ -64,6 +64,7 @@ export async function startBridge(o: BridgeOptions = {}): Promise<Bridge> {
     /** Run a user-configured HTTP provider here so the key never leaves the bridge and CORS is not an issue. */
     async httpGenerate(p, actor) { const plugin = httpProvider(p.config), r = p.request as Record<string, any>; const req: GenRequest = { ...r, passes: Object.fromEntries(Object.entries(r.passes ?? {}).map(([k, v]) => [k, (v as string[]).map(unb64)])), firstFrame: r.firstFrame ? unb64(r.firstFrame) : undefined, lastFrame: r.lastFrame ? unb64(r.lastFrame) : undefined, keyframe: r.keyframe ? unb64(r.keyframe) : undefined, mask: r.mask ? unb64(r.mask) : undefined, source: r.source ? (r.source as string[]).map(unb64) : undefined, references: r.references ?? [] } as GenRequest; log(actor, `sent ${r.shotId} to ${plugin.name}`); return plugin.generate(req, { onProgress: (f, note) => broadcast({ type: 'gen:progress', jobId: p.jobId, fraction: f, note }), signal: { aborted: false }, secret: (n) => secrets.get(n) }); },
     log: () => state.log.slice(-200),
+    lanAddresses: async () => { const { networkInterfaces } = await import('node:os'); return Object.values(networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i!.address); },
   };
   const rpc = async (method: string, params: Record<string, unknown> = {}, actor = 'mcp') => { const f = RPC[method]; if (!f) throw new Error(`unknown method ${method}`); return f(params as Record<string, any>, actor); };
 

@@ -8,3 +8,4 @@ export * from './cine';
 export * from './continuity';
 export * from './presets';
 export * from './demo';
+export * from './mocap';
