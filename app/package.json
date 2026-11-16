@@ -1,0 +1,32 @@
+{
+  "name": "lyric-engine-pro",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kinetic typography for music and speech",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "fixtures": "node scripts/make-fixtures.mjs && node scripts/make-luts.mjs",
+    "test": "node scripts/test.mjs",
+    "e2e": "node scripts/e2e.mjs",
+    "new-effect": "node scripts/new-effect.mjs"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "3.8.1",
+    "fflate": "0.8.3",
+    "gifenc": "1.0.3",
+    "hyphen": "1.14.1",
+    "mp4-muxer": "5.2.2",
+    "webm-muxer": "5.1.4"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
+  }
+}
