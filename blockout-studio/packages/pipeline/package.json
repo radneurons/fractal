@@ -1,0 +1,3 @@
+{ "name": "@blockout/pipeline", "version": "0.1.0", "private": true, "type": "module",
+  "main": "src/index.ts", "types": "src/index.ts", "exports": { ".": "./src/index.ts" },
+  "dependencies": {"@blockout/core":"workspace:*","@blockout/render":"workspace:*","@blockout/prompting":"workspace:*","zod":"^3.23.8","fflate":"^0.8.2"}  }

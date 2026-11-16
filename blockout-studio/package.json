@@ -1,0 +1,25 @@
+{
+  "name": "blockout-studio",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "pnpm --filter @blockout/studio dev",
+    "bridge": "pnpm --filter @blockout/bridge start",
+    "dev:all": "pnpm -r --parallel --filter @blockout/studio --filter @blockout/bridge run dev",
+    "build": "pnpm --filter @blockout/studio build",
+    "typecheck": "tsc -b --pretty",
+    "test": "vitest run",
+    "test:e2e": "playwright test --trace off",
+    "mcp:install": "pnpm --filter @blockout/mcp run install-config",
+    "golden:update": "UPDATE_GOLDEN=1 vitest run packages/render"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  },
+  "pnpm": { "onlyBuiltDependencies": ["esbuild", "keytar"] }
+}
