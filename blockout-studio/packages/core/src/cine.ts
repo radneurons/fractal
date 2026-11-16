@@ -95,6 +95,8 @@ export function actionBeats(p: Project, c: Character, start: number, end: number
     const moving = d > 0.4, loco = !!def?.stride;
     let verb = VERBS[clip] ?? (p.clips[clip] ? `performs "${p.clips[clip].name}"` : clip);
     if (loco && !moving) verb = 'stands';
+    const HOLD: Record<string, string> = { fall: 'lies on the ground', sit: 'stays seated', block: 'holds a guard', point: 'keeps pointing', crouch: 'stays crouched' };
+    if (def && !def.loop && a - ks[i].t > def.dur / ks[i].speed + 0.05) verb = HOLD[clip] ?? 'stands ready';
     const beat: ActionBeat = { t: round(a - start, 2), end: round(Math.min(b, end) - start, 2), verb, clip: loco && !moving ? 'idle' : clip, distance: round(d, 1), speed: round(d / (b - a), 1) };
     if (moving) {
       beat.curve = turn / DEG > 25 ? 'curves left' : turn / DEG < -25 ? 'curves right' : 'straight';

@@ -1,0 +1,21 @@
+import { chromium } from '@playwright/test';
+const out = process.argv[2];
+const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 1600, height: 950 } }); const logs = [];
+p.on('console', m => { if (m.type() === 'error') logs.push('E: ' + m.text().slice(0, 300)); }); p.on('pageerror', e => logs.push('PAGEERROR ' + e.message.slice(0, 400)));
+await p.goto('http://localhost:5174/?fresh&nobridge'); await p.waitForTimeout(2500);
+await p.evaluate(() => { const s = window.__studio.getState(); s.select({ kind: 'shot', id: 's3' }); s.setTime(3.4); });
+await p.keyboard.press('Control+k'); await p.getByTestId('command-input').fill('Have the grey ronin circle him twice, then lunge as the camera cranes up.'); await p.keyboard.press('Enter');
+await p.getByTestId('proposal-card').waitFor({ timeout: 15000 }); await p.waitForTimeout(1500); await p.screenshot({ path: out + '-cmd.png' });
+await p.getByTestId('proposal-apply').click(); await p.waitForTimeout(500);
+const r1 = await p.evaluate(() => { const s = window.__studio.getState(); return { last: s.history.past.at(-1).label, author: s.history.past.at(-1).author, shots: s.project.shots.length, hist: s.history.past.length }; });
+await p.evaluate(() => window.__studio.getState().undo()); const r2 = await p.evaluate(() => window.__studio.getState().project.shots.length);
+// prompts
+await p.getByTestId('tab-prompt').click(); await p.evaluate(() => window.__studio.getState().select({ kind: 'shot', id: 's2' })); await p.getByTestId('compile-all').click(); await p.getByTestId('prompt-diff').waitFor({ timeout: 15000 }); await p.getByTestId('diff-accept').click(); await p.waitForTimeout(300);
+await p.evaluate(() => { const s = window.__studio.getState(); for (const pr of s.proposals) if (pr.status === 'pending') s.applyProposal(pr.id); });
+const r3 = await p.evaluate(() => Object.keys(window.__studio.getState().project.prompts.active).length);
+await p.evaluate(() => window.__studio.getState().dispatch({ type: 'setLens', cameraId: 'cam2', focal: 85 })); await p.waitForTimeout(400);
+const stale = await p.getByTestId('stale-badge').innerText(); await p.getByTestId('compile-stale').click(); await p.getByTestId('prompt-diff').waitFor({ timeout: 15000 }); await p.waitForTimeout(400);
+const pend = await p.evaluate(() => window.__studio.getState().proposals.filter(x => x.status === 'pending').map(x => x.meta.changes.map(c => c.shotId + ':' + c.provider + ':' + c.changed.join('+'))));
+await p.screenshot({ path: out + '-prompt.png' });
+console.log(JSON.stringify({ r1, r2, r3, stale, pend }, null, 1)); console.log(logs.slice(0, 8).join('\n')); await b.close();

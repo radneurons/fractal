@@ -82,6 +82,8 @@ export const ShotS = z.object({
 export const PromptVersionS = z.object({
   id: IdS, shotId: IdS, provider: z.string(), text: z.string(), parent: IdS.optional(), factsHash: z.string(),
   author: z.enum(['claude', 'user', 'local']), note: z.string().default(''), at: z.number().default(0),
+  /** The generated segments this text was assembled from; lets a recompile replace only what changed and keep manual wording. */
+  segments: z.record(z.string()).optional(), negative: z.string().optional(),
 });
 export const CritiqueS = z.object({
   staging: z.number().min(0).max(10), character: z.number().min(0).max(10), style: z.number().min(0).max(10), artifacts: z.number().min(0).max(10),

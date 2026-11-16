@@ -16,6 +16,8 @@ import { installHotkeys } from './hotkeys';
 import { exportBlockout, importBlockout, recover, startAutosave, changeLogMarkdown } from './persist';
 import { download } from './ui';
 import { exportShotPackage } from './exporter';
+import { connectBridge, startProjectSync } from './gateway';
+import { initBaselines } from './director';
 
 const TABS: [string, string, React.FC][] = [['inspector', 'Inspector', Inspector], ['prompt', 'Prompt', PromptPanel], ['bibles', 'Bibles', BiblesPanel], ['takes', 'Takes', TakesPanel], ['claude', 'Claude', ClaudePanel]];
 
@@ -48,8 +50,9 @@ export function App() {
   useEffect(() => {
     let stop = () => {}; const off = installHotkeys(() => setCmd(true));
     const noRecover = new URLSearchParams(location.search).has('fresh');
-    (noRecover ? Promise.resolve(false) : recover()).then((ok) => { if (ok) S().notify('Recovered your last session from autosave.'); stop = startAutosave(); });
-    return () => { off(); stop(); };
+    (noRecover ? Promise.resolve(false) : recover()).then((ok) => { if (ok) S().notify('Recovered your last session from autosave.'); stop = startAutosave(); initBaselines(S().project); connectBridge(); });
+    const offSync = startProjectSync();
+    return () => { off(); stop(); offSync(); };
   }, []);
   return <div className="flex h-full flex-col">
     <TopBar openCommand={() => setCmd(true)} />
