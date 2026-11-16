@@ -3,6 +3,7 @@ import type { App } from './app.ts';
 import type { MaterialSettings, PlanSegment, TransitionKind, Layer, BlendMode } from './types.ts';
 import { allEffects } from './effects/registry.ts';
 import { uid } from './project/state.ts';
+import { exportVideo, type ExportOptions } from './export/exporter.ts';
 
 export interface Hooks { [k: string]: unknown }
 
@@ -45,6 +46,14 @@ export function installHooks(app: App): Hooks {
     applyLyrics: (text: string) => app.applyLyrics(text),
     applyTranslation: (text: string) => app.applyTranslation(text),
     exportLrc: () => app.exportLrc(),
+    /** Export a clip and return it as base64 (the e2e scripts write it to disk and probe it). */
+    exportClip: async (o: Partial<ExportOptions> = {}) => {
+      const r = await exportVideo(app, { format: 'mp4', res: 720, fps: 30, start: 0, end: 2, quality: 12, ...o });
+      const buf = new Uint8Array(await r.blob.arrayBuffer());
+      let bin = '';
+      for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+      return { ...r, blob: undefined, base64: btoa(bin), bytes: buf.length };
+    },
     errors: [] as string[],
   };
   (window as unknown as { LE: Hooks }).LE = LE;

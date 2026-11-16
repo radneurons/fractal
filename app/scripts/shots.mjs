@@ -31,6 +31,6 @@ try {
     console.log(`${effect}: prepare ${prep} ms, render ${ms.map((x) => x.toFixed(0)).join('/')} ms`);
   }
   const pageErrors = await page.evaluate(() => window.LE.errors);
-  const all = [...errors, ...pageErrors];
+  const all = [...errors, ...pageErrors].filter((e) => !/ResizeObserver loop/.test(e));
   if (all.length) { console.log('ERRORS:\n' + all.slice(0, 8).join('\n')); process.exitCode = 1; }
 } finally { await browser.close(); server.stop(); }

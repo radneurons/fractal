@@ -40,6 +40,21 @@ const SYL = 0.28;
 export function alignToRecognised(ly: Lyrics, recRaw: RecWord[], a: Analysis | null, opts: { approx?: boolean } = {}): AlignResult {
   const W = ly.words;
   const rec = recRaw.map((r) => ({ ...r, text: normaliseWord(r.text) })).filter((r) => r.text);
+  // Whisper attaches leading silence to the first word after a pause: a word far longer than it can be
+  // sung starts late, not early. Keep its END and pull the start in (then onto a vocal onset if one is near).
+  for (const r of rec) {
+    const plausible = 0.35 + 0.45 * Math.max(1, Math.round(r.text.length / 3));
+    if (r.end - r.start > Math.max(1.5, plausible * 2)) {
+      let st = r.end - plausible;
+      if (a) {
+        const on = a.vocalOnsets.length ? a.vocalOnsets : a.onsets;
+        let best = st, bd = 0.45;
+        for (const t of on) { if (t < r.start || t > r.end) continue; const d = Math.abs(t - st); if (d < bd) { bd = d; best = t; } }
+        st = best;
+      }
+      r.start = Math.max(r.start, st);
+    }
+  }
   const n = W.length, m = rec.length;
   // ---- Needleman–Wunsch ----
   const S = new Float64Array((n + 1) * (m + 1));

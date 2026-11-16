@@ -325,7 +325,7 @@ export class Stage {
     if (pm) Object.assign(post, pm);
     const att = this.flashAttenuation(t);
     const g = this.guard;
-    const guardMix = g && s.flashGuard && att < 1 ? 0.3 + 0.7 * att : 1;
+    const guardMix = g && s.flashGuard && att < 1 ? 0.04 + 0.96 * att ** 0.7 : 1;
     const mean = g ? sample(g.mean, t, g.fps) : 0;
     if (!postIsNeutral(post) || guardMix < 0.999) {
       const m = Math.sqrt(Math.max(0, mean)); // display-referred grey for the precomputed mean luminance
@@ -340,6 +340,41 @@ export class Stage {
     if (saved) Object.assign(s, saved);
     this.frameMs = performance.now() - t00;
   }
+
+  /**
+   * Motion blur by sub-frame accumulation (§10.2): render(t) is pure, so S sub-frames across the shutter
+   * interval are averaged in linear light. Export only.
+   */
+  renderBlurred(t: number, fps: number, samples: number, shutterDeg: number): void {
+    const W = this.w, H = this.h;
+    const acc = this.blurAcc ?? (this.blurAcc = new Float32Array(0));
+    const n = W * H * 4;
+    const sum = acc.length === n ? acc : (this.blurAcc = new Float32Array(n));
+    sum.fill(0);
+    const g2 = this.blurCtx ?? (this.blurCtx = (makeCanvas(W, H).getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D));
+    if (g2.canvas.width !== W || g2.canvas.height !== H) { g2.canvas.width = W; g2.canvas.height = H; }
+    const lut = this.gammaLut ?? (this.gammaLut = Float32Array.from({ length: 256 }, (_, i) => (i / 255) ** 2.2));
+    for (let i = 0; i < samples; i++) {
+      const dt = ((samples > 1 ? i / (samples - 1) : 0.5) - 0.5) * (shutterDeg / 360) / fps;
+      this.renderAt(t + dt);
+      g2.globalCompositeOperation = 'copy';
+      g2.drawImage(this.canvas as HTMLCanvasElement, 0, 0);
+      const d = g2.getImageData(0, 0, W, H).data;
+      for (let k = 0; k < n; k += 4) { sum[k] += lut[d[k]]; sum[k + 1] += lut[d[k + 1]]; sum[k + 2] += lut[d[k + 2]]; sum[k + 3] += d[k + 3]; }
+    }
+    const out = g2.createImageData(W, H);
+    const o = out.data, inv = 1 / samples;
+    for (let k = 0; k < n; k += 4) {
+      o[k] = 255 * (sum[k] * inv) ** (1 / 2.2); o[k + 1] = 255 * (sum[k + 1] * inv) ** (1 / 2.2); o[k + 2] = 255 * (sum[k + 2] * inv) ** (1 / 2.2); o[k + 3] = sum[k + 3] * inv;
+    }
+    g2.putImageData(out, 0, 0);
+    this.g.globalCompositeOperation = 'copy';
+    this.g.drawImage(g2.canvas, 0, 0);
+    this.g.globalCompositeOperation = 'source-over';
+  }
+  private blurAcc: Float32Array | null = null;
+  private blurCtx: CanvasRenderingContext2D | null = null;
+  private gammaLut: Float32Array | null = null;
 
   /** The word mask of the plan layer at t, drawn into the stage canvas (tests, storyboards). */
   renderMaskAt(t: number): void {

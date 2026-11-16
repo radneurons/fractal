@@ -662,6 +662,10 @@ export class Broadside extends Canvas2DEffect {
       const r = Math.min(cap * 0.55, lw * 0.56);
       g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.arc(0, 0, r * 0.78, 0, Math.PI * 2, true); g.fill('evenodd');
       drawIcon(g, p.icon, r * 0.56);
+    } else if (p.shape === 'stem') {
+      // a tall, narrow icon standing in for the I
+      g.scale(Math.max(0.42, Math.min(0.7, (lw * 1.5) / cap)), 1);
+      drawIcon(g, p.icon, cap * 0.5);
     } else drawIcon(g, p.icon, Math.min(cap * 0.52, Math.max(lw * 0.62, cap * 0.3)));
     void world; void mask;
     g.restore();
