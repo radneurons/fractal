@@ -48,6 +48,15 @@ const GROUPS: [number, number, string][] = [
     tremble trembling rock rocking roll thunderous lightning electric shock rush flash blast boom`],
   [0.0, 0.2, `slow quiet hush hushed sleep sleeping asleep dream drift drifting float floating low lower under beneath below deep
     deeper sleepy pale faint dim still waiting`],
+  [0.5, 0.75, `tonight shout sing loud bounce clap hands fire lit burning bright spark sparks flame ignite blaze thunder roar roaring
+    charge storming rebel rebels revolution uprising defiant defy unbroken unbreakable survive survivor rising reborn awaken
+    conquer overcome breakthrough breaking-free release released unleash unleashed blast rocket lightning`],
+  [0.4, 0.2, `autumn evening dusk twilight candle lantern harbor window rainfall drizzle snowfall hometown yesterday childhood
+    letter letters photograph picture old older years ago once whisper whispering humming echo echoes tide tides drifting
+    wandering quiet-night lull softness velvet silver paper lamplight firelight`],
+  [-0.5, 0.5, `chain cage locked lock stolen steal stole thief buried bury sunk drowned swallowed hunger hungry starving thirst
+    cold-hearted cruel cruelty wicked evil sin sins sinner fallen fate doom ending apocalypse plague famine tyranny
+    surrender defeated defeat lose loser failing fail failed falling-apart wasted waste`],
   [0.2, 0.4, `heart hearts soul souls mind eyes hands hand face name names voice voices word words story stories time years days
     world earth land city town street house door window room road river mountain mountains tree trees sea`],
 ];

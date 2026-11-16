@@ -46,6 +46,33 @@ function spreadLine(words: Word[], start: number, avail: number, period: number)
   }
 }
 
+/**
+ * Maps u ∈ [0,1] to a time in [t0, t1] following cumulative vocal activity, so instrumental passages
+ * take (almost) no lyric time. Null when the activity curve is flat or missing.
+ */
+export function vocalWarp(a: Analysis | null, t0: number, t1: number): ((u: number) => number) | null {
+  if (!a || !a.vocal.length || t1 <= t0) return null;
+  const i0 = Math.floor(t0 * FPS), i1 = Math.min(a.vocal.length - 1, Math.ceil(t1 * FPS));
+  if (i1 - i0 < 4) return null;
+  const cum = new Float64Array(i1 - i0 + 2);
+  let quiet = 0;
+  for (let i = i0; i <= i1; i++) {
+    const on = a.vocal[i] > 0.35;
+    if (!on) quiet++;
+    cum[i - i0 + 1] = cum[i - i0] + (on ? a.vocal[i] : 0.02);
+  }
+  const tot = cum[cum.length - 1];
+  if (!(tot > 0) || quiet < 0.08 * (i1 - i0)) return null;
+  return (u: number) => {
+    const target = clamp(u, 0, 1) * tot;
+    let lo = 0, hi = cum.length - 1;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < target) lo = m + 1; else hi = m; }
+    const k = Math.max(1, lo);
+    const f = cum[k] > cum[k - 1] ? (target - cum[k - 1]) / (cum[k] - cum[k - 1]) : 0;
+    return (i0 + k - 1 + f) / FPS;
+  };
+}
+
 /** Plain text: spread over the first-to-last onset span by syllables (+2 per line), warped by vocal activity. */
 function spreadPlain(lines: Word[][], a: Analysis | null, duration: number): void {
   const t0 = a && a.onsets.length ? a.onsets[0] : 0;
@@ -53,26 +80,7 @@ function spreadPlain(lines: Word[][], a: Analysis | null, duration: number): voi
   // weights
   let total = 0;
   for (const l of lines) { total += 2; for (const w of l) if (!w.backing) total += w.syllables; }
-  // warp: cumulative vocal activity over [t0, t1] (instrumental passages take no lyric time)
-  let warp: ((u: number) => number) | null = null;
-  if (a && a.vocal.length) {
-    const i0 = Math.floor(t0 * FPS), i1 = Math.min(a.vocal.length - 1, Math.ceil(t1 * FPS));
-    const cum = new Float64Array(i1 - i0 + 2);
-    for (let i = i0; i <= i1; i++) cum[i - i0 + 1] = cum[i - i0] + Math.max(0.02, a.vocal[i] > 0.35 ? a.vocal[i] : 0.02);
-    const tot = cum[cum.length - 1];
-    let varies = 0;
-    for (let i = i0; i <= i1; i++) if (a.vocal[i] < 0.35) varies++;
-    if (tot > 0 && varies > 0.08 * (i1 - i0)) {
-      warp = (u: number) => {
-        const target = clamp(u, 0, 1) * tot;
-        let lo = 0, hi = cum.length - 1;
-        while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < target) lo = m + 1; else hi = m; }
-        const k = Math.max(1, lo);
-        const f = cum[k] > cum[k - 1] ? (target - cum[k - 1]) / (cum[k] - cum[k - 1]) : 0;
-        return (i0 + k - 1 + f) / FPS;
-      };
-    }
-  }
+  const warp = vocalWarp(a, t0, t1);
   const at = (u: number) => (warp ? warp(u) : t0 + (t1 - t0) * u);
   let acc = 0;
   for (const l of lines) {

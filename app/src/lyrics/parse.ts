@@ -118,8 +118,8 @@ function tokenise(text: string, into: RawToken[], voice?: string): void {
     const backing = depth > 0 || opens > 0;
     depth = Math.max(0, depth + opens - closes);
     if (!/[\p{L}\p{N}]/u.test(w)) {
-      // pure punctuation joins the previous token
-      if (into.length) into[into.length - 1].display += w;
+      // pure punctuation joins the previous token (symbols like "&" or "—" keep their space)
+      if (into.length) into[into.length - 1].display += (/^[&+—–-]/.test(w) ? ' ' : '') + w;
       continue;
     }
     into.push({ display: w, backing: backing || undefined, voice });
