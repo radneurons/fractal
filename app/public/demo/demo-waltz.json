@@ -1,0 +1,1171 @@
+{
+ "title": "Lantern Waltz",
+ "artist": "Lyric Engine Demo",
+ "duration": 66,
+ "bpm": 96,
+ "meter": 3,
+ "beats": [
+  0,
+  0.625,
+  1.25,
+  1.875,
+  2.5,
+  3.125,
+  3.75,
+  4.375,
+  5,
+  5.625,
+  6.25,
+  6.875,
+  7.5,
+  8.125,
+  8.75,
+  9.375,
+  10,
+  10.625,
+  11.25,
+  11.875,
+  12.5,
+  13.125,
+  13.75,
+  14.375,
+  15,
+  15.625,
+  16.25,
+  16.875,
+  17.5,
+  18.125,
+  18.75,
+  19.375,
+  20,
+  20.625,
+  21.25,
+  21.875,
+  22.5,
+  23.125,
+  23.75,
+  24.375,
+  25,
+  25.625,
+  26.25,
+  26.875,
+  27.5,
+  28.125,
+  28.75,
+  29.375,
+  30,
+  30.625,
+  31.25,
+  31.875,
+  32.5,
+  33.125,
+  33.75,
+  34.375,
+  35,
+  35.625,
+  36.25,
+  36.875,
+  37.5,
+  38.125,
+  38.75,
+  39.375,
+  40,
+  40.625,
+  41.25,
+  41.875,
+  42.5,
+  43.125,
+  43.75,
+  44.375,
+  45,
+  45.625,
+  46.25,
+  46.875,
+  47.5,
+  48.125,
+  48.75,
+  49.375,
+  50,
+  50.625,
+  51.25,
+  51.875,
+  52.5,
+  53.125,
+  53.75,
+  54.375,
+  55,
+  55.625,
+  56.25,
+  56.875,
+  57.5,
+  58.125,
+  58.75,
+  59.375,
+  60,
+  60.625,
+  61.25,
+  61.875,
+  62.5,
+  63.125,
+  63.75,
+  64.375,
+  65,
+  65.625
+ ],
+ "downbeats": [
+  0,
+  1.875,
+  3.75,
+  5.625,
+  7.5,
+  9.375,
+  11.25,
+  13.125,
+  15,
+  16.875,
+  18.75,
+  20.625,
+  22.5,
+  24.375,
+  26.25,
+  28.125,
+  30,
+  31.875,
+  33.75,
+  35.625,
+  37.5,
+  39.375,
+  41.25,
+  43.125,
+  45,
+  46.875,
+  48.75,
+  50.625,
+  52.5,
+  54.375,
+  56.25,
+  58.125,
+  60,
+  61.875,
+  63.75,
+  65.625
+ ],
+ "sections": [
+  {
+   "start": 0,
+   "label": "intro"
+  },
+  {
+   "start": 7.5,
+   "label": "verse"
+  },
+  {
+   "start": 18.75,
+   "label": "verse"
+  },
+  {
+   "start": 30,
+   "label": "chorus"
+  },
+  {
+   "start": 37.5,
+   "label": "bridge"
+  },
+  {
+   "start": 45,
+   "label": "chorus"
+  },
+  {
+   "start": 56.25,
+   "label": "outro"
+  }
+ ],
+ "tonic": 2,
+ "mode": "minor",
+ "keyChanges": [
+  {
+   "t": 37.5,
+   "tonic": 5,
+   "mode": "major"
+  }
+ ],
+ "chords": [
+  {
+   "start": 0,
+   "end": 1.875,
+   "root": 2,
+   "quality": "min"
+  },
+  {
+   "start": 1.875,
+   "end": 3.75,
+   "root": 7,
+   "quality": "min"
+  },
+  {
+   "start": 3.75,
+   "end": 5.625,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 5.625,
+   "end": 7.5,
+   "root": 2,
+   "quality": "min"
+  },
+  {
+   "start": 7.5,
+   "end": 9.375,
+   "root": 2,
+   "quality": "min"
+  },
+  {
+   "start": 9.375,
+   "end": 11.25,
+   "root": 7,
+   "quality": "min"
+  },
+  {
+   "start": 11.25,
+   "end": 13.125,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 13.125,
+   "end": 15,
+   "root": 2,
+   "quality": "min"
+  },
+  {
+   "start": 15,
+   "end": 16.875,
+   "root": 2,
+   "quality": "min"
+  },
+  {
+   "start": 16.875,
+   "end": 18.75,
+   "root": 7,
+   "quality": "min"
+  },
+  {
+   "start": 18.75,
+   "end": 20.625,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 20.625,
+   "end": 22.5,
+   "root": 2,
+   "quality": "min"
+  },
+  {
+   "start": 22.5,
+   "end": 24.375,
+   "root": 2,
+   "quality": "min"
+  },
+  {
+   "start": 24.375,
+   "end": 26.25,
+   "root": 7,
+   "quality": "min"
+  },
+  {
+   "start": 26.25,
+   "end": 28.125,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 28.125,
+   "end": 30,
+   "root": 2,
+   "quality": "min"
+  },
+  {
+   "start": 30,
+   "end": 31.875,
+   "root": 2,
+   "quality": "min"
+  },
+  {
+   "start": 31.875,
+   "end": 33.75,
+   "root": 7,
+   "quality": "min"
+  },
+  {
+   "start": 33.75,
+   "end": 35.625,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 35.625,
+   "end": 37.5,
+   "root": 2,
+   "quality": "min"
+  },
+  {
+   "start": 37.5,
+   "end": 39.375,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 39.375,
+   "end": 41.25,
+   "root": 10,
+   "quality": "maj"
+  },
+  {
+   "start": 41.25,
+   "end": 43.125,
+   "root": 0,
+   "quality": "maj"
+  },
+  {
+   "start": 43.125,
+   "end": 45,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 45,
+   "end": 46.875,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 46.875,
+   "end": 48.75,
+   "root": 10,
+   "quality": "maj"
+  },
+  {
+   "start": 48.75,
+   "end": 50.625,
+   "root": 0,
+   "quality": "maj"
+  },
+  {
+   "start": 50.625,
+   "end": 52.5,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 52.5,
+   "end": 54.375,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 54.375,
+   "end": 56.25,
+   "root": 10,
+   "quality": "maj"
+  },
+  {
+   "start": 56.25,
+   "end": 58.125,
+   "root": 0,
+   "quality": "maj"
+  },
+  {
+   "start": 58.125,
+   "end": 60,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 60,
+   "end": 61.875,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 61.875,
+   "end": 63.75,
+   "root": 10,
+   "quality": "maj"
+  }
+ ],
+ "vocalSpans": [
+  [
+   7.5,
+   8.045
+  ],
+  [
+   8.125,
+   10.545
+  ],
+  [
+   11.25,
+   14.325
+  ],
+  [
+   15,
+   16.795
+  ],
+  [
+   16.875,
+   18.075
+  ],
+  [
+   18.75,
+   21.825
+  ],
+  [
+   22.5,
+   25.8875
+  ],
+  [
+   26.25,
+   27.7325
+  ],
+  [
+   28.125,
+   29.6375
+  ],
+  [
+   30,
+   31.5125
+  ],
+  [
+   31.875,
+   35.545
+  ],
+  [
+   35.625,
+   37.1375
+  ],
+  [
+   37.5,
+   41.0125
+  ],
+  [
+   41.25,
+   42.7625
+  ],
+  [
+   42.9375,
+   44.4875
+  ],
+  [
+   45,
+   46.5125
+  ],
+  [
+   46.875,
+   52.1375
+  ],
+  [
+   52.5,
+   54.325
+  ],
+  [
+   54.6875,
+   56.1375
+  ],
+  [
+   57.50625,
+   59.643750000000004
+  ]
+ ],
+ "melisma": {
+  "text": "home",
+  "start": 42.9375,
+  "end": 44.4875,
+  "voice": "B",
+  "backing": false,
+  "midi": 64,
+  "plateaus": [
+   {
+    "start": 42.9375,
+    "end": 43.421875,
+    "midi": 60
+   },
+   {
+    "start": 43.421875,
+    "end": 43.90625,
+    "midi": 64
+   },
+   {
+    "start": 43.90625,
+    "end": 44.4875,
+    "midi": 67
+   }
+  ],
+  "melisma": true,
+  "vibratoHz": 6
+ },
+ "words": [
+  {
+   "text": "Lantern",
+   "start": 7.5,
+   "end": 8.075,
+   "voice": "A",
+   "backing": false,
+   "midi": 50,
+   "syllables": [
+    {
+     "text": "Lan",
+     "start": 7.5,
+     "end": 7.7875
+    },
+    {
+     "text": "tern",
+     "start": 7.7875,
+     "end": 8.075
+    }
+   ],
+   "tagged": false
+  },
+  {
+   "text": "light",
+   "start": 8.125,
+   "end": 8.7,
+   "voice": "A",
+   "backing": false,
+   "midi": 53
+  },
+  {
+   "text": "across",
+   "start": 8.75,
+   "end": 9.325,
+   "voice": "A",
+   "backing": false,
+   "midi": 57
+  },
+  {
+   "text": "the",
+   "start": 9.375,
+   "end": 9.6375,
+   "voice": "A",
+   "backing": false,
+   "midi": 55
+  },
+  {
+   "text": "water",
+   "start": 9.6875,
+   "end": 10.575,
+   "voice": "A",
+   "backing": false,
+   "midi": 53,
+   "syllables": [
+    {
+     "text": "wa",
+     "start": 9.6875,
+     "end": 10.13125
+    },
+    {
+     "text": "ter",
+     "start": 10.13125,
+     "end": 10.575
+    }
+   ],
+   "tagged": true
+  },
+  {
+   "text": "Carry",
+   "start": 11.25,
+   "end": 11.825,
+   "voice": "A",
+   "backing": false,
+   "midi": 50
+  },
+  {
+   "text": "me",
+   "start": 11.875,
+   "end": 12.45,
+   "voice": "A",
+   "backing": false,
+   "midi": 53
+  },
+  {
+   "text": "beyond",
+   "start": 12.5,
+   "end": 13.075,
+   "voice": "A",
+   "backing": false,
+   "midi": 55
+  },
+  {
+   "text": "the",
+   "start": 13.125,
+   "end": 13.3875,
+   "voice": "A",
+   "backing": false,
+   "midi": 52
+  },
+  {
+   "text": "harbor",
+   "start": 13.4375,
+   "end": 14.325,
+   "voice": "A",
+   "backing": false,
+   "midi": 50
+  },
+  {
+   "text": "Every",
+   "start": 15,
+   "end": 15.575,
+   "voice": "A",
+   "backing": false,
+   "midi": 57
+  },
+  {
+   "text": "yesterday",
+   "start": 15.625,
+   "end": 16.825,
+   "voice": "A",
+   "backing": false,
+   "midi": 55,
+   "syllables": [
+    {
+     "text": "yes",
+     "start": 15.625,
+     "end": 16.025
+    },
+    {
+     "text": "ter",
+     "start": 16.025,
+     "end": 16.424999999999997
+    },
+    {
+     "text": "day",
+     "start": 16.425,
+     "end": 16.825
+    }
+   ],
+   "tagged": true
+  },
+  {
+   "text": "is",
+   "start": 16.875,
+   "end": 17.1375,
+   "voice": "A",
+   "backing": false,
+   "midi": 53
+  },
+  {
+   "text": "fading",
+   "start": 17.1875,
+   "end": 18.075,
+   "voice": "A",
+   "backing": false,
+   "midi": 50
+  },
+  {
+   "text": "Silver",
+   "start": 18.75,
+   "end": 19.325,
+   "voice": "B",
+   "backing": false,
+   "midi": 62
+  },
+  {
+   "text": "rain",
+   "start": 19.375,
+   "end": 19.95,
+   "voice": "B",
+   "backing": false,
+   "midi": 65
+  },
+  {
+   "text": "upon",
+   "start": 20,
+   "end": 20.575,
+   "voice": "B",
+   "backing": false,
+   "midi": 64
+  },
+  {
+   "text": "the",
+   "start": 20.625,
+   "end": 20.8875,
+   "voice": "B",
+   "backing": false,
+   "midi": 62
+  },
+  {
+   "text": "window",
+   "start": 20.9375,
+   "end": 21.825,
+   "voice": "B",
+   "backing": false,
+   "midi": 60
+  },
+  {
+   "text": "Tell",
+   "start": 22.5,
+   "end": 23.075,
+   "voice": "B",
+   "backing": false,
+   "midi": 62
+  },
+  {
+   "text": "me",
+   "start": 23.125,
+   "end": 23.7,
+   "voice": "B",
+   "backing": false,
+   "midi": 65
+  },
+  {
+   "text": "where",
+   "start": 23.75,
+   "end": 24.325,
+   "voice": "B",
+   "backing": false,
+   "midi": 67
+  },
+  {
+   "text": "the",
+   "start": 24.375,
+   "end": 24.6375,
+   "voice": "B",
+   "backing": false,
+   "midi": 65
+  },
+  {
+   "text": "night",
+   "start": 24.6875,
+   "end": 25.2625,
+   "voice": "B",
+   "backing": false,
+   "midi": 64
+  },
+  {
+   "text": "goes",
+   "start": 25.3125,
+   "end": 25.8875,
+   "voice": "B",
+   "backing": false,
+   "midi": 62
+  },
+  {
+   "text": "I",
+   "start": 26.25,
+   "end": 26.5125,
+   "voice": "B",
+   "backing": false,
+   "midi": 57
+  },
+  {
+   "text": "remember,",
+   "start": 26.5625,
+   "end": 27.7625,
+   "voice": "B",
+   "backing": false,
+   "midi": 62,
+   "syllables": [
+    {
+     "text": "re",
+     "start": 26.5625,
+     "end": 26.9625
+    },
+    {
+     "text": "mem",
+     "start": 26.9625,
+     "end": 27.362499999999997
+    },
+    {
+     "text": "ber",
+     "start": 27.3625,
+     "end": 27.7625
+    }
+   ],
+   "tagged": true
+  },
+  {
+   "text": "I",
+   "start": 28.125,
+   "end": 28.3875,
+   "voice": "B",
+   "backing": false,
+   "midi": 60
+  },
+  {
+   "text": "remember",
+   "start": 28.4375,
+   "end": 29.6375,
+   "voice": "B",
+   "backing": false,
+   "midi": 62
+  },
+  {
+   "text": "Turn",
+   "start": 30,
+   "end": 30.575,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 57
+  },
+  {
+   "text": "with",
+   "start": 30.625,
+   "end": 30.8875,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 55
+  },
+  {
+   "text": "me,",
+   "start": 30.9375,
+   "end": 31.5125,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 53
+  },
+  {
+   "text": "around",
+   "start": 31.875,
+   "end": 32.45,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 55
+  },
+  {
+   "text": "and",
+   "start": 32.5,
+   "end": 32.7625,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 53
+  },
+  {
+   "text": "around",
+   "start": 32.8125,
+   "end": 33.7,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 50
+  },
+  {
+   "text": "(around)",
+   "start": 33.25,
+   "end": 33.7,
+   "voice": "backing",
+   "backing": true,
+   "midi": 62
+  },
+  {
+   "text": "Until",
+   "start": 33.75,
+   "end": 34.325,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 53
+  },
+  {
+   "text": "the",
+   "start": 34.375,
+   "end": 34.6375,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 52
+  },
+  {
+   "text": "morning",
+   "start": 34.6875,
+   "end": 35.575,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 57,
+   "syllables": [
+    {
+     "text": "mor",
+     "start": 34.6875,
+     "end": 35.13125
+    },
+    {
+     "text": "ning",
+     "start": 35.13125,
+     "end": 35.575
+    }
+   ],
+   "tagged": true
+  },
+  {
+   "text": "(ooh)",
+   "start": 35.625,
+   "end": 35.8875,
+   "voice": "backing",
+   "backing": true,
+   "midi": 65
+  },
+  {
+   "text": "comes",
+   "start": 35.9375,
+   "end": 37.1375,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 50
+  },
+  {
+   "text": "Open",
+   "start": 37.5,
+   "end": 38.075,
+   "voice": "A",
+   "backing": false,
+   "midi": 53
+  },
+  {
+   "text": "the",
+   "start": 38.125,
+   "end": 38.3875,
+   "voice": "A",
+   "backing": false,
+   "midi": 55
+  },
+  {
+   "text": "door,",
+   "start": 38.4375,
+   "end": 39.325,
+   "voice": "A",
+   "backing": false,
+   "midi": 57
+  },
+  {
+   "text": "let",
+   "start": 39.375,
+   "end": 39.6375,
+   "voice": "A",
+   "backing": false,
+   "midi": 58
+  },
+  {
+   "text": "summer",
+   "start": 39.6875,
+   "end": 40.2625,
+   "voice": "A",
+   "backing": false,
+   "midi": 60
+  },
+  {
+   "text": "in",
+   "start": 40.3125,
+   "end": 41.0125,
+   "voice": "A",
+   "backing": false,
+   "midi": 57
+  },
+  {
+   "text": "We",
+   "start": 41.25,
+   "end": 41.5125,
+   "voice": "B",
+   "backing": false,
+   "midi": 60
+  },
+  {
+   "text": "are",
+   "start": 41.5625,
+   "end": 41.825,
+   "voice": "B",
+   "backing": false,
+   "midi": 62
+  },
+  {
+   "text": "finally",
+   "start": 41.875,
+   "end": 42.7625,
+   "voice": "B",
+   "backing": false,
+   "midi": 65
+  },
+  {
+   "text": "home",
+   "start": 42.9375,
+   "end": 44.4875,
+   "voice": "B",
+   "backing": false,
+   "midi": 64,
+   "plateaus": [
+    {
+     "start": 42.9375,
+     "end": 43.421875,
+     "midi": 60
+    },
+    {
+     "start": 43.421875,
+     "end": 43.90625,
+     "midi": 64
+    },
+    {
+     "start": 43.90625,
+     "end": 44.4875,
+     "midi": 67
+    }
+   ],
+   "melisma": true,
+   "vibratoHz": 6
+  },
+  {
+   "text": "Turn",
+   "start": 45,
+   "end": 45.575,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 60
+  },
+  {
+   "text": "with",
+   "start": 45.625,
+   "end": 45.8875,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 58
+  },
+  {
+   "text": "me,",
+   "start": 45.9375,
+   "end": 46.5125,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 57
+  },
+  {
+   "text": "around",
+   "start": 46.875,
+   "end": 47.45,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 58
+  },
+  {
+   "text": "and",
+   "start": 47.5,
+   "end": 47.7625,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 57
+  },
+  {
+   "text": "around",
+   "start": 47.8125,
+   "end": 48.7,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 53
+  },
+  {
+   "text": "(around)",
+   "start": 48.25,
+   "end": 48.7,
+   "voice": "backing",
+   "backing": true,
+   "midi": 65
+  },
+  {
+   "text": "Until",
+   "start": 48.75,
+   "end": 49.325,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 57
+  },
+  {
+   "text": "the",
+   "start": 49.375,
+   "end": 49.6375,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 55
+  },
+  {
+   "text": "morning",
+   "start": 49.6875,
+   "end": 50.575,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 60
+  },
+  {
+   "text": "(ooh)",
+   "start": 50.625,
+   "end": 50.8875,
+   "voice": "backing",
+   "backing": true,
+   "midi": 69
+  },
+  {
+   "text": "comes",
+   "start": 50.9375,
+   "end": 52.1375,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 53
+  },
+  {
+   "text": "Yesterday",
+   "start": 52.5,
+   "end": 53.3875,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 60
+  },
+  {
+   "text": "is",
+   "start": 53.4375,
+   "end": 53.7,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 58
+  },
+  {
+   "text": "over",
+   "start": 53.75,
+   "end": 54.325,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 57
+  },
+  {
+   "text": "now",
+   "start": 54.6875,
+   "end": 55.8875,
+   "voice": "A+B",
+   "backing": false,
+   "midi": 53
+  },
+  {
+   "text": "(over",
+   "start": 55.1875,
+   "end": 55.5125,
+   "voice": "backing",
+   "backing": true,
+   "midi": 65
+  },
+  {
+   "text": "now)",
+   "start": 55.5625,
+   "end": 56.1375,
+   "voice": "backing",
+   "backing": true,
+   "midi": 65
+  },
+  {
+   "text": "Lantern",
+   "start": 57.50625,
+   "end": 58.081250000000004,
+   "voice": "A",
+   "backing": false,
+   "midi": 53
+  },
+  {
+   "text": "light",
+   "start": 58.13125,
+   "end": 59.643750000000004,
+   "voice": "A",
+   "backing": false,
+   "midi": 57
+  }
+ ]
+}

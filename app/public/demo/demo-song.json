@@ -1,0 +1,1061 @@
+{
+ "title": "Open the Garden Gate",
+ "artist": "Lyric Engine Demo",
+ "duration": 73,
+ "bpm": 120,
+ "meter": 4,
+ "beats": [
+  0,
+  0.5,
+  1,
+  1.5,
+  2,
+  2.5,
+  3,
+  3.5,
+  4,
+  4.5,
+  5,
+  5.5,
+  6,
+  6.5,
+  7,
+  7.5,
+  8,
+  8.5,
+  9,
+  9.5,
+  10,
+  10.5,
+  11,
+  11.5,
+  12,
+  12.5,
+  13,
+  13.5,
+  14,
+  14.5,
+  15,
+  15.5,
+  16,
+  16.5,
+  17,
+  17.5,
+  18,
+  18.5,
+  19,
+  19.5,
+  20,
+  20.5,
+  21,
+  21.5,
+  22,
+  22.5,
+  23,
+  23.5,
+  24,
+  24.5,
+  25,
+  25.5,
+  26,
+  26.5,
+  27,
+  27.5,
+  28,
+  28.5,
+  29,
+  29.5,
+  30,
+  30.5,
+  31,
+  31.5,
+  32,
+  32.5,
+  33,
+  33.5,
+  34,
+  34.5,
+  35,
+  35.5,
+  36,
+  36.5,
+  37,
+  37.5,
+  38,
+  38.5,
+  39,
+  39.5,
+  40,
+  40.5,
+  41,
+  41.5,
+  42,
+  42.5,
+  43,
+  43.5,
+  44,
+  44.5,
+  45,
+  45.5,
+  46,
+  46.5,
+  47,
+  47.5,
+  48,
+  48.5,
+  49,
+  49.5,
+  50,
+  50.5,
+  51,
+  51.5,
+  52,
+  52.5,
+  53,
+  53.5,
+  54,
+  54.5,
+  55,
+  55.5,
+  56,
+  56.5,
+  57,
+  57.5,
+  58,
+  58.5,
+  59,
+  59.5,
+  60,
+  60.5,
+  61,
+  61.5,
+  62,
+  62.5,
+  63,
+  63.5,
+  64,
+  64.5,
+  65,
+  65.5,
+  66,
+  66.5,
+  67,
+  67.5,
+  68,
+  68.5,
+  69,
+  69.5,
+  70,
+  70.5,
+  71,
+  71.5,
+  72,
+  72.5
+ ],
+ "downbeats": [
+  0,
+  2,
+  4,
+  6,
+  8,
+  10,
+  12,
+  14,
+  16,
+  18,
+  20,
+  22,
+  24,
+  26,
+  28,
+  30,
+  32,
+  34,
+  36,
+  38,
+  40,
+  42,
+  44,
+  46,
+  48,
+  50,
+  52,
+  54,
+  56,
+  58,
+  60,
+  62,
+  64,
+  66,
+  68,
+  70,
+  72
+ ],
+ "sections": [
+  {
+   "start": 0,
+   "label": "intro"
+  },
+  {
+   "start": 8,
+   "label": "verse"
+  },
+  {
+   "start": 24,
+   "label": "chorus"
+  },
+  {
+   "start": 40,
+   "label": "breakdown"
+  },
+  {
+   "start": 48,
+   "label": "chorus"
+  },
+  {
+   "start": 64,
+   "label": "outro"
+  }
+ ],
+ "drops": [
+  48
+ ],
+ "tonic": 9,
+ "chords": [
+  {
+   "start": 0,
+   "end": 2,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 2,
+   "end": 4,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 4,
+   "end": 6,
+   "root": 7,
+   "quality": "maj"
+  },
+  {
+   "start": 6,
+   "end": 8,
+   "root": 4,
+   "quality": "maj"
+  },
+  {
+   "start": 8,
+   "end": 10,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 10,
+   "end": 12,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 12,
+   "end": 14,
+   "root": 7,
+   "quality": "maj"
+  },
+  {
+   "start": 14,
+   "end": 16,
+   "root": 4,
+   "quality": "maj"
+  },
+  {
+   "start": 16,
+   "end": 18,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 18,
+   "end": 20,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 20,
+   "end": 22,
+   "root": 7,
+   "quality": "maj"
+  },
+  {
+   "start": 22,
+   "end": 24,
+   "root": 4,
+   "quality": "maj"
+  },
+  {
+   "start": 24,
+   "end": 26,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 26,
+   "end": 28,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 28,
+   "end": 30,
+   "root": 7,
+   "quality": "maj"
+  },
+  {
+   "start": 30,
+   "end": 32,
+   "root": 4,
+   "quality": "maj"
+  },
+  {
+   "start": 32,
+   "end": 34,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 34,
+   "end": 36,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 36,
+   "end": 38,
+   "root": 7,
+   "quality": "maj"
+  },
+  {
+   "start": 38,
+   "end": 40,
+   "root": 4,
+   "quality": "maj"
+  },
+  {
+   "start": 40,
+   "end": 42,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 42,
+   "end": 44,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 44,
+   "end": 46,
+   "root": 7,
+   "quality": "maj"
+  },
+  {
+   "start": 46,
+   "end": 48,
+   "root": 4,
+   "quality": "maj"
+  },
+  {
+   "start": 48,
+   "end": 50,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 50,
+   "end": 52,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 52,
+   "end": 54,
+   "root": 7,
+   "quality": "maj"
+  },
+  {
+   "start": 54,
+   "end": 56,
+   "root": 4,
+   "quality": "maj"
+  },
+  {
+   "start": 56,
+   "end": 58,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 58,
+   "end": 60,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 60,
+   "end": 62,
+   "root": 7,
+   "quality": "maj"
+  },
+  {
+   "start": 62,
+   "end": 64,
+   "root": 4,
+   "quality": "maj"
+  },
+  {
+   "start": 64,
+   "end": 66,
+   "root": 9,
+   "quality": "maj"
+  },
+  {
+   "start": 66,
+   "end": 68,
+   "root": 5,
+   "quality": "maj"
+  },
+  {
+   "start": 68,
+   "end": 70,
+   "root": 7,
+   "quality": "maj"
+  },
+  {
+   "start": 70,
+   "end": 72,
+   "root": 4,
+   "quality": "maj"
+  }
+ ],
+ "onsets": [
+  8,
+  8.25,
+  8.5,
+  9,
+  9.25,
+  9.5,
+  10,
+  10.5,
+  11,
+  11.5,
+  12,
+  12.25,
+  12.5,
+  13,
+  13.25,
+  13.5,
+  14,
+  14.5,
+  15,
+  15.5,
+  16,
+  16.25,
+  16.5,
+  16.75,
+  17,
+  17.25,
+  17.5,
+  18,
+  18.25,
+  18.5,
+  19,
+  19.5,
+  20,
+  20.25,
+  20.5,
+  20.75,
+  21,
+  21.25,
+  21.5,
+  22,
+  22.5,
+  23,
+  23.5,
+  24,
+  24.5,
+  25,
+  25.5,
+  26,
+  26.5,
+  27,
+  27.5,
+  28,
+  28.5,
+  29,
+  29.5,
+  30,
+  30.5,
+  31,
+  31.5,
+  32,
+  32.5,
+  33,
+  33.5,
+  34,
+  34.5,
+  35,
+  35.5,
+  36,
+  36.25,
+  36.5,
+  37,
+  37.5,
+  38,
+  38.5,
+  39,
+  39.5,
+  41,
+  42,
+  42.25,
+  42.5,
+  44.5,
+  45,
+  46,
+  46.5,
+  48,
+  48.5,
+  49,
+  49.25,
+  49.5,
+  50,
+  50.25,
+  50.5,
+  51,
+  51.5,
+  52,
+  52.5,
+  53,
+  53.25,
+  53.5,
+  54,
+  54.25,
+  54.5,
+  55,
+  55.5,
+  56,
+  56.5,
+  57,
+  57.5,
+  58,
+  58.5,
+  59,
+  59.5,
+  60,
+  60.25,
+  60.5,
+  61,
+  61.5,
+  62,
+  62.5,
+  63,
+  63.5,
+  64,
+  65,
+  65.25,
+  65.75,
+  66.5,
+  66.75,
+  67,
+  68
+ ],
+ "words": [
+  {
+   "text": "I've",
+   "start": 8,
+   "end": 8.21,
+   "midi": 52
+  },
+  {
+   "text": "been",
+   "start": 8.25,
+   "end": 8.46,
+   "midi": 52
+  },
+  {
+   "text": "waiting",
+   "start": 8.5,
+   "end": 9.21,
+   "midi": 57
+  },
+  {
+   "text": "for",
+   "start": 9.25,
+   "end": 9.46,
+   "midi": 54
+  },
+  {
+   "text": "the",
+   "start": 9.5,
+   "end": 9.71,
+   "midi": 52
+  },
+  {
+   "text": "light",
+   "start": 10,
+   "end": 10.96,
+   "midi": 61
+  },
+  {
+   "text": "An",
+   "start": 12,
+   "end": 12.21,
+   "midi": 53
+  },
+  {
+   "text": "ember",
+   "start": 12.25,
+   "end": 12.96,
+   "midi": 57
+  },
+  {
+   "text": "in",
+   "start": 13,
+   "end": 13.21,
+   "midi": 53
+  },
+  {
+   "text": "the",
+   "start": 13.25,
+   "end": 13.46,
+   "midi": 53
+  },
+  {
+   "text": "quiet",
+   "start": 13.5,
+   "end": 13.96,
+   "midi": 55
+  },
+  {
+   "text": "night",
+   "start": 14,
+   "end": 14.96,
+   "midi": 60
+  },
+  {
+   "text": "The",
+   "start": 16,
+   "end": 16.21,
+   "midi": 50
+  },
+  {
+   "text": "river",
+   "start": 16.25,
+   "end": 16.71,
+   "midi": 55
+  },
+  {
+   "text": "runs",
+   "start": 16.75,
+   "end": 17.21,
+   "midi": 59
+  },
+  {
+   "text": "to",
+   "start": 17.25,
+   "end": 17.46,
+   "midi": 55
+  },
+  {
+   "text": "meet",
+   "start": 17.5,
+   "end": 17.96,
+   "midi": 55
+  },
+  {
+   "text": "the",
+   "start": 18,
+   "end": 18.21,
+   "midi": 50
+  },
+  {
+   "text": "morning",
+   "start": 18.25,
+   "end": 19.21,
+   "midi": 59
+  },
+  {
+   "text": "And",
+   "start": 20,
+   "end": 20.21,
+   "midi": 52
+  },
+  {
+   "text": "every",
+   "start": 20.25,
+   "end": 20.71,
+   "midi": 56
+  },
+  {
+   "text": "wall",
+   "start": 20.75,
+   "end": 21.21,
+   "midi": 59
+  },
+  {
+   "text": "we",
+   "start": 21.25,
+   "end": 21.46,
+   "midi": 56
+  },
+  {
+   "text": "built",
+   "start": 21.5,
+   "end": 21.96,
+   "midi": 56
+  },
+  {
+   "text": "just",
+   "start": 22,
+   "end": 22.21,
+   "midi": 52
+  },
+  {
+   "text": "broke",
+   "start": 22.5,
+   "end": 23.46,
+   "midi": 59
+  },
+  {
+   "text": "Open",
+   "start": 24,
+   "end": 24.46,
+   "midi": 61
+  },
+  {
+   "text": "the",
+   "start": 24.5,
+   "end": 24.71,
+   "midi": 57
+  },
+  {
+   "text": "garden",
+   "start": 25,
+   "end": 25.71,
+   "midi": 61
+  },
+  {
+   "text": "gate",
+   "start": 26,
+   "end": 27.21,
+   "midi": 64
+  },
+  {
+   "text": "Set",
+   "start": 28,
+   "end": 28.46,
+   "midi": 60
+  },
+  {
+   "text": "the",
+   "start": 28.5,
+   "end": 28.71,
+   "midi": 57
+  },
+  {
+   "text": "sky",
+   "start": 29,
+   "end": 29.46,
+   "midi": 60
+  },
+  {
+   "text": "on",
+   "start": 29.5,
+   "end": 29.71,
+   "midi": 57
+  },
+  {
+   "text": "fire",
+   "start": 30,
+   "end": 31.21,
+   "midi": 65
+  },
+  {
+   "text": "Burn",
+   "start": 32,
+   "end": 32.46,
+   "midi": 59
+  },
+  {
+   "text": "bright,",
+   "start": 32.5,
+   "end": 33.21,
+   "midi": 62
+  },
+  {
+   "text": "burn",
+   "start": 33.5,
+   "end": 33.96,
+   "midi": 59
+  },
+  {
+   "text": "bright",
+   "start": 34,
+   "end": 35.21,
+   "midi": 67
+  },
+  {
+   "text": "Let",
+   "start": 36,
+   "end": 36.21,
+   "midi": 56
+  },
+  {
+   "text": "the",
+   "start": 36.25,
+   "end": 36.46,
+   "midi": 56
+  },
+  {
+   "text": "thunder",
+   "start": 36.5,
+   "end": 37.21,
+   "midi": 59
+  },
+  {
+   "text": "shake",
+   "start": 37.5,
+   "end": 37.96,
+   "midi": 64
+  },
+  {
+   "text": "the",
+   "start": 38,
+   "end": 38.21,
+   "midi": 59
+  },
+  {
+   "text": "sky",
+   "start": 38.5,
+   "end": 39.71,
+   "midi": 64
+  },
+  {
+   "text": "Whisper",
+   "start": 41,
+   "end": 41.71,
+   "midi": 52
+  },
+  {
+   "text": "to",
+   "start": 42,
+   "end": 42.21,
+   "midi": 49
+  },
+  {
+   "text": "the",
+   "start": 42.25,
+   "end": 42.46,
+   "midi": 49
+  },
+  {
+   "text": "smoke",
+   "start": 42.5,
+   "end": 43.71,
+   "midi": 52
+  },
+  {
+   "text": "Hold",
+   "start": 44.5,
+   "end": 44.96,
+   "midi": 53
+  },
+  {
+   "text": "still,",
+   "start": 45,
+   "end": 45.71,
+   "midi": 57
+  },
+  {
+   "text": "hold",
+   "start": 46,
+   "end": 46.46,
+   "midi": 53
+  },
+  {
+   "text": "still",
+   "start": 46.5,
+   "end": 47.71,
+   "midi": 60
+  },
+  {
+   "text": "Here",
+   "start": 48,
+   "end": 48.46,
+   "midi": 61
+  },
+  {
+   "text": "comes",
+   "start": 48.5,
+   "end": 48.96,
+   "midi": 61
+  },
+  {
+   "text": "the",
+   "start": 49,
+   "end": 49.21,
+   "midi": 57
+  },
+  {
+   "text": "storm,",
+   "start": 49.25,
+   "end": 49.96,
+   "midi": 64
+  },
+  {
+   "text": "the",
+   "start": 50.25,
+   "end": 50.46,
+   "midi": 61
+  },
+  {
+   "text": "rain",
+   "start": 50.5,
+   "end": 51.71,
+   "midi": 64
+  },
+  {
+   "text": "We",
+   "start": 52,
+   "end": 52.21,
+   "midi": 57
+  },
+  {
+   "text": "rise",
+   "start": 52.5,
+   "end": 53.21,
+   "midi": 60
+  },
+  {
+   "text": "and",
+   "start": 53.25,
+   "end": 53.46,
+   "midi": 57
+  },
+  {
+   "text": "turn",
+   "start": 53.5,
+   "end": 53.96,
+   "midi": 60
+  },
+  {
+   "text": "again",
+   "start": 54.25,
+   "end": 55.46,
+   "midi": 65
+  },
+  {
+   "text": "Burn",
+   "start": 56,
+   "end": 56.46,
+   "midi": 59
+  },
+  {
+   "text": "bright,",
+   "start": 56.5,
+   "end": 57.21,
+   "midi": 62
+  },
+  {
+   "text": "burn",
+   "start": 57.5,
+   "end": 57.96,
+   "midi": 59
+  },
+  {
+   "text": "bright",
+   "start": 58,
+   "end": 59.21,
+   "midi": 67
+  },
+  {
+   "text": "Let",
+   "start": 60,
+   "end": 60.21,
+   "midi": 56
+  },
+  {
+   "text": "the",
+   "start": 60.25,
+   "end": 60.46,
+   "midi": 56
+  },
+  {
+   "text": "thunder",
+   "start": 60.5,
+   "end": 61.21,
+   "midi": 59
+  },
+  {
+   "text": "shake",
+   "start": 61.5,
+   "end": 61.96,
+   "midi": 64
+  },
+  {
+   "text": "the",
+   "start": 62,
+   "end": 62.21,
+   "midi": 59
+  },
+  {
+   "text": "sky",
+   "start": 62.5,
+   "end": 63.71,
+   "midi": 64
+  },
+  {
+   "text": "I'm",
+   "start": 65,
+   "end": 65.21,
+   "midi": 52
+  },
+  {
+   "text": "still",
+   "start": 65.25,
+   "end": 65.71,
+   "midi": 57
+  },
+  {
+   "text": "waiting",
+   "start": 65.75,
+   "end": 66.46,
+   "midi": 57
+  },
+  {
+   "text": "for",
+   "start": 66.5,
+   "end": 66.71,
+   "midi": 54
+  },
+  {
+   "text": "the",
+   "start": 66.75,
+   "end": 66.96,
+   "midi": 52
+  },
+  {
+   "text": "morning",
+   "start": 67,
+   "end": 67.71,
+   "midi": 57
+  },
+  {
+   "text": "light",
+   "start": 68,
+   "end": 69.96,
+   "midi": 61
+  }
+ ]
+}

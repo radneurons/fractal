@@ -8,28 +8,33 @@ export const FPS = 60;
 export const FRAME_RATE = SR / HOP; // ≈ 86.13 analysis frames per second
 /** time (s) a frame's energy-like features represent */
 export const LEAD_ENERGY = WIN / 2;
-/** time a flux peak represents: the transient is ~0.82·WIN into the window when the Hann² slope peaks */
-export const LEAD_FLUX = WIN * 0.82;
+/**
+ * Time a flux peak represents. The transient is well into the Hann window when the log-mel rise peaks;
+ * 0.68·WIN is calibrated on the fixture's drum hits (the uncorrected value runs tens of ms early).
+ */
+export const LEAD_FLUX = WIN * 0.68;
 
 export const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-/** Radix-2 complex FFT with precomputed tables. */
+/** Complex FFT (radix-4 stages with a radix-2 clean-up) with per-stage twiddle tables. */
 export class FFT {
   readonly n: number;
-  private cos: Float64Array;
-  private sin: Float64Array;
   private rev: Uint32Array;
+  private twr: Float64Array;
+  private twi: Float64Array;
   constructor(n: number) {
     this.n = n;
     const bits = Math.round(Math.log2(n));
     if (1 << bits !== n) throw new Error('FFT size must be a power of two');
-    this.cos = new Float64Array(n / 2);
-    this.sin = new Float64Array(n / 2);
-    for (let i = 0; i < n / 2; i++) {
-      this.cos[i] = Math.cos((2 * Math.PI * i) / n);
-      this.sin[i] = Math.sin((2 * Math.PI * i) / n);
-    }
+    // twiddles for a stage with half-size h live at [h, 2h)
+    this.twr = new Float64Array(n);
+    this.twi = new Float64Array(n);
+    for (let h = 1; h < n; h <<= 1)
+      for (let j = 0; j < h; j++) {
+        this.twr[h + j] = Math.cos((Math.PI * j) / h);
+        this.twi[h + j] = -Math.sin((Math.PI * j) / h);
+      }
     this.rev = new Uint32Array(n);
     for (let i = 0; i < n; i++) {
       let r = 0;
@@ -39,7 +44,7 @@ export class FFT {
   }
   /** in-place forward transform (e^{-iωt}) */
   forward(re: Float64Array, im: Float64Array): void {
-    const n = this.n, rev = this.rev, cos = this.cos, sin = this.sin;
+    const n = this.n, rev = this.rev, twr = this.twr, twi = this.twi;
     for (let i = 0; i < n; i++) {
       const j = rev[i];
       if (j > i) {
@@ -47,16 +52,36 @@ export class FFT {
         t = im[i]; im[i] = im[j]; im[j] = t;
       }
     }
-    for (let size = 2; size <= n; size <<= 1) {
-      const half = size >> 1, step = n / size;
+    let h = 1;
+    // an odd number of stages: one radix-2 stage first (twiddle = 1)
+    if (Math.round(Math.log2(n)) & 1) {
+      for (let i = 0; i < n; i += 2) {
+        const ar = re[i], ai = im[i], br = re[i + 1], bi = im[i + 1];
+        re[i] = ar + br; im[i] = ai + bi; re[i + 1] = ar - br; im[i + 1] = ai - bi;
+      }
+      h = 2;
+    }
+    // radix-4: two radix-2 stages (half-sizes h and 2h) fused
+    for (; h < n; h <<= 2) {
+      const h2 = h << 1, size = h << 2;
       for (let i = 0; i < n; i += size) {
-        for (let j = 0, k = 0; j < half; j++, k += step) {
-          const wr = cos[k], wi = -sin[k];
-          const a = i + j, b = a + half;
-          const xr = re[b] * wr - im[b] * wi;
-          const xi = re[b] * wi + im[b] * wr;
-          re[b] = re[a] - xr; im[b] = im[a] - xi;
-          re[a] += xr; im[a] += xi;
+        for (let j = 0; j < h; j++) {
+          const w1r = twr[h + j], w1i = twi[h + j];          // stage 1 twiddle
+          const w2r = twr[h2 + j], w2i = twi[h2 + j];        // stage 2 twiddle for j
+          const w3r = twr[h2 + j + h], w3i = twi[h2 + j + h]; // stage 2 twiddle for j + h
+          const a = i + j, b = a + h, c = a + h2, d = c + h;
+          // stage 1 on (a,b) and (c,d)
+          let xr = re[b] * w1r - im[b] * w1i, xi = re[b] * w1i + im[b] * w1r;
+          const b0r = re[a] - xr, b0i = im[a] - xi;
+          const a0r = re[a] + xr, a0i = im[a] + xi;
+          xr = re[d] * w1r - im[d] * w1i; xi = re[d] * w1i + im[d] * w1r;
+          const d0r = re[c] - xr, d0i = im[c] - xi;
+          const c0r = re[c] + xr, c0i = im[c] + xi;
+          // stage 2 on (a,c) with w2 and (b,d) with w3
+          xr = c0r * w2r - c0i * w2i; xi = c0r * w2i + c0i * w2r;
+          re[c] = a0r - xr; im[c] = a0i - xi; re[a] = a0r + xr; im[a] = a0i + xi;
+          xr = d0r * w3r - d0i * w3i; xi = d0r * w3i + d0i * w3r;
+          re[d] = b0r - xr; im[d] = b0i - xi; re[b] = b0r + xr; im[b] = b0i + xi;
         }
       }
     }

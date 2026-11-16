@@ -1,0 +1,13 @@
+import { decodeFile } from '../lib/node-audio.ts';
+import { resample, SR } from '../../src/analysis/dsp.ts';
+import { computeFrames } from '../../src/analysis/frames.ts';
+import { analyze } from '../../src/analysis/index.ts';
+const pcm = decodeFile(process.argv[2]);
+let t = performance.now();
+const l = resample(pcm.channels[0], pcm.sampleRate, SR), r = resample(pcm.channels[1], pcm.sampleRate, SR);
+console.log('resample x2', (performance.now() - t).toFixed(0)); t = performance.now();
+computeFrames({ left: l, right: r });
+console.log('frames', (performance.now() - t).toFixed(0)); t = performance.now();
+let last = '', lt = performance.now();
+analyze(pcm, (s) => { if (s !== last) { console.log('  stage', last, (performance.now() - lt).toFixed(0)); last = s; lt = performance.now(); } });
+console.log('total analyze', (performance.now() - t).toFixed(0));
