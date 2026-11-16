@@ -3,6 +3,7 @@ import { evalCamera, shotFacts, ASPECTS, SHOT_SIZE_NAMES, type Project } from '@
 import { GLPassRenderer, PASSES, type PassName } from '@blockout/render';
 import { S, useStudio, activeShot } from '../store';
 import { Sel, Toggle } from '../ui';
+import { assetUrl } from '../persist';
 
 /** Live view through a camera using the *export* renderer, so what you see is exactly what the passes contain. */
 export function BlockoutCanvas({ pass, cameraId, style, className, maxWidth = 960 }: { pass: PassName; cameraId: string | null; style?: React.CSSProperties; className?: string; maxWidth?: number }) {
@@ -63,8 +64,8 @@ export function ResultView() {
     <div className="relative min-h-0 flex-1 bg-black">
       {take ? <div className="absolute inset-0 flex items-center justify-center">
         <div className="relative max-h-full max-w-full" style={{ aspectRatio: String(ASPECTS[project.aspect]), height: '100%' }}>
-          <img data-testid="take-frame" alt={`Take frame`} src={frameOf(take)} className="absolute inset-0 h-full w-full object-contain" />
-          {other && <img alt="Compare take" src={frameOf(other)} className="absolute inset-0 h-full w-full object-contain" style={{ clipPath: `inset(0 0 0 ${split}%)` }} />}
+          <img data-testid="take-frame" alt={`Take frame`} src={assetUrl(frameOf(take))} className="absolute inset-0 h-full w-full object-contain" />
+          {other && <img alt="Compare take" src={assetUrl(frameOf(other))} className="absolute inset-0 h-full w-full object-contain" style={{ clipPath: `inset(0 0 0 ${split}%)` }} />}
           {other && <input aria-label="A/B split" type="range" min={0} max={100} value={split} onChange={(e) => setSplit(+e.target.value)} className="absolute bottom-1 left-0 w-full" />}
           {opacity > 0 && shot && <BlockoutCanvas pass="clay" cameraId={shot.cameraId} maxWidth={640} className="absolute inset-0" style={{ opacity, mixBlendMode: 'normal' }} />}
         </div></div> : <div className="flex h-full items-center justify-center text-dim">Generate a take from the Takes tab to see it here.</div>}
