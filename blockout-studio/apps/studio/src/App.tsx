@@ -15,6 +15,7 @@ import { CommandBar } from './panels/CommandBar';
 import { installHotkeys } from './hotkeys';
 import { exportBlockout, importBlockout, recover, startAutosave, changeLogMarkdown } from './persist';
 import { download } from './ui';
+import { exportShotPackage } from './exporter';
 
 const TABS: [string, string, React.FC][] = [['inspector', 'Inspector', Inspector], ['prompt', 'Prompt', PromptPanel], ['bibles', 'Bibles', BiblesPanel], ['takes', 'Takes', TakesPanel], ['claude', 'Claude', ClaudePanel]];
 
@@ -30,6 +31,7 @@ function TopBar({ openCommand }: { openCommand: () => void }) {
     <span className="flex-1" />
     <button className="btn-claude" data-testid="open-command" onClick={openCommand}>✳ Direct with Claude <kbd className="ml-1 rounded bg-black/30 px-1 text-xxs">⌘K</kbd>{pending > 0 && <span className="ml-1 rounded-full bg-claude px-1.5 text-xxs text-white">{pending}</span>}</button>
     <span className="text-xxs text-dim" title="Autosaved to this browser (IndexedDB)">{savedAt ? `saved ${new Date(savedAt).toLocaleTimeString()}` : 'not saved yet'}</span>
+    <button className="btn" data-testid="export-shot" title="Export the active shot as a control-pass package (zip)" onClick={async () => { const s = S(), shot = s.project.shots.find((x) => x.id === s.activeShotId); if (!shot) return s.notify('Select a shot first.', 'error'); s.notify(`Rendering ${shot.name}…`); try { const r = await exportShotPackage(shot, { height: 720, onProgress: (d, t, l) => { if (d % 24 === 0) S().notify(`Rendering ${l} ${Math.round((d / t) * 100)}%`); } }); download(`${shot.id}-package.zip`, r.zip, 'application/zip'); S().set({ lastExport: { shotId: shot.id, hash: r.hash, files: Object.keys(r.files).length, seconds: r.seconds } } as never); S().notify(`Exported ${Object.keys(r.files).length} files in ${r.seconds.toFixed(1)}s (hash ${r.hash})`); } catch (e) { S().notify(String((e as Error).message), 'error'); } }}>Export shot</button>
     <button className="btn" onClick={async () => download(`${name.replace(/\W+/g, '-').toLowerCase()}.blockout`, await exportBlockout())} title="Save a portable .blockout file">Save</button>
     <button className="btn" onClick={() => file.current?.click()}>Open</button>
     <input ref={file} type="file" accept=".blockout,.zip" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (f) try { await importBlockout(new Uint8Array(await f.arrayBuffer())); S().notify(`Opened ${f.name}`); } catch (err) { S().notify(String((err as Error).message), 'error'); } e.target.value = ''; }} />

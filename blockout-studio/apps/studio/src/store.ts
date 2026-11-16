@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { applyOp, batch, commit, demoProject, describeOp, emptyHistory, redo, undo, OpError, type History, type Op, type Project, type ShotDiff, type ContinuityIssue } from '@blockout/core';
+import { compileFrame, applyOp, batch, commit, demoProject, describeOp, emptyHistory, redo, undo, OpError, type History, type Op, type Project, type ShotDiff, type ContinuityIssue } from '@blockout/core';
 import type { PassName } from '@blockout/render';
 
 export type SelKind = 'character' | 'camera' | 'prop' | 'fx' | 'shot' | 'lighting' | 'project';
@@ -105,4 +105,4 @@ export const useStudio = create<Studio>((set, get) => ({
 }));
 export const S = () => useStudio.getState();
 export const activeShot = (s: Studio) => s.project.shots.find((x) => x.id === s.activeShotId) ?? null;
-if (typeof window !== 'undefined') (window as unknown as { __studio: typeof useStudio }).__studio = useStudio;
+if (typeof window !== 'undefined') Object.assign(window, { __studio: useStudio, __compile: (p: Project, t: number) => compileFrame(p, t) });
