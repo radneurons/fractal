@@ -1,4 +1,5 @@
 // Frame-exact offline export (SPEC §13): WebCodecs video + audio, muxed with mp4-muxer / webm-muxer.
+import { runGuard, guardKey } from '../render/guardrun.ts';
 import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4Target } from 'mp4-muxer';
 import { Muxer as WebmMuxer, ArrayBufferTarget as WebmTarget } from 'webm-muxer';
 import type { App } from '../app.ts';
@@ -96,6 +97,11 @@ export async function exportVideo(app: App, o: ExportOptions): Promise<ExportRes
   const prev = { forced: stage.forcedSize, aspect: app.state.settings.aspect, fps: stage.fps, transparent: app.state.settings.transparentBackground };
   app.exporting = true;
   app.player.pause();
+  // every export is guarded (§10.3): the dialog runs this with progress first; scripted exports land here
+  if (app.state.settings.flashGuard && stage.song && !(stage.guard && stage.guard.key === guardKey(stage))) {
+    const g = await runGuard(stage, { fps: 30 }).done;
+    if (g) console.log(`export flash guard: ${g.fixed.length} window(s) attenuated, verified ${g.verified}`);
+  }
   let wake: { release(): Promise<void> } | null = null;
   try { wake = await (navigator as Navigator & { wakeLock?: { request(t: string): Promise<{ release(): Promise<void> }> } }).wakeLock?.request('screen') ?? null; } catch { /* not available */ }
   try {
