@@ -27,8 +27,12 @@ export function characterDrawables(c: Character, sk: Skeleton, out: Drawable[] =
   const h = sk.scale, b = c.build, P = sk.pos, M = sk.mat;
   const push = (part: string, kind: MeshKind, matrix: Mat4) => out.push({ key: `${c.id}:${part}`, entityId: c.id, kind, matrix, idColor: c.idColor, layer: 'entity' });
   push('pelvis', 'box', mMul(M.hips, mCompose([0, 0.02 * h, 0], [0, 0, 0, 1], [0.3 * h * b, 0.2 * h, 0.19 * h * b])));
-  const torsoMid = lerp3(P.spine, P.neck, 0.5), tl = len(sub(P.neck, P.spine));
-  push('torso', 'box', mCompose(torsoMid, segmentQuat(P.spine, P.neck, mDir(M.chest, [0, 0, 1])), [0.36 * h * b, tl + 0.06 * h, 0.21 * h * b]));
+  // tapered torso: abdomen (spine→chest) narrower than the chest (chest→neck), with a rounded chest and a neck
+  const fwd = mDir(M.chest, [0, 0, 1]), al = len(sub(P.chest, P.spine)), cl = len(sub(P.neck, P.chest));
+  push('abdomen', 'box', mCompose(lerp3(P.spine, P.chest, 0.5), segmentQuat(P.spine, P.chest, fwd), [0.3 * h * b, al + 0.04 * h, 0.19 * h * b]));
+  push('chest', 'box', mCompose(lerp3(P.chest, P.neck, 0.45), segmentQuat(P.chest, P.neck, fwd), [0.38 * h * b, cl, 0.22 * h * b]));
+  // ball joints, mannequin-style
+  for (const [j, r] of [['upperArmL', 0.06], ['upperArmR', 0.06], ['foreArmL', 0.045], ['foreArmR', 0.045], ['upLegL', 0.075], ['upLegR', 0.075], ['legL', 0.058], ['legR', 0.058]] as [Joint, number][]) push(`ball:${j}`, 'sphere', mCompose(P[j], [0, 0, 0, 1], [r * 2 * h * (j.startsWith('up') ? b : 1), r * 2 * h, r * 2 * h * (j.startsWith('up') ? b : 1)]));
   push('head', 'sphere', mMul(M.head, mCompose([0, 0.115 * h, 0.01 * h], [0, 0, 0, 1], [0.2 * h, 0.245 * h, 0.22 * h])));
   push('nose', 'box', mMul(M.head, mCompose([0, 0.1 * h, 0.115 * h], [0, 0, 0, 1], [0.03 * h, 0.05 * h, 0.04 * h])));
   for (const [a, bb, r] of LIMBS) {

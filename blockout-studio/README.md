@@ -28,6 +28,12 @@ Connect Claude Code or Claude Desktop over MCP:
 pnpm mcp:install   # prints the exact config snippet
 ```
 
+Keep webcam mocap fully offline (downloads the pose model once):
+
+```bash
+pnpm mocap:fetch
+```
+
 ## Layout
 
 | | |
@@ -42,7 +48,7 @@ pnpm mcp:install   # prints the exact config snippet
 
 ## Keys
 
-`W/E/R` transform · `P` path mode · `K` keyframe · `Space` play (`⇧Space` plays the cut) · `,` `.` frame step · `C` camera from view · `F` frame selection · `Tab` scene/blockout focus · `M` marker · `1–9` shots · `⌘K` direct with Claude · `⌘Z`/`⇧⌘Z` undo/redo · `Del` delete key.
+`W/E/R` transform · `P` path mode (Pose/Sculpt/Scatter modes in the scene toolbar) · `K` keyframe · `Space` play (`⇧Space` plays the cut) · `,` `.` frame step · `C` camera from view · `F` frame selection · `Tab` scene/blockout focus · `M` marker · `1–9` shots · `⌘K` direct with Claude · `⌘Z`/`⇧⌘Z` undo/redo · `Del` delete key.
 
 ## Tests
 
@@ -51,7 +57,7 @@ pnpm test          # unit, golden-image, contract (recorded Claude fixtures), MC
 ```
 
 ```bash
-pnpm test:e2e      # Playwright: brief flow, docking, collaboration, phone camera, audio + cut mix, HTTP-provider takes, export determinism, performance
+pnpm test:e2e      # Playwright: brief flow, docking, pop-outs, curves, GLB import, offline mocap, collaboration, phone camera, audio + cut mix, HTTP-provider takes, export determinism, performance
 ```
 
 Per-phase notes, including known gaps and the honest performance numbers: `docs/phase-1.md` … `docs/phase-6.md`.

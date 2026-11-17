@@ -13,6 +13,13 @@
 **Tested** `pnpm test`: arc-length sampling, keyframe interpolation and easing, apply → invert → equal for every op type, atomic rejection of invalid ops, history, IK ground constraint.
 
 **Known gaps**
-- The mannequin is procedural (boxes/capsules on a joint hierarchy), not a skinned CC0 GLB. That was a deliberate trade for byte-exact determinism and zero binary assets; retargeting works on joint eulers, so a skinned mesh can be bound to the same 17 joints later.
+- The mannequin is our own procedural, CC0 rig: a tapered chest and abdomen, ball joints, and limb segments on 17 joints. It is not a skinned mesh. That trade buys byte-exact determinism and no binary assets. Retargeting works on joint eulers, so a skinned GLB could be bound to the same joints later.
 - Panels re-dock through the Layout menu (added after phase 6); they cannot float in separate windows.
-- GLB props are accepted by the schema and rendered as a proxy box.
+- GLB props render as the real mesh in WebGL views and passes, and as their bounding box in the pure-TS renderer (see the follow-up below).
+
+**Follow-up (finishing pass)**
+- **Pose mode in the viewport.** Select a character, choose Pose, click a joint, rotate it with the gizmo, and release: an additive pose key is written at the playhead (one undo entry). `poseKeyFor` is round-trip tested: the keyed joint lands exactly on the requested world orientation.
+- **GLB import** (Add → Prop · GLB model…). The file is stored as an asset (IndexedDB and `.blockout` files) and normalised into its bounding box, which becomes the prop's scale. The WebGL renderer draws the mesh; the deterministic software renderer and the prompt facts use the box. E2E-tested, including recovery after a reload.
+- **Curve editor.** Camera focal, height and roll keys can be dragged; flat curves draw through the middle so their keys don't hide others.
+- **Panels.** The Layout menu re-docks panels, and Blockout/Result pop out (⧉) into their own windows. A pop-out window mirrors the editor live over a BroadcastChannel, is read-only, and never autosaves.
+- **Change log.** Saves and (at most every five minutes) autosaves write change-log entries.

@@ -12,4 +12,4 @@
 
 **Known gaps**
 - Shot size uses full-body height vs frame height; it does not yet account for partial occlusion.
-- Depth of field is described in facts and drawn nowhere (no focus-plane gizmo yet).
+- The focus-plane gizmo shows the focus distance plus the near/far limits of acceptable sharpness for the active camera (circle of confusion scaled by sensor width). Sensor presets cover full frame, Super 35, APS-C, MFT, Alexa 65, IMAX, 1-inch and phone. The motion-trails overlay shows the last 1.5 s of each character and moving camera.

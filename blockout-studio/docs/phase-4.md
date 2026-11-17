@@ -9,7 +9,7 @@
 - Tasks: natural-language direction, script → blockout, prompt compile, vision critique, continuity explanation + fixes, alternate setups, bible/memory review, storyboard notes.
 - Edit-aware prompt compiler: measured facts → seven canonical segments → provider dialect (canonical, Seedance, H3, Kling, Veo, Runway, Luma, Wan, mock; more via JSON files in `~/.blockout-studio/dialects/`). On recompile, only segments whose facts changed are replaced; hand-edited passages are kept and reported as conflicts. The Prompt tab shows a word-level diff with per-hunk accept/reject; versions carry lineage and authorship.
 - ⌘K command bar with ghost preview (orange paths/frusta); proposals are Preview / Apply / Edit (JSON) / Reject and apply as a single "Claude: …" undo entry. Re-staging a character ripples its later keys instead of interleaving them.
-- Session memory: statements like "I hate dutch angles" are stored and fed into every task; the bible review flags violations with a fix.
+- Session memory: statements like "I hate dutch angles" are stored and fed into every task; the bible review flags violations with a fix. Each accepted Claude proposal is also recorded as a decision (the last 30 are kept). Decisions go into the volatile part of each request, so accepting a proposal does not break the prompt cache.
 
 **Run** `pnpm bridge` (terminal 1), `pnpm dev` (terminal 2). Choose the backend in the Claude tab. For MCP: `pnpm mcp:install` and follow the printed steps.
 

@@ -31,6 +31,7 @@
 **Follow-up: docking.** The ▦ Layout menu swaps the scene view and the viewer stack, moves the sidebar left or right, and puts Result above or below Blockout. The arrangement persists, and panel sizes are remembered per arrangement (E2E-tested). Panels still cannot float in separate windows.
 
 **Known gaps**
-- Mocap needs network access on first use (the MediaPipe WASM and model come from public CDNs) and a webcam, so CI tests the solver, not the camera path. Hands and face are not captured; landmarks carry no bone twist.
+- Mocap runs offline. The MediaPipe WASM is served from the installed package (and copied into the build); `pnpm mocap:fetch` stores the pose model locally once. An E2E test feeds Chromium a fake webcam of the mannequin (rendered to Y4M, with a painted face so the face-first detector can find it) with all CDNs blocked, and checks that a retargeted clip lands on the character.
+- Hands and face are not captured, and landmarks carry no bone twist.
 - iOS only exposes motion sensors over HTTPS: run `pnpm dev:https` (self-signed certificate; accept it once on the phone).
 - Collaboration undo is per user and inverse-based, so undoing your edit after someone else changed the same thing can be skipped as a conflict (it is reported, not silently applied).
