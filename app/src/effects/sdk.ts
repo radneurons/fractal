@@ -9,7 +9,7 @@
 import type { Affinity, Analysis, GlobalSettings, Line, Lyrics, ParamSpec, Word } from '../types.ts';
 import { NEUTRAL_AFFINITY } from '../types.ts';
 import { BaseEffect, Canvas2DEffect, GLEffect, type EffectContext, type EffectMeta, type Frame } from './types.ts';
-import { registerEffect } from './registry.ts';
+import { registerEffect, effectClass } from './registry.ts';
 import type { GLScope, Target } from '../render/glhost.ts';
 import * as tk from '../render/textkit.ts';
 import { layoutLine, frameKeys, maskFill, type LayoutOpts, type LineLayout } from './common.ts';
@@ -195,7 +195,10 @@ export function defineEffect<S>(spec: EffectSpec<S>): (new () => BaseEffect) & {
       dispose(): void { if (this.state !== undefined) s.dispose?.(this.state); super.dispose(); }
     };
   }
+  const replaced = !!effectClass(spec.id);
   registerEffect(cls as never);
+  // hot reload in `npm run dev`: the stage re-prepares only this effect (main.ts listens)
+  if (replaced && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('le:effect-reloaded', { detail: spec.id }));
   return cls;
 }
 

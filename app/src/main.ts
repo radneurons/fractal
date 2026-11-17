@@ -19,6 +19,8 @@ const root = document.getElementById('app')!;
 const canvas = document.createElement('canvas');
 canvas.id = 'stage';
 const app = new App(canvas);
+// SDK hot reload (§15): an edited effects/user/*.ts re-registers itself; re-prepare just that effect
+window.addEventListener("le:effect-reloaded", (e) => { void app.stage.reloadEffect((e as CustomEvent<string>).detail); });
 const params = new URLSearchParams(location.search);
 
 // ---------- persistence of settings (each access wrapped in try/catch) ----------

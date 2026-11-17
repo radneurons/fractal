@@ -444,6 +444,11 @@ export class Stage {
     const s = this.segments.find((x) => t < x.end) ?? this.segments[this.segments.length - 1];
     return s?.effect ?? null;
   }
+  /** An effect's module was hot-reloaded (SDK, §15): re-prepare only the instances of that effect. */
+  reloadEffect(effectId: string): Promise<void> {
+    for (const p of this.inst.values()) if (p.effectId === effectId) p.key = '';
+    return this.prepare();
+  }
   prepared(instanceId: string): Effect | undefined { return this.inst.get(instanceId)?.effect; }
   prepareMs(): Record<string, number> { const o: Record<string, number> = {}; for (const [k, v] of this.inst) o[k] = v.ms; return o; }
 

@@ -1,9 +1,9 @@
 // Screenshot of the whole UI:  node scripts/ui-shot.mjs [--effect broadside] [--t 26.4] [--tab Layers] [--out out/ui.png]
 import { mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { startServer, openApp, args, ROOT } from './lib/browser.mjs';
 const a = args({ effect: 'broadside', t: '26.4', out: 'out/ui.png', song: 'demo-song', width: '1500', height: '940' });
-const out = join(ROOT, a.out);
+const out = resolve(ROOT, a.out);
 mkdirSync(dirname(out), { recursive: true });
 const server = await startServer(Number(a.port ?? 4173));
 const { browser, page, errors } = await openApp({ url: server.url, width: Number(a.width), height: Number(a.height) });

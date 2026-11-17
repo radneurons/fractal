@@ -6,13 +6,15 @@
   "description": "Kinetic typography for music and speech",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/lint-effects.mjs && tsc --noEmit && vite build",
     "preview": "vite preview --port 4173 --strictPort",
     "typecheck": "tsc --noEmit",
     "fixtures": "node scripts/make-fixtures.mjs && node scripts/make-luts.mjs",
     "test": "node scripts/test.mjs",
     "e2e": "node scripts/e2e.mjs",
-    "new-effect": "node scripts/new-effect.mjs"
+    "new-effect": "node scripts/new-effect.mjs",
+    "lint:effects": "node scripts/lint-effects.mjs",
+    "e2e:effect": "node scripts/e2e-effect.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",
