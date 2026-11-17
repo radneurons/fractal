@@ -70,7 +70,7 @@ Measured on this machine (headless Chromium + SwiftShader for browser tests). �
 | §5 | Whisper auto-sync + alignment | ✅ | test-align (robustness cases from §17); used to align the three example songs |
 | §6 | Director roles/elements/concepts | ✅ | test-lyrics |
 | §8 | 16 effects with masks, transparency, reduce motion | ✅ | e2e, e2e-golden, e2e-hybrid |
-| §8.12 | MONOLITH depth of field | ❌ | not implemented (sun path, shadows, AO, fog and camera shots are) |
+| §8.12 | MONOLITH depth of field | ✅ | depth in the march target's alpha + mip blur by thin-lens CoC, focus on the sung word (`dof` param) |
 | §9 | layers, word masks, materials, modulation, automation, media, artwork palette | ✅ | test-modulation, e2e-hybrid |
 | §9.6 | Auto-Director | ✅ | test-director: no repeats in a row, ≤ 5 effects, choruses share an effect; back-to-back repeats alternate; sections > 45 s are split |
 | §9.7 | storyboard | ✅ | Auto-Director dialog (Apply / Shuffle / Cancel) in `ui/dialogs.ts` |

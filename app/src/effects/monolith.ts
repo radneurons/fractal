@@ -129,10 +129,22 @@ void main(){
   if(depth < uFar){ float f = 1.0 - exp(-depth * fogK * exp(-max(ro.y, 0.0) * 0.08)); col = mix(col, mix(uSky0, uSky1, 0.4) * 1.05, clamp(f, 0.0, 1.0)); }
   col = col / (1.0 + col * 0.35);
   col = pow(col, vec3(0.92));
-  o = vec4(col, uTransparent > 0.5 ? isWord : 1.0);
-  // depth goes into a separate target pass (see FS_DEPTH)
+  // opaque output: alpha carries normalised depth for the depth-of-field pass (mask mode: word coverage)
+  o = vec4(col, uTransparent > 0.5 ? isWord : clamp(depth / uFar, 0.0, 1.0));
 }`;
-const FS_UP = FS_HEAD + `uniform sampler2D uTex; uniform float uFocus, uDof; void main(){ o = texture(uTex, vUv); }`;
+// Depth of field from the depth in alpha and the mip chain: CoC ∝ |1/focus − 1/depth|·focus (thin lens), as a mip
+// level; the depth used is the minimum of the pixel and a blurred level so in-focus words don't bleed over a soft
+// background edge. uDof = 0 is a plain upscale.
+const FS_UP = FS_HEAD + `uniform sampler2D uTex; uniform float uFocus, uDof, uFar, uMaxLod;
+float coc(float d){ d = max(d * uFar, 0.05); return clamp(uDof * abs(1.0 / uFocus - 1.0 / d) * uFocus, 0.0, 1.0); }
+void main(){
+  vec4 c0 = textureLod(uTex, vUv, 0.0);
+  if (uDof <= 0.0) { o = vec4(c0.rgb, 1.0); return; }
+  float d = min(c0.a, textureLod(uTex, vUv, 2.0).a);
+  float lod = coc(d) * uMaxLod;
+  vec3 c = textureLod(uTex, vUv, lod).rgb;
+  o = vec4(c, 1.0);
+}`;
 const FS_MASK = FS_HEAD + `uniform sampler2D uTex; void main(){ vec4 c = texture(uTex, vUv); float m = step(0.5, c.a); o = vec4(vec3(m), 1.0); }`;
 
 type Shot = 'orbit' | 'dolly-in' | 'crane-up' | 'low' | 'top-down' | 'canyon';
@@ -150,6 +162,7 @@ export class Monolith extends GLEffect {
       range('depth', 'Extrusion depth', 'Look', 0.35, 0.1, 1, 0.01),
       select('sun', 'Sun path', 'Light', 'song', ['song', 'fixed noon', 'night with moon']),
       range('fog', 'Fog', 'Light', 1, 0, 3, 0.01),
+      range('dof', 'Depth of field', 'Camera', 0.6, 0, 1.5, 0.01, true, 'Focus follows the sung word; 0 = everything sharp'),
       select('shots', 'Shot style', 'Camera', 'cinematic', ['cinematic', 'static', 'orbit'], false),
       toggle('cut', 'Cut on downbeats', 'Camera', true, false),
       range('ao', 'AO quality', 'Light', 1, 0, 1.5, 0.01),
@@ -208,7 +221,7 @@ export class Monolith extends GLEffect {
     this.atlas = this.scope.texture({ w: 2048, h: ah, internal: gl.R8, format: gl.RED, data: buf });
     this.atlasSize = [2048, ah];
     const half = this.bool('halfRes') && ctx.quality !== 'export';
-    this.rt = this.scope.target(half ? Math.max(2, W >> 1) : W, half ? Math.max(2, H >> 1) : H);
+    this.rt = this.scope.target(half ? Math.max(2, W >> 1) : W, half ? Math.max(2, H >> 1) : H, { mip: true });
   }
 
   /** The active line, the previous (sinking) and the next (rising) line's words, as uniforms. */
@@ -315,8 +328,12 @@ export class Monolith extends GLEffect {
       uSky0: sky0, uSky1: sky1, uSunCol: sunCol, uFov: cam.fov, uT: t, uNight: night ? 1 : 0, uFog: this.num('fog'), uAO: this.num('ao'),
       uMat: mat, uDepth: this.num('depth'), uTransparent: mask ? 1 : 0, uFar: 80,
     });
+    this.scope.mips(rt); // the target is mipmapped (depth of field); keep it complete for every read
     if (mask) { this.scope.pass(this.scope.program(FS_MASK), target, { uTex: rt.tex }); return; }
-    this.scope.pass(this.scope.program(FS_UP), target, { uTex: rt.tex, uFocus: 0, uDof: 0 });
+    // focus on the point the camera looks at (the sung word); depth of field scales with the rt size
+    const focus = Math.hypot(cam.at[0] - cam.eye[0], cam.at[1] - cam.eye[1], cam.at[2] - cam.eye[2]);
+    const dof = this.num('dof') * (this.s.reduceMotion ? 0.5 : 1);
+    this.scope.pass(this.scope.program(FS_UP), target, { uTex: rt.tex, uFocus: Math.max(0.5, focus), uDof: dof, uFar: 80, uMaxLod: Math.log2(Math.max(rt.w, rt.h) / 160) });
     if (this.s.showTranslation !== 'off') {
       const ov = this.layer('sub');
       ov.g.clearRect(0, 0, W, H);
