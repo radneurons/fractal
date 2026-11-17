@@ -27,4 +27,13 @@ const hook: Analysis = { ...a, duration: 185, drops: [], sections: secs.slice(0,
 const ph = autoDirect(hook, ly, 1776);
 const longest = Math.max(...ph.segments.map((s) => s.end - s.start));
 check('back-to-back repeats alternate (no 100 s single-effect block)', !sameInARow(ph) && longest < 40, ph.segments.map((s) => `${s.effect} ${(s.end - s.start).toFixed(0)}s`).join(', '));
+// variety: a through-composed song (12 different sections) has room for many effects
+const tsecs = Array.from({ length: 13 }, (_, i) => i * 16);
+const thru: Analysis = { ...a, duration: 192, drops: [], sections: tsecs.slice(0, -1).map((t, i) => ({ start: t, end: tsecs[i + 1], label: i % 2 ? 'verse' : 'chorus', energy: 0.3 + 0.05 * i, cluster: i })) } as Analysis;
+const nFx = (v: number) => new Set(autoDirect(thru, ly, 1776, { variety: v }).segments.map((s) => s.effect)).size;
+const counts = [2, 5, 8, 16].map(nFx);
+check('variety caps the number of distinct effects', counts[0] <= 2 && counts[1] <= 5 && counts[2] <= 8, counts.join(' / '));
+check('higher variety uses more effects', counts[2] > counts[1] && counts[3] > counts[2], counts.join(' / '));
+check('variety 16: still never the same effect twice in a row', !sameInARow(autoDirect(thru, ly, 1776, { variety: 16 })));
+check('variety 16: choruses of the demo still share an effect', (() => { const p = autoDirect(a, ly, 1776, { variety: 16 }); const ch = a.sections.filter((s) => s.label === 'chorus'); return new Set(ch.map((s) => p.segments.find((g) => s.start + 0.1 >= g.start && s.start + 0.1 < g.end)?.effect)).size === 1; })());
 done();

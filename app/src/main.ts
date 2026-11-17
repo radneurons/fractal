@@ -174,9 +174,9 @@ if (params.has('live')) void openLive(params.has('output'));
 const LE = installHooks(app);
 Object.assign(LE, {
   undo: () => history.history.undo(), redo: () => history.history.redo(), commit: (label: string) => services.commit(label),
-  autoDirect: (seed = 1776, apply = true) => {
+  autoDirect: (seed = 1776, apply = true, variety = app.state.settings.variety) => {
     if (!app.song) throw new Error('load a song first');
-    const plan = autoDirect(app.song.analysis, app.song.lyrics, seed, { hasTranslation: !!app.translationText });
+    const plan = autoDirect(app.song.analysis, app.song.lyrics, seed, { variety, hasTranslation: !!app.translationText });
     if (apply) { app.setPlan(plan.segments, 'auto'); if (plan.layers.length) app.setLayers([...app.state.layers.filter((l) => !l.id.startsWith('auto-')), ...plan.layers]); }
     return plan;
   },

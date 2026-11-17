@@ -675,7 +675,7 @@ export class Broadside extends Canvas2DEffect {
     } else if (p.shape === 'stem') {
       // a tall, narrow icon standing in for the I
       g.scale(Math.max(0.42, Math.min(0.7, (lw * 1.5) / cap)), 1);
-      drawIcon(g, p.icon, cap * 0.5);
+      drawIcon(g, p.icon, cap * 0.5, true);
     } else drawIcon(g, p.icon, Math.min(cap * 0.52, Math.max(lw * 0.62, cap * 0.3)));
     void world; void mask;
     g.restore();

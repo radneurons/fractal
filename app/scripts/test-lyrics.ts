@@ -88,4 +88,15 @@ check('LRC stamp rounding never gives :60.00', lrcStamp(59.999) === '01:00.00' &
 // mood lexicon
 const m1 = lyricMood(['so', 'happy']), m2 = lyricMood(['not', 'happy']);
 check('mood: lexicon size, negation, intensifier', MOOD_LEXICON_SIZE >= 700 && m1.valence > 0.7 && m2.valence < 0, `${MOOD_LEXICON_SIZE} words; ${m1.valence.toFixed(2)} / ${m2.valence.toFixed(2)}`);
+{ // a stage direction in brackets over several lines is not sung
+  const pd = parseLyrics('[Bridge]\n[Drums and low strings build\nDistant choral “ahh”]\nSay the word\nAnd I’ll burn it all');
+  const txt = pd.lines.map((l) => l.tokens.map((t) => t.display).join(' '));
+  check('multi-line [stage direction] is skipped', txt.length === 2 && txt[0].startsWith('Say'), JSON.stringify(txt));
+}
+{ // section headers survive LRC: "[Chorus]" lines are read as hints and written back
+  const pl = parseLyrics('[ti:x]\n[Verse 1]\n[00:10.00]one line\n[00:12.00]two line\n[Chorus]\n[00:20.00]hook line\n');
+  check('LRC section headers become hints', pl.lines.length === 3 && pl.lines[0].hint === 'verse' && pl.lines[2].hint === 'chorus' && pl.lines[2].block !== pl.lines[0].block, JSON.stringify(pl.lines.map((l) => [l.hint, l.block])));
+  const out = toEnhancedLrc(buildLyrics(pl, a));
+  check('LRC section headers are written back', /\[Verse\]\n\[00:(09|10)/.test(out) && /\[Chorus\]\n\[00:(19|20)/.test(out) && (out.match(/\[Verse\]/g) ?? []).length === 1, out.replace(/\n/g, ' | '));
+}
 done();

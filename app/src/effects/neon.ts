@@ -158,14 +158,21 @@ export class Neon extends GLEffect {
     });
     this.signs = signs;
     // the camera dollies sideways from sign to sign
-    const frames = signs.map((s) => {
+    // It arrives just before a sign's first word and leaves only after the previous sign's last word has lit, so on
+    // fast back-to-back lines the dolly is a quick whip at the boundary instead of leaving a line half-sung.
+    const frames = signs.map((s, i) => {
       const fw = s.w + S * 0.3, fh = Math.max(s.h * 2.6, S * 0.62);
       const top = s.y + Math.min(...s.tubes.map((tb) => tb.y - tb.k * SKEL_CAP));
       const bottom = s.y + Math.max(...s.tubes.map((tb) => tb.y + 0.3 * tb.k * SKEL_CAP));
       const zoom = Math.min(W / fw, H / fh) * 0.92;
       // the sign's centre sits at 42 % from the top of the frame, above its reflection in the street
       const cy = (top + bottom) / 2 + 0.08 * (H / zoom);
-      return { t: s.start - 0.9, x: s.x - S * 0.15, y: cy - fh / 2, w: fw, h: fh, margin: 0.92, move: 1.0 };
+      const prev = signs[i - 1];
+      if (!prev) return { t: s.start - 0.9, x: s.x - S * 0.15, y: cy - fh / 2, w: fw, h: fh, margin: 0.92, move: 1.0 };
+      const arrive = s.start - 0.1;
+      const lastWord = Math.max(...prev.tubes.filter((tb) => !tb.w.backing).map((tb) => tb.w.start), prev.start);
+      const move = Math.max(0.45, Math.min(1.0, arrive - (lastWord + 0.15)));
+      return { t: arrive, x: s.x - S * 0.15, y: cy - fh / 2, w: fw, h: fh, margin: 0.92, move };
     });
     this.keys = frameKeys(frames, W, H);
     // the faulty tube: one seeded hero word

@@ -24,7 +24,8 @@ function person(g: Ctx2D, x: number, s: number, r: number): void {
 }
 
 /** Draw icon `name` centred on the origin inside radius r. */
-export function drawIcon(g: Ctx2D, name: string, r: number): void {
+/** `straightRoad`: draw the road without perspective, for when it replaces the letter I */
+export function drawIcon(g: Ctx2D, name: string, r: number, straightRoad = false): void {
   g.beginPath();
   switch (name as IconName) {
     case 'flame':
@@ -124,6 +125,11 @@ export function drawIcon(g: Ctx2D, name: string, r: number): void {
       poly(g, [-0.07, 0.07, -0.07, -0.6, 0.07, -0.6, 0.07, -0.07, 0.45, -0.07, 0.45, 0.07], r);
       break;
     case 'road':
+      if (straightRoad) { // standing in for an "I": parallel edges, so it does not read as an "A"
+        poly(g, [-0.5, -1, 0.5, -1, 0.5, 1, -0.5, 1], r);
+        for (let i = 0; i < 3; i++) { const y0 = -0.78 + i * 0.6; poly(g, [-0.07, y0, 0.07, y0, 0.07, y0 + 0.36, -0.07, y0 + 0.36], r); }
+        break;
+      }
       poly(g, [-0.28, -1, 0.28, -1, 0.9, 1, -0.9, 1], r);
       for (let i = 0; i < 3; i++) { const y0 = -0.8 + i * 0.62, w0 = 0.035 + i * 0.02; poly(g, [-w0, y0, w0, y0, w0 * 1.4, y0 + 0.34, -w0 * 1.4, y0 + 0.34], r); }
       break;

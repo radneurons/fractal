@@ -50,7 +50,7 @@ RANSOM, MANDALA, FIREWORKS, SUMI, MONOLITH, KARAOKE. Live-capable: NEON, SIGNAL,
 | `node scripts/e2e-perf.mjs [--update]` | median / p95 render ms per effect at 720p against a per-machine baseline |
 | `node scripts/e2e-effect.mjs --effects id` | determinism + mask check for one effect (what `new-effect` scaffolds) |
 | `node scripts/showcase.mjs` | showcase reel: Auto-Director demo, a 9:16 cut, KARAOKE waltz with translation, all-effects sheet |
-| `node scripts/export-clip.mjs --audio x.mp3 --lrc x.lrc --auto 1776 --end full` | export any song through the app (used for the example videos) |
+| `node scripts/export-clip.mjs --audio x.mp3 --lrc x.lrc --auto 1776 [--variety 16] --end full` | export any song through the app (used for the example videos) |
 | `node scripts/tools/flash-check.mjs video.mp4` | independent WCAG flash count of any video file |
 | `node scripts/run.mjs scripts/tools/analyze-file.ts song.mp3` | readable analysis report for any file |
 
@@ -72,7 +72,7 @@ Measured on this machine (headless Chromium + SwiftShader for browser tests). �
 | §8 | 16 effects with masks, transparency, reduce motion | ✅ | e2e, e2e-golden, e2e-hybrid |
 | §8.12 | MONOLITH depth of field | ✅ | depth in the march target's alpha + mip blur by thin-lens CoC, focus on the sung word (`dof` param) |
 | §9 | layers, word masks, materials, modulation, automation, media, artwork palette | ✅ | test-modulation, e2e-hybrid |
-| §9.6 | Auto-Director | ✅ | test-director: no repeats in a row, ≤ 5 effects, choruses share an effect; back-to-back repeats alternate; sections > 45 s are split |
+| §9.6 | Auto-Director | ✅ | test-director: no repeats in a row, ≤ variety effects (default 5, slider 2–16 in the storyboard, `--variety` in export-clip), choruses share an effect; back-to-back repeats alternate; sections > 45 s are split |
 | §9.7 | storyboard | ✅ | Auto-Director dialog (Apply / Shuffle / Cancel) in `ui/dialogs.ts` |
 | §10 | post, LUTs, motion blur, flash guard, reduce motion | ✅ | test-flash, e2e-flash |
 | §11 | UI, lanes, palette, HUD, a11y, MIDI learn | ✅ | ui-shot; keyboard and ARIA throughout |

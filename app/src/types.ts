@@ -175,6 +175,8 @@ export interface GlobalSettings {
   reactivity: number;
   caseMode: 'upper' | 'as-is' | 'lower';
   seed: number;
+  /** Auto-Director: how many different effects a plan may use (2–16) */
+  variety: number;
   endCard: boolean;
   title: string;
   artist: string;
@@ -198,6 +200,7 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
   reactivity: 100,
   caseMode: 'upper',
   seed: 1776,
+  variety: 5,
   endCard: false,
   title: '',
   artist: '',

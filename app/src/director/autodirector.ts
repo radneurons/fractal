@@ -78,7 +78,8 @@ export function splitLongSections(a: Analysis, ly: Lyrics, maxLen = 45): Section
 
 export function autoDirect(a0: Analysis, ly: Lyrics, seed = 1776, opts: { variety?: number; exclude?: string[]; hasTranslation?: boolean } = {}): AutoPlan {
   const a: Analysis = { ...a0, sections: splitLongSections(a0, ly) };
-  const variety = opts.variety ?? 5;
+  const variety = Math.max(1, Math.round(opts.variety ?? 5));
+  const novelty = variety > 5 ? 0.06 * (variety - 5) : 0;
   const effects = allEffects().filter((e) => !(opts.exclude ?? []).includes(e.meta.id));
   const feats = describeSections(a, ly);
   const nS = feats.length, nE = effects.length;
@@ -102,7 +103,9 @@ export function autoDirect(a0: Analysis, ly: Lyrics, seed = 1776, opts: { variet
         if (prev === e && rep < 0) continue; // never the same effect twice in a row (long sections are already split)
         if (!node.used.has(e) && node.used.size >= variety) continue;
         const used = node.used.has(e) ? node.used : new Set(node.used).add(e);
-        next.push({ picks: [...node.picks, e], score: node.score + score[s][e] * (a.sections[s].end - a.sections[s].start), used });
+        // above the default variety, a fresh effect gets a bonus so the extra room is actually used
+        const fresh = node.used.has(e) ? 0 : novelty;
+        next.push({ picks: [...node.picks, e], score: node.score + (score[s][e] + fresh) * (a.sections[s].end - a.sections[s].start), used });
       }
     }
     if (!next.length) { // constraints unsatisfiable (very few effects): relax to the best free pick

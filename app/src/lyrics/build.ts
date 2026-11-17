@@ -282,8 +282,12 @@ export function toEnhancedLrc(ly: Lyrics, meta: { title?: string; artist?: strin
   let out = '';
   if (meta.title) out += `[ti:${meta.title}]\n`;
   if (meta.artist) out += `[ar:${meta.artist}]\n`;
-  let lastVoice: string | undefined;
+  let lastVoice: string | undefined, lastBlock: number | undefined, lastHint: string | undefined;
   for (const line of ly.lines) {
+    // section headers ("[Chorus]") survive the round trip, so the Director keeps the song's structure
+    const block = (line as Line & { block?: number }).block;
+    if (line.hint && (block !== undefined ? block !== lastBlock : line.hint !== lastHint)) out += `[${line.hint[0].toUpperCase()}${line.hint.slice(1)}]\n`;
+    lastBlock = block; lastHint = line.hint;
     let row = `[${lrcStamp(line.start)}]`;
     if (line.voice && line.voice !== lastVoice) { row += line.voice === 'A' ? 'v1: ' : line.voice === 'B' ? 'v2: ' : line.voice === 'all' ? '[A+B] ' : `{${line.voice}} `; lastVoice = line.voice; }
     const ws = line.words.map((i) => ly.words[i]);

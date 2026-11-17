@@ -245,7 +245,9 @@ export function autoDirectDialog(app: App, sv: Services): void {
   const song = app.song;
   if (!song) { toast('Load a song first.', 'error'); return; }
   let seed = app.state.settings.seed;
-  let plan: AutoPlan = autoDirect(song.analysis, song.lyrics, seed, { hasTranslation: !!app.translationText });
+  let variety = app.state.settings.variety ?? 5;
+  const plan0 = () => autoDirect(song.analysis, song.lyrics, seed, { variety, hasTranslation: !!app.translationText });
+  let plan: AutoPlan = plan0();
   const strip = h('div', { class: 'storyboard' });
   const before = { plan: JSON.parse(JSON.stringify(app.state.plan)), layers: JSON.parse(JSON.stringify(app.state.layers)) };
   let applied = false;
@@ -269,9 +271,13 @@ export function autoDirectDialog(app: App, sv: Services): void {
   };
   const d = dialog('Auto-Director', h('div', { class: 'col' }, h('p', { class: 'dim' }, 'A full plan from the analysis: effects by section character, repeated sections reuse their effect, drops get the highest-energy pick. Click a thumbnail to jump there.'),
     strip, h('div', { class: 'row end' },
-      h('button', { onClick: () => { seed = (seed * 7919 + 13) % 9973 + 1; plan = autoDirect(song.analysis, song.lyrics, seed, { hasTranslation: !!app.translationText }); void preview(); } }, 'Shuffle'),
+      h('label', { class: 'row', title: 'How many different effects the plan may use. Choruses keep one effect either way.' }, 'Effects ',
+        h('input', { type: 'range', min: 2, max: 16, step: 1, value: String(variety), 'aria-label': 'Number of different effects',
+          onInput: (e: Event) => { const el = e.target as HTMLInputElement; variety = Number(el.value); (el.nextSibling as HTMLElement).textContent = `up to ${variety}`; plan = plan0(); void preview(); } }),
+        h('span', { class: 'dim' }, `up to ${variety}`)),
+      h('button', { onClick: () => { seed = (seed * 7919 + 13) % 9973 + 1; plan = plan0(); void preview(); } }, 'Shuffle'),
       h('button', { onClick: () => d.close() }, 'Cancel'),
-      h('button', { class: 'primary', onClick: () => { applied = true; if (plan.layers.length) app.setLayers([...app.state.layers.filter((l) => !l.id.startsWith('auto-')), ...plan.layers]); sv.commit('Auto-Director'); d.close(); sv.refresh(); } }, 'Apply'))),
+      h('button', { class: 'primary', onClick: () => { applied = true; app.state.settings.variety = variety; if (plan.layers.length) app.setLayers([...app.state.layers.filter((l) => !l.id.startsWith('auto-')), ...plan.layers]); sv.commit('Auto-Director'); d.close(); sv.refresh(); } }, 'Apply'))),
   { wide: true, onClose: () => { if (!applied) { app.state.plan = before.plan; app.setLayers(before.layers); app.schedulePrepare(0); sv.refresh(); } } });
   void preview();
 }

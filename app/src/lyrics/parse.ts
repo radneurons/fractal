@@ -129,10 +129,15 @@ function tokenise(text: string, into: RawToken[], voice?: string): void {
 function parseLrc(text: string, format: LyricsFormat): ParsedLyrics {
   const lines: RawLine[] = [];
   const meta: ParsedLyrics['meta'] = { offsetMs: 0 };
-  let voice: string | undefined;
+  let voice: string | undefined, hint: SectionLabel | undefined, block: number | undefined, blockCount = 0;
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.replace(/^﻿/, '');
     let m: RegExpMatchArray | null;
+    // a section header on its own line ("[Chorus]", "[Verse 2]"): LRC players ignore it, the Director uses it
+    if ((m = line.match(/^\s*\[([A-Za-z][^\]:]*)\]\s*$/)) && !/^(A\+B|B\+A|ALL|BOTH|A|B)$/i.test(m[1].trim())) {
+      hint = hintFromHeader(m[1]); block = blockCount++;
+      continue;
+    }
     if ((m = line.match(/^\s*\[(ti|ar|al|by|offset|length|re|ve)\s*:\s*(.*?)\]\s*$/i))) {
       const k = m[1].toLowerCase();
       if (k === 'ti') meta.title = m[2];
@@ -205,7 +210,7 @@ function parseLrc(text: string, format: LyricsFormat): ParsedLyrics {
     }
     for (const tok of tokens) if (tok.syl && tok.syl.length < 2) delete tok.syl;
     for (const t of stamps) {
-      lines.push({ time: t, end: lineEnd, tokens: tokens.map((k) => ({ ...k, syl: k.syl?.map((s) => ({ ...s })) })), voice });
+      lines.push({ time: t, end: lineEnd, tokens: tokens.map((k) => ({ ...k, syl: k.syl?.map((s) => ({ ...s })) })), voice, hint, block });
     }
     // several stamps repeat the line: shift word tags for the repeats
     if (stamps.length > 1) {
@@ -273,10 +278,14 @@ function parsePlain(text: string): ParsedLyrics {
   const lines: RawLine[] = [];
   const blocks: ParsedLyrics['blocks'] = [];
   let voice: string | undefined, hint: SectionLabel | undefined, block = -1, blockTitle: string | undefined;
-  let sawHeader = false, blank = true;
+  let sawHeader = false, blank = true, direction = false;
   for (const raw of text.replace(/^﻿/, '').split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) { blank = true; continue; }
+    // a stage direction in brackets that runs over several lines ("[Drums and low strings build" … "choral “ahh”]")
+    // is not sung: skip to its closing bracket
+    if (direction) { if (line.includes(']')) direction = false; continue; }
+    if (/^\[[^\]]*$/.test(line)) { direction = true; continue; }
     // a whole-line bracketed header that is not a voice tag: "[Chorus]", "[Verse 2 – urgent …]"
     const hm = line.match(/^\[([^\]]+)\]$/) ?? line.match(/^\(((?:intro|verse|chorus|bridge|outro|pre-?chorus|hook|instrumental|interlude|solo)[^)]*)\)$/i);
     if (hm && !/^(A\+B|B\+A|ALL|BOTH|A|B)$/i.test(hm[1].trim())) {

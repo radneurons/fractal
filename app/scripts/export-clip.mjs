@@ -1,6 +1,6 @@
 // Export a clip through the app's own exporter and save it:
 //   node scripts/export-clip.mjs --audio song.mp3 --lrc song.lrc --effect broadside --start 20 --end 40 --out out/clip.mp4
-//     [--mode director] [--res 720] [--fps 30] [--aspect 16:9] [--auto 1776] [--js "LE.setPost({bloom:0.3})"]
+//     [--mode director] [--res 720] [--fps 30] [--aspect 16:9] [--auto 1776] [--variety 5] [--js "LE.setPost({bloom:0.3})"]
 import { writeFileSync, readFileSync, mkdirSync, openSync, writeSync, closeSync } from 'node:fs';
 import { dirname, join, basename, isAbsolute } from 'node:path';
 import { startServer, openApp, args, ROOT } from './lib/browser.mjs';
@@ -15,7 +15,7 @@ try {
   if (a.audio) await page.evaluate(([lrc, name]) => window.LE.loadUrl('/__local/audio', lrc, name), [a.lrc ? readFileSync(a.lrc, 'utf8') : undefined, basename(a.audio)]);
   else await page.evaluate((n) => window.LE.loadDemo(n), a.song);
   if (a.mode === 'director') await page.evaluate((tr) => window.LE.setMode('director', tr), a.transition ?? 'auto');
-  else if (a.auto) { const plan = await page.evaluate((seed) => window.LE.autoDirect(Number(seed), true).segments.map((s) => `${s.start.toFixed(1)}–${s.end.toFixed(1)} ${s.effect} (${s.transition})`), a.auto); console.log('plan:\n  ' + plan.join('\n  ')); }
+  else if (a.auto) { const plan = await page.evaluate(([seed, v]) => window.LE.autoDirect(Number(seed), true, v ? Number(v) : undefined).segments.map((s) => `${s.start.toFixed(1)}–${s.end.toFixed(1)} ${s.effect} (${s.transition})`), [a.auto, a.variety]); console.log('plan:\n  ' + plan.join('\n  ')); }
   else await page.evaluate((e) => window.LE.setEffect(e), a.effect);
   for (const kv of a.set) { const [k, v] = kv.split('='); await page.evaluate(([e, k2, v2]) => window.LE.setParam(e, k2, v2 === 'true' ? true : v2 === 'false' ? false : Number.isNaN(Number(v2)) ? v2 : Number(v2)), [a.effect, k, v]); }
   if (a.js) await page.evaluate((code) => new Function('LE', code)(window.LE), a.js);
