@@ -15,7 +15,7 @@ import type { SnapshotHistory } from '../project/history.ts';
 import { BUILTIN_LOOKS, applyLook, captureLook, type Look } from '../project/presets.ts';
 import { listProjects, deleteProject, storageInfo, type ProjectRecord } from '../project/store.ts';
 import { autoDirect, type AutoPlan } from '../director/autodirector.ts';
-import { effectMeta } from '../effects/registry.ts';
+import { effectMeta, allEffects } from '../effects/registry.ts';
 import { runGuard, guardKey, type GuardRun } from '../render/guardrun.ts';
 import { setLineVoice } from '../lyrics/voices.ts';
 import { idbGet, idbSet, idbClear } from '../project/idb.ts';
@@ -272,7 +272,7 @@ export function autoDirectDialog(app: App, sv: Services): void {
   const d = dialog('Auto-Director', h('div', { class: 'col' }, h('p', { class: 'dim' }, 'A full plan from the analysis: effects by section character, repeated sections reuse their effect, drops get the highest-energy pick. Click a thumbnail to jump there.'),
     strip, h('div', { class: 'row end' },
       h('label', { class: 'row', title: 'How many different effects the plan may use. Choruses keep one effect either way.' }, 'Effects ',
-        h('input', { type: 'range', min: 2, max: 16, step: 1, value: String(variety), 'aria-label': 'Number of different effects',
+        h('input', { type: 'range', min: 2, max: allEffects().length, step: 1, value: String(variety), 'aria-label': 'Number of different effects',
           onInput: (e: Event) => { const el = e.target as HTMLInputElement; variety = Number(el.value); (el.nextSibling as HTMLElement).textContent = `up to ${variety}`; plan = plan0(); void preview(); } }),
         h('span', { class: 'dim' }, `up to ${variety}`)),
       h('button', { onClick: () => { seed = (seed * 7919 + 13) % 9973 + 1; plan = plan0(); void preview(); } }, 'Shuffle'),

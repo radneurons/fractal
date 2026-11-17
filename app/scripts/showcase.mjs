@@ -2,7 +2,7 @@
 //   out/showcase/demo-auto-1776.mp4   the demo song through the Auto-Director, seed 1776 (16:9)
 //   out/showcase/demo-9x16.mp4        a 9:16 cut (the first chorus into the breakdown)
 //   out/showcase/waltz-karaoke.mp4    KARAOKE on the waltz, with its translation
-//   out/showcase/effects-sheet.png    a contact sheet of all 16 effects
+//   out/showcase/effects-sheet.png    a contact sheet of every effect
 //   node scripts/showcase.mjs [--res 720] [--out out/showcase]
 import { mkdirSync, openSync, writeSync, closeSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -45,7 +45,7 @@ try {
   await page.evaluate(() => window.LE.whenReady());
   const wdur = await page.evaluate(() => window.LE.song.analysis.duration);
   await exportTo('waltz-karaoke.mp4', { start: 0, end: wdur });
-  // 4. contact sheet of all 16 effects on the demo
+  // 4. contact sheet of every effect on the demo
   await page.evaluate(() => { window.LE.state.previewRes = 360; });
   await page.evaluate(() => window.LE.loadDemo());
   const ids = await page.evaluate(() => window.LE.effects().map((e) => e.id).filter((id) => id !== 'rise'));

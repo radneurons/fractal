@@ -2,7 +2,7 @@
 
 Kinetic typography for music and speech, in the browser. Drop in a song and its lyrics (LRC, SRT, VTT or plain text —
 or let Whisper transcribe and align them), and the engine analyses the audio, directs the words and renders a lyric
-video with one of sixteen effects, or a whole Auto-Directed plan, exported frame-exactly to MP4/WebM/GIF with
+video with one of seventeen effects, or a whole Auto-Directed plan, exported frame-exactly to MP4/WebM/GIF with
 sidecars. Live mode runs the same effects from a microphone for concerts, karaoke and streams.
 
 Vite + TypeScript, no framework, no 3D library; all DSP is hand-written and deterministic. The full brief is
@@ -24,7 +24,7 @@ npx vite build       # runs the effect lint and the type check first via `npm ru
 | Lyrics | `src/lyrics/` | LRC (enhanced/word), SRT, VTT, plain; voices and backing vocals, syllables (hyphenation + DP timing on vocal onsets), translation by overlap or index, tap sync |
 | Auto-sync | `src/align/` | Whisper (transformers.js) transcription + Needleman–Wunsch alignment to the lyric text |
 | Director | `src/director/` | roles, stress, concepts and elements (700+ word lexicon); Auto-Director beam search with transitions and a storyboard |
-| Effects | `src/effects/` | 16 effects (below) + SDK effects in `src/effects/user/` |
+| Effects | `src/effects/` | 17 effects (below) + SDK effects in `src/effects/user/` |
 | Compositor | `src/compose/`, `src/render/` | one shared WebGL2 context; layers with blend modes and word masks, 12 materials, modulation matrix, automation lanes, post (bloom, grain, chroma, vignette, distortion, halation, LUTs, letterbox, motion blur) |
 | Safety | `src/render/flashguard.ts` | WCAG 2.3.1 general + red flash guard: pre-pass, attenuation, verification; runs on every export and online in live mode |
 | Projects | `src/project/` | IndexedDB projects, zip project files, Looks (presets), undo/redo history |
@@ -32,8 +32,10 @@ npx vite build       # runs the effect lint and the type check first via `npm ru
 | Live | `src/live/`, `src/analysis/online.ts`, `src/ui/live.ts` | mic / tab / rehearsal input → AudioWorklet → worker; online beats/tempo/downbeats; cue / word-cue / auto-follow; presenter view, audience window, `?live&output` |
 | SDK | `src/effects/sdk.ts`, `npm run new-effect` | `defineEffect(spec)` with a helper kit; build lint; hot reload |
 
-The sixteen effects: BROADSIDE, ELEMENTS, MISSION POSTER, SWARM, LIQUID CHROME, DROSTE, PRESS, POP-UP, NEON, SIGNAL,
-RANSOM, MANDALA, FIREWORKS, SUMI, MONOLITH, KARAOKE. Live-capable: NEON, SIGNAL, SWARM, MANDALA, FIREWORKS, KARAOKE.
+The seventeen effects: BROADSIDE, ELEMENTS, MISSION POSTER, SWARM, LIQUID CHROME, DROSTE, PRESS, POP-UP, NEON, SIGNAL,
+RANSOM, MANDALA, FIREWORKS, SUMI, MONOLITH, KARAOKE, and BREAKOUT (added after the spec's sixteen: a campaign-style
+title sequence in pure type — giant words punch out of a letterbox window over its fixed bars, with colour fields,
+barcodes and UI chrome, stickers, ink spatter, torn paper and halftone, snapped to the beat). Live-capable: NEON, SIGNAL, SWARM, MANDALA, FIREWORKS, KARAOKE.
 
 ## Scripts
 
@@ -69,7 +71,7 @@ Measured on this machine (headless Chromium + SwiftShader for browser tests). �
 | §5 | lyrics formats, voices, syllables, translation | ✅ | test-lyrics, test-syllables |
 | §5 | Whisper auto-sync + alignment | ✅ | test-align (robustness cases from §17, deaf-span retry). Hardened on the three example songs: anchor-chain consistency (no crushed lines from stray one-word matches), re-transcription of stretches Whisper went deaf to, held notes kept. Word match after retries: 91 % / 74 % / 72 % |
 | §6 | Director roles/elements/concepts | ✅ | test-lyrics |
-| §8 | 16 effects with masks, transparency, reduce motion | ✅ | e2e, e2e-golden, e2e-hybrid |
+| §8 | 16 effects with masks, transparency, reduce motion | ✅ | e2e, e2e-golden, e2e-hybrid; plus BREAKOUT (beyond the spec), checked the same way |
 | §8.12 | MONOLITH depth of field | ✅ | depth in the march target's alpha + mip blur by thin-lens CoC, focus on the sung word (`dof` param) |
 | §9 | layers, word masks, materials, modulation, automation, media, artwork palette | ✅ | test-modulation, e2e-hybrid |
 | §9.6 | Auto-Director | ✅ | test-director: no repeats in a row, ≤ variety effects (default 5, slider 2–16 in the storyboard, `--variety` in export-clip), choruses share an effect; back-to-back repeats alternate; sections > 45 s are split |

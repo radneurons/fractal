@@ -175,7 +175,7 @@ export interface GlobalSettings {
   reactivity: number;
   caseMode: 'upper' | 'as-is' | 'lower';
   seed: number;
-  /** Auto-Director: how many different effects a plan may use (2–16) */
+  /** Auto-Director: how many different effects a plan may use (2 to the number of effects) */
   variety: number;
   endCard: boolean;
   title: string;

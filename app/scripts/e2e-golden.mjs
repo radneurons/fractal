@@ -1,4 +1,4 @@
-// Golden frames (SPEC §17): 4 times × 3 aspects × 16 effects, compared with stored PNGs by a perceptual difference
+// Golden frames (SPEC §17): 4 times × 3 aspects × every effect, compared with stored PNGs by a perceptual difference
 // (mean SSIM over 8×8 luma blocks ≥ 0.97). `--update` rewrites the goldens after a deliberate change; diff images
 // (abs difference ×4) go to out/golden-diff/. Goldens live in test/golden/ at a small size to keep the repo light.
 //   node scripts/e2e-golden.mjs [--update] [--effects a,b] [--aspects 16:9,9:16,1:1]
