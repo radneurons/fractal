@@ -349,15 +349,20 @@ export class Broadside extends Canvas2DEffect {
     const rm = this.s.reduceMotion;
     let prevBlock: Block | null = null;
     for (const b of this.blocks) {
-      for (const ln of b.lines) for (const it of ln.items) {
+      for (const [li, ln] of b.lines.entries()) for (const it of ln.items) {
         if (it.kind !== 'big') continue;
-        const xEnd = it.x + it.w;
+        // the row above stays in frame (whole) while it is fresh, so a smaller new row never crops a big one
+        const prevLn = li > 0 ? b.lines[li - 1] : null;
+        const keepPrev = !!prevLn && it.land - prevLn.end < 2.5;
+        const xEnd = Math.max(it.x + it.w, keepPrev ? prevLn!.width : 0);
         const fw = Math.max(1.12 * xEnd, 580, 1.5 * it.w);
-        const fh = 2.6 * ln.cap * (portrait ? 0.8 : 1);
+        const yTop = keepPrev ? prevLn!.y - prevLn!.cap * 1.05 : ln.y - ln.cap * 1.3, yBot = ln.y + ln.cap * 0.3;
+        const fh = Math.max(2.6 * ln.cap * (portrait ? 0.8 : 1), (yBot - yTop) * 1.3);
         const zoom = Math.min(W / fw, H / fh) * 0.94;
         const x0 = Math.min(0, it.x);
-        const [x, y] = this.toLevel(b, x0 + fw / 2 - 0.04 * fw, ln.y - ln.cap * 0.5);
-        const t = it.land - 0.1;
+        const [x, y] = this.toLevel(b, x0 + fw / 2 - 0.04 * fw, keepPrev ? (yTop + yBot) / 2 : ln.y - ln.cap * 0.5);
+        // after a dive key the camera is still landing: frame this word a beat later instead of being overridden
+        const t = Math.max(it.land - 0.1, (keys[keys.length - 1]?.t ?? -Infinity) + 0.3);
         if (prevBlock && prevBlock !== b && b.level === prevBlock.level) {
           // a new block: hold the last word, then whip in the last 0.5 s
           const whip = rm ? 0.8 : 0.5;
