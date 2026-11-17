@@ -364,6 +364,11 @@ export class Broadside extends Canvas2DEffect {
           const last = keys[keys.length - 1];
           if (last && t - whip > last.t + 0.05) { keys.push({ ...last, t: t - whip, ease: 'hold' }); this.whips.push([t - whip, t]); }
         }
+        // hold the current framing while it is sung; travel only in the last MOVE s before the next word lands
+        // (an unbroken ease over a long gap crops the line being sung as the camera drifts toward the next one)
+        const prevK = keys[keys.length - 1];
+        const MOVE = rm ? 1.0 : 0.7;
+        if (prevK && prevK.ease !== 'hold' && t - prevK.t > MOVE + 0.25) keys.push({ ...prevK, t: t - MOVE, ease: 'hold' });
         keys.push({ t, x, y, zoom, roll: b.rot, level: b.level, ease: 'inout' });
         prevBlock = b;
         if ((it.entrance === 'slam' || it.entrance === 'knocked') && it.words[0].role === 'hero') this.impacts.push(it.land);

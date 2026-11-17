@@ -5,6 +5,9 @@ import { allEffects } from './effects/registry.ts';
 import { uid } from './project/state.ts';
 import { skeletonize } from './render/skeleton.ts';
 import { exportVideo, type ExportOptions } from './export/exporter.ts';
+import { exportGif, type GifOptions } from './export/gif.ts';
+import { exportPngZip, alphaSupported } from './export/alpha.ts';
+import { toAss, toSrt, toVtt } from './export/captions.ts';
 
 export interface Hooks { [k: string]: unknown }
 
@@ -58,6 +61,21 @@ export function installHooks(app: App): Hooks {
       for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
       return { ...r, blob: undefined, base64: btoa(bin), bytes: buf.length };
     },
+    /** GIF / PNG-sequence exports keep their bytes for readExport, like exportClip({ chunked: true }) */
+    exportGif: async (o: Partial<GifOptions> = {}) => {
+      const r = await exportGif(app, { start: 0, end: 1, fps: 12, ...o });
+      const buf = new Uint8Array(await r.blob.arrayBuffer());
+      (window as unknown as { __export: Uint8Array }).__export = buf;
+      return { frames: r.frames, width: r.width, height: r.height, bytes: buf.length };
+    },
+    exportPngZip: async (o: { res?: number; fps?: number; start?: number; end?: number } = {}) => {
+      const r = await exportPngZip(app, { res: 360, fps: 12, start: 0, end: 1, ...o });
+      const buf = new Uint8Array(await r.blob.arrayBuffer());
+      (window as unknown as { __export: Uint8Array }).__export = buf;
+      return { frames: r.frames, bytes: buf.length };
+    },
+    alphaSupported: (w = 640, h = 360, fps = 30) => alphaSupported(w, h, fps),
+    sidecars: () => { const ly = app.song!.lyrics; return { ass: toAss(ly, { title: app.state.settings.title || app.song!.name }), srt: toSrt(ly), vtt: toVtt(ly) }; },
     /** base64 of a slice of the last export (large files are read in chunks) */
     readExport: (offset: number, length: number) => {
       const buf = (window as unknown as { __export: Uint8Array }).__export.subarray(offset, offset + length);
