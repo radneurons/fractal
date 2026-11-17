@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test --trace off",
     "mcp:install": "pnpm --filter @blockout/mcp run install-config",
-    "golden:update": "UPDATE_GOLDEN=1 vitest run packages/render"
+    "golden:update": "UPDATE_GOLDEN=1 vitest run packages/render",
+    "dev:https": "BLOCKOUT_HTTPS=1 pnpm --filter @blockout/studio dev"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

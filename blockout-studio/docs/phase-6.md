@@ -32,5 +32,5 @@
 
 **Known gaps**
 - Mocap needs network access on first use (the MediaPipe WASM and model come from public CDNs) and a webcam, so CI tests the solver, not the camera path. Hands and face are not captured; landmarks carry no bone twist.
-- iOS only exposes motion sensors over HTTPS; serve the studio with a certificate (for example `vite --https`) for iPhones.
+- iOS only exposes motion sensors over HTTPS: run `pnpm dev:https` (self-signed certificate; accept it once on the phone).
 - Collaboration undo is per user and inverse-based, so undoing your edit after someone else changed the same thing can be skipped as a conflict (it is reported, not silently applied).

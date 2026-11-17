@@ -1,7 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import basicSsl from '@vitejs/plugin-basic-ssl';
+
+// BLOCKOUT_HTTPS=1 serves over HTTPS with a self-signed cert (iOS only exposes motion sensors to secure pages).
+const https = process.env.BLOCKOUT_HTTPS === '1';
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), ...(https ? [basicSsl()] : [])],
   server: { port: 5173, strictPort: false, proxy: { '/bridge': { target: 'http://127.0.0.1:8787', ws: true, rewrite: (p) => p.replace(/^\/bridge/, '') } } },
   build: { target: 'es2022', chunkSizeWarningLimit: 4000 },
   optimizeDeps: { exclude: ['@blockout/core', '@blockout/render', '@blockout/prompting', '@blockout/pipeline'] },

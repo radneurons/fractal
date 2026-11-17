@@ -18,6 +18,8 @@ pnpm bridge        # terminal 1: local companion (Claude Code / MCP / API, keych
 pnpm dev           # terminal 2: the studio at http://localhost:5173 (opens the "Field Duel" demo)
 ```
 
+For the phone virtual camera on an iPhone, use `pnpm dev:https` instead of `pnpm dev`; iOS only exposes motion sensors to secure pages.
+
 The studio also runs with no bridge at all: the offline director and the mock provider keep every workflow usable, and the UI shows when it has fallen back.
 
 Connect Claude Code or Claude Desktop over MCP:
