@@ -130,6 +130,16 @@ function edt(grid: Float64Array, w: number, h: number): void {
   }
 }
 
+/** Euclidean distance (px) from each inside pixel to the nearest outside pixel (0 outside). */
+export function insideDistance(alpha: Uint8Array | Uint8ClampedArray, w: number, h: number, stride = 4, offset = 3, thr = 128): Float32Array {
+  const n = w * h, grid = new Float64Array(n);
+  for (let i = 0; i < n; i++) grid[i] = alpha[i * stride + offset] >= thr ? INF : 0;
+  edt(grid, w, h);
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = Math.sqrt(grid[i]);
+  return out;
+}
+
 export interface SDF { data: Uint8Array; w: number; h: number; spread: number }
 
 /** Signed distance field from an alpha mask (0..255). 128 = edge; ±spread px maps to 0..255 (inside > 128). */

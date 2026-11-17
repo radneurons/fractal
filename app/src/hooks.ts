@@ -3,6 +3,7 @@ import type { App } from './app.ts';
 import type { MaterialSettings, PlanSegment, TransitionKind, Layer, BlendMode } from './types.ts';
 import { allEffects } from './effects/registry.ts';
 import { uid } from './project/state.ts';
+import { skeletonize } from './render/skeleton.ts';
 import { exportVideo, type ExportOptions } from './export/exporter.ts';
 
 export interface Hooks { [k: string]: unknown }
@@ -54,6 +55,7 @@ export function installHooks(app: App): Hooks {
       for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
       return { ...r, blob: undefined, base64: btoa(bin), bytes: buf.length };
     },
+    skeleton: (text: string, font: string) => skeletonize(text, font).strokes.map((st) => ({ letter: st.letter, len: Math.round(st.len), n: st.cum.length, a: [Math.round(st.pts[0]), Math.round(st.pts[1])], b: [Math.round(st.pts[st.pts.length - 3]), Math.round(st.pts[st.pts.length - 2])] })),
     errors: [] as string[],
   };
   (window as unknown as { LE: Hooks }).LE = LE;
