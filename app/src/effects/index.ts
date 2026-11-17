@@ -7,6 +7,7 @@ import './chrome.ts';
 import './droste.ts';
 import './press.ts';
 import './popup.ts';
+import './signal.ts';
 import './karaoke.ts';
 // SDK effects: every file in effects/user/ is discovered at build time and hot-reloads in `npm run dev`.
 const user = import.meta.glob('./user/*.ts', { eager: true });
