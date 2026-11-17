@@ -21,6 +21,8 @@ export interface EffectContext {
   artwork?: ArtPalette | null;
   /** instance id (modulation targets, seeds) */
   instanceId: string;
+  /** 'export' renders at full quality; effects may cut corners in 'preview' (never in export) */
+  quality?: 'preview' | 'export';
 }
 
 /** What an effect hands to the compositor: a 2D canvas or a texture in the shared GL context. */

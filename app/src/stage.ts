@@ -106,7 +106,7 @@ export class Stage {
     const p = this.baseParams(instanceId, effectId);
     const nonLive: Params = {};
     for (const spec of meta?.params ?? []) if (!spec.live) nonLive[spec.key] = p[spec.key];
-    return JSON.stringify([this.w, this.h, this.song?.stamp, s.syncOffsetMs, s.caseMode, s.seed, s.minReadMs, s.anticipationMs, s.aspect, s.transparentBackground,
+    return JSON.stringify([this.w, this.h, !!this.forcedSize, this.song?.stamp, s.syncOffsetMs, s.caseMode, s.seed, s.minReadMs, s.anticipationMs, s.aspect, s.transparentBackground,
       s.voicePalette, s.showTranslation, s.reduceMotion, s.paletteSource, s.title, s.artist, s.fontOverrides, this.artwork?.all.join(''), nonLive]);
   }
 
@@ -139,7 +139,7 @@ export class Stage {
         this.onStatus?.(`Preparing ${cls.meta.name}…`);
         const ctx: EffectContext = {
           song, lyrics: this.lyrics!, analysis: song.analysis, settings: this.state.settings, params: this.baseParams(id, effectId),
-          width: w, height: h, host: this.host, flashAttenuation: (t) => this.flashAttenuation(t), artwork: this.artwork, instanceId: id,
+          width: w, height: h, host: this.host, flashAttenuation: (t) => this.flashAttenuation(t), artwork: this.artwork, instanceId: id, quality: this.forcedSize ? 'export' : 'preview',
         };
         await effect.prepare(ctx);
         this.inst.set(id, { effect, key, effectId, ms: performance.now() - t0 });
