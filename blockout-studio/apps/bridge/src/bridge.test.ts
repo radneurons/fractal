@@ -68,3 +68,18 @@ describe('secrets', () => {
     expect(JSON.stringify(await bridge.rpc('status'))).not.toMatch(/sk-super/); await st.delete('MY_VIDEO_KEY'); expect(await st.get('MY_VIDEO_KEY')).toBeUndefined();
   });
 });
+
+describe('segmentation via the bridge', () => {
+  it('runs the configured HTTP segmenter with keychain secrets and returns the mask', async () => {
+    const { createServer } = await import('node:http'); let auth = '';
+    const srv = createServer((req, res) => { let body = ''; req.on('data', (d) => (body += d)); req.on('end', () => { auth = String(req.headers.authorization); res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ mask: JSON.parse(body).hint })); }); });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r)); const port = (srv.address() as { port: number }).port;
+    try {
+      await bridge.rpc('secrets.set', { name: 'SEG_KEY', value: 'k-123' });
+      await bridge.rpc('segmenter.save', { config: { name: 'stub', url: `http://127.0.0.1:${port}/seg`, headers: { authorization: 'Bearer {{secret:SEG_KEY}}' }, maskPath: 'mask' } });
+      const { encodePNG } = await import('@blockout/render'), px = new Uint8ClampedArray(4 * 4 * 4).fill(255), b64 = Buffer.from(encodePNG(px, 4, 4)).toString('base64');
+      const r = (await bridge.rpc('segment', { image: b64, hint: b64, palette: [{ color: '#56b4e9', entityId: 'kenji' }] })) as { mask: string };
+      expect(auth).toBe('Bearer k-123'); expect(decodePNG(new Uint8Array(Buffer.from(r.mask, 'base64'))).width).toBe(4);
+    } finally { srv.close(); await bridge.rpc('segmenter.save', { config: null }); }
+  });
+});

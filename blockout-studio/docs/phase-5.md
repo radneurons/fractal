@@ -33,5 +33,5 @@
 - **Audio in the final cut:** tracks are mixed into cut time, following trims, J-cut leads, L-cut tails and edge fades (`mixCutAudio`, unit-tested), and encoded with WebCodecs `AudioEncoder` (AAC where available, otherwise Opus) next to the video. When no audio encoder exists, a WAV goes into a zip with the video. E2E-tested.
 
 **Known gaps**
-- The seeded segmenter is still model-free. It needs subjects whose colours differ from their surroundings, and it judges where colour regions sit, not identity. Plug a real segmenter (e.g. an HTTP SAM endpoint) into `SegmentationProvider` for production scoring; identity remains the vision critique's job.
+- The built-in seeded segmenter is model-free. It needs subjects whose colours differ from their surroundings, and it judges where colour regions sit, not identity. For production scoring, connect a real model in Takes → Providers → "connect a model": an HTTP segmenter (e.g. SAM) that runs in the bridge with keychain secrets and receives the frame, the blockout ID mask as a hint, and the palette. It is tested against a stub server. Identity remains the vision critique's job.
 - Frame decoding uses the browser's `<video>` element, so the provider's codec must be playable in the studio's browser.

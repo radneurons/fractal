@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ASPECTS, type Take } from '@blockout/core';
 import { S, useStudio, activeShot } from '../store';
-import { autoScore, cancelJob, critique, estimate, frameUrl, generate, loadHttpProviders, providers, useJobs } from '../generate';
+import { autoScore, cancelJob, critique, estimate, frameUrl, generate, loadHttpProviders, loadSegmenter, providers, useJobs } from '../generate';
 import { exportEDL, exportFCPXML, exportGLTF, exportOTIO, exportStoryboard, exportUSD, renderCut } from '../assembly';
 import { rpc, useGateway } from '../gateway';
 import { download, Section } from '../ui';
@@ -42,7 +42,7 @@ function TakeCard({ t, n }: { t: Take; n: number }) {
 }
 export function TakesPanel() {
   const project = useStudio((s) => s.project), shot = useStudio(activeShot), connected = useGateway((g) => g.connected), [prov, setProv] = useState('mock'), [height, setHeight] = useState(360), [confirm, setConfirm] = useState(false), [busy, setBusy] = useState<string | null>(null), jobs = useJobs((s) => s.jobs), httpN = useJobs((s) => s.httpConfigs.length), [cfg, setCfg] = useState<string | null>(null);
-  useEffect(() => { if (connected) void loadHttpProviders(); }, [connected]);
+  useEffect(() => { if (connected) { void loadHttpProviders(); void loadSegmenter(); } }, [connected]);
   const list = useMemo(() => providers('video'), [httpN]), pr = list.find((x) => x.id === prov) ?? list[0], imgPr = providers('image')[0];
   const takes = useMemo(() => Object.values(project.takes).filter((t) => t.shotId === shot?.id).sort((a, b) => a.at - b.at), [project.takes, shot?.id]);
   const spent = Object.values(project.takes).reduce((a, t) => a + t.cost, 0), est = shot && pr ? estimate(shot, pr, height) : null, allProposals = useStudio((s) => s.proposals), pendingGen = useMemo(() => allProposals.filter((p) => p.status === 'pending' && p.kind === 'generation'), [allProposals]);
@@ -77,6 +77,7 @@ export function TakesPanel() {
     </Section>
     <Section title="Providers" right={connected ? <button className="btn" onClick={() => setCfg(cfg === null ? JSON.stringify({ id: 'my-video', name: 'My video API', dialect: 'seedance', controls: ['firstFrame'], maxDuration: 10, costPerSecond: 0.1, submit: { url: 'https://api.example.com/v1/video', headers: { authorization: 'Bearer {{secret:MY_VIDEO_KEY}}' }, body: { prompt: '{{prompt}}', negative_prompt: '{{negative}}', seed: '{{seed}}', duration: '{{duration}}', image: 'data:image/png;base64,{{firstFrame}}' } }, poll: { url: 'https://api.example.com/v1/video/{{id}}', idPath: 'id', statusPath: 'status' }, resultPath: 'output.url' }, null, 1) : null)}>+ HTTP provider</button> : undefined}>
       <ul className="text-xxs">{list.map((x) => <li key={x.id}><b>{x.name}</b> <span className="text-dim">({x.id}, dialect {x.dialect})</span></li>)}</ul>
+      <SegmenterConfig connected={connected} />
       {!connected && <p className="text-xxs text-dim">Start the bridge to add your own HTTP providers (Seedance, H3, …); their keys live in the bridge keychain and are referenced as {'{{secret:NAME}}'}.</p>}
       {cfg !== null && <div className="mt-1"><textarea aria-label="HTTP provider config" className="inp h-48 font-mono !text-xxs" value={cfg} onChange={(e) => setCfg(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
         <div className="mt-1 flex gap-1"><button className="btn-primary" onClick={async () => { try { await rpc('providers.save', { config: JSON.parse(cfg) }); await loadHttpProviders(); setCfg(null); S().notify('Provider saved in the bridge.'); } catch (e) { S().notify((e as Error).message, 'error'); } }}>Save</button><SecretSetter /></div></div>}
@@ -84,3 +85,13 @@ export function TakesPanel() {
   </div>;
 }
 function SecretSetter() { const [n, setN] = useState(''), [v, setV] = useState(''); return <span className="flex gap-1"><input aria-label="Secret name" className="inp !w-28" placeholder="SECRET_NAME" value={n} onChange={(e) => setN(e.target.value)} onKeyDown={(e) => e.stopPropagation()} /><input aria-label="Secret value" type="password" className="inp !w-28" placeholder="value" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.stopPropagation()} /><button className="btn" disabled={!n || !v} onClick={async () => { await rpc('secrets.set', { name: n, value: v }); setV(''); S().notify(`${n} stored in the bridge keychain.`); }}>Store key</button></span>; }
+
+function SegmenterConfig({ connected }: { connected: boolean }) {
+  const seg = useJobs((s) => s.segmenter), [cfg, setCfg] = useState<string | null>(null);
+  return <div className="mt-1 text-xxs" data-testid="segmenter-config"><b>Segmentation for scoring:</b> {seg ? `${seg.name} (HTTP, via the bridge)` : 'built-in seeded segmenter (no model)'}{' '}
+    {connected && <button className="text-accent underline" onClick={() => setCfg(cfg === null ? JSON.stringify(seg ?? { name: 'SAM endpoint', url: 'https://seg.example.com/v1/segment', headers: { authorization: 'Bearer {{secret:SEG_KEY}}' }, maskPath: 'mask' }, null, 1) : null)}>{seg ? 'edit' : 'connect a model'}</button>}
+    {seg && connected && <button className="ml-1 text-bad underline" onClick={async () => { await rpc('segmenter.save', { config: null }); await loadSegmenter(); }}>use built-in</button>}
+    {cfg !== null && <div className="mt-1"><p className="text-dim">POSTs {'{ image, hint, palette }'} (base64 PNGs; hint = blockout ID mask) and expects a base64 PNG label image in the mask colours at <code>maskPath</code>.</p><textarea aria-label="Segmenter config" className="inp h-28 font-mono !text-xxs" value={cfg} onChange={(e) => setCfg(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
+      <button className="btn-primary mt-1" onClick={async () => { try { await rpc('segmenter.save', { config: JSON.parse(cfg) }); await loadSegmenter(); setCfg(null); } catch (e) { S().notify((e as Error).message, 'error'); } }}>Save</button></div>}
+  </div>;
+}

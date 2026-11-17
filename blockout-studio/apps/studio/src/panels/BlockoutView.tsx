@@ -70,7 +70,7 @@ export function ResultView() {
           {other && <img alt="Compare take" src={assetUrl(frameOf(other))} className="absolute inset-0 h-full w-full object-contain" style={{ clipPath: `inset(0 0 0 ${split}%)` }} />}
           {other && <input aria-label="A/B split" type="range" min={0} max={100} value={split} onChange={(e) => setSplit(+e.target.value)} className="absolute bottom-1 left-0 w-full" />}
           {opacity > 0 && shot && <BlockoutCanvas pass="clay" cameraId={shot.cameraId} maxWidth={640} className="absolute inset-0" style={{ opacity, mixBlendMode: 'normal' }} />}
-        </div></div> : <div className="flex h-full items-center justify-center text-dim">Generate a take from the Takes tab to see it here.</div>}
+        </div></div> : <div className="flex h-full items-center justify-center text-neutral-400">Generate a take from the Takes tab to see it here.</div>}
     </div>
   </div>;
 }

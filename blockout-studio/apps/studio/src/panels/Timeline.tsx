@@ -72,7 +72,7 @@ export function Timeline() {
   };
   const ticks = useMemo(() => { const step = pps > 120 ? 0.5 : pps > 45 ? 1 : pps > 20 ? 2 : 5, out: number[] = []; for (let t = 0; t <= project.duration + 1e-6; t += step) out.push(+t.toFixed(3)); return out; }, [pps, project.duration]);
   const row = (key: string, label: React.ReactNode, body: React.ReactNode, onLabel?: () => void, selected?: boolean, onDbl?: (t: number) => void) => (
-    <div key={key} className="relative flex border-b border-line/50" style={{ height: ROW }} role="row">
+    <div key={key} className="relative flex border-b border-line/50" style={{ height: ROW }} role="group" aria-label={typeof label === 'string' ? label : key}>
       <button type="button" className={`sticky left-0 z-10 flex shrink-0 items-center gap-1 truncate border-r border-line px-2 text-left text-xxs ${selected ? 'bg-raised text-fg' : 'bg-panel text-dim'}`} style={{ width: LABEL_W }} onClick={onLabel}>{label}</button>
       <div className="relative" style={{ width }} onDoubleClick={(e) => onDbl?.(snapTime(S().project, timeAt(e.clientX), pps, false))}>{body}</div>
     </div>);
@@ -93,7 +93,7 @@ export function Timeline() {
       <button className="btn" onClick={() => S().dispatch({ type: 'addMarker', marker: { id: newId('m'), t: S().t, label: 'Marker', kind: 'marker' } })} title="Add marker at playhead (M)">+ Marker</button>
       <input aria-label="Timeline zoom" type="range" min={12} max={240} value={pps} onChange={(e) => setPps(+e.target.value)} className="w-24" />
     </div>
-    <div ref={scroller} className="relative min-h-0 flex-1 overflow-auto" role="grid" aria-label="Dope sheet">
+    <div ref={scroller} className="relative min-h-0 flex-1 overflow-auto" role="region" aria-label="Dope sheet">
       <div className="relative" style={{ width: width + LABEL_W }}>
         <Playhead pps={pps} />
         {range && <div className="pointer-events-none absolute bottom-0 top-0 z-0 bg-accent/10" style={{ left: LABEL_W + range[0] * pps, width: (range[1] - range[0]) * pps }} />}

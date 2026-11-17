@@ -1,6 +1,6 @@
 @tailwind base; @tailwind components; @tailwind utilities;
 :root, [data-theme='dark'] { --bg: 14 15 18; --panel: 22 24 29; --raised: 34 37 45; --line: 52 56 66; --fg: 228 230 235; --dim: 139 146 160; --accent: 94 168 255; --warn: 240 180 60; --bad: 240 96 96; --good: 80 200 140; --claude: 217 119 87; color-scheme: dark; }
-[data-theme='light'] { --bg: 240 241 244; --panel: 252 252 253; --raised: 236 238 242; --line: 208 212 220; --fg: 24 26 32; --dim: 96 104 118; --accent: 30 110 220; --warn: 176 116 0; --bad: 200 50 50; --good: 20 140 90; --claude: 190 90 60; color-scheme: light; }
+[data-theme='light'] { --bg: 240 241 244; --panel: 252 252 253; --raised: 236 238 242; --line: 208 212 220; --fg: 24 26 32; --dim: 96 104 118; --accent: 20 88 190; --warn: 135 85 0; --bad: 180 35 35; --good: 10 110 65; --claude: 165 70 38; color-scheme: light; }
 html, body, #root { height: 100%; margin: 0; }
 body { background: rgb(var(--bg)); color: rgb(var(--fg)); font: 12px/1.4 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; -webkit-font-smoothing: antialiased; }
 * { scrollbar-width: thin; scrollbar-color: rgb(var(--line)) transparent; }

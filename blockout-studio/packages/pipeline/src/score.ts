@@ -74,3 +74,27 @@ export async function scoreTake(blockoutId: Image[], blockoutClay: Image[], resu
   for (const f of picks) { const bi = Math.min(blockoutId.length - 1, Math.round((f / Math.max(1, result.length - 1)) * (blockoutId.length - 1))), r = maskIoU(blockoutId[bi], await seg.segment(result[f], palette, blockoutId[bi]), palette); mean += r.mean; cov += r.coverage; for (const [k, v] of Object.entries(r.perEntity)) (per[k] ??= []).push(v); }
   return { iou: mean / picks.length, coverage: cov / picks.length, perEntity: Object.fromEntries(Object.entries(per).map(([k, v]) => [k, v.reduce((a, b) => a + b, 0) / v.length])), flicker: Math.max(0, flicker(result) - flicker(blockoutClay)), paletteDistance: paletteDistance(result[picks[1] ?? 0], stylePalette), segmenter: seg.id };
 }
+
+// ---------- pluggable HTTP segmentation (e.g. a SAM endpoint) ----------
+import { z } from 'zod';
+import { decodePNG, encodePNG } from '@blockout/render';
+export const HttpSegmenterConfigS = z.object({
+  name: z.string().default('HTTP segmenter'), url: z.string().url(), headers: z.record(z.string()).default({}),
+  /** Response path to a base64 PNG label image that uses the palette colours (white/black/any other colour = background). */
+  maskPath: z.string().default('mask'),
+});
+export type HttpSegmenterConfig = z.infer<typeof HttpSegmenterConfigS>;
+const b64e = (u: Uint8Array) => (typeof Buffer !== 'undefined' ? Buffer.from(u).toString('base64') : btoa(Array.from(u, (c) => String.fromCharCode(c)).join('')));
+const b64d = (s: string) => (typeof Buffer !== 'undefined' ? new Uint8Array(Buffer.from(s, 'base64')) : Uint8Array.from(atob(s), (c) => c.charCodeAt(0)));
+/** Request body: { image: <png base64>, hint: <png base64 of the blockout ID mask>, palette: [{color, entityId}] }.
+ *  Headers may use {{secret:NAME}} (resolved by the caller, i.e. the bridge keychain). */
+export async function segmentViaHttp(raw: unknown, frame: Image, palette: { color: string; entityId: string }[], hint: Image | undefined, deps: { fetch?: typeof fetch; secret(name: string): Promise<string | undefined> }): Promise<Image> {
+  const c = HttpSegmenterConfigS.parse(raw), headers: Record<string, string> = { 'content-type': 'application/json' };
+  for (const [k, v] of Object.entries(c.headers)) { let out = v; for (const m of v.matchAll(/\{\{secret:([^}]+)\}\}/g)) { const s = await deps.secret(m[1]); if (s === undefined) throw new Error(`secret "${m[1]}" is not set in the bridge keychain`); out = out.replace(m[0], s); } headers[k] = out; }
+  const res = await (deps.fetch ?? fetch)(c.url, { method: 'POST', headers, body: JSON.stringify({ image: b64e(encodePNG(frame.data, frame.width, frame.height, 1)), hint: hint ? b64e(encodePNG(hint.data, hint.width, hint.height, 1)) : null, palette }) });
+  if (!res.ok) throw new Error(`${c.name}: HTTP ${res.status}`);
+  const json = await res.json(), mask = c.maskPath.split('.').reduce<unknown>((a, k) => (a as Record<string, unknown> | undefined)?.[k], json); if (typeof mask !== 'string') throw new Error(`${c.name}: no base64 mask at "${c.maskPath}"`);
+  const img = decodePNG(b64d(mask)); return img.width === frame.width ? img : resize(img, frame.width, frame.height);
+}
+/** A SegmentationProvider backed by any async segment function (the studio passes one that calls the bridge). */
+export const remoteSegmenter = (id: string, name: string, fn: (frame: Image, palette: { color: string; entityId: string }[], hint?: Image) => Promise<Image>): SegmentationProvider => ({ id, name, segment: fn });

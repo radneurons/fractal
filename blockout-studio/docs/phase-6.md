@@ -35,3 +35,5 @@
 - Hands and face are not captured, and landmarks carry no bone twist.
 - iOS only exposes motion sensors over HTTPS: run `pnpm dev:https` (self-signed certificate; accept it once on the phone).
 - Collaboration undo is per user and inverse-based, so undoing your edit after someone else changed the same thing can be skipped as a conflict (it is reported, not silently applied).
+
+**Follow-up: accessibility.** Tab switches scene/blockout focus only when no control has focus, so it otherwise moves between controls as usual. The dope sheet is a labelled region of labelled rows. Light-theme accent, warning, success and Claude colours were darkened to meet WCAG contrast. An axe-core E2E test checks every sidebar tab in both themes for serious or critical violations (none remain).

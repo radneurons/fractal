@@ -70,3 +70,12 @@ describe('interchange', () => {
     const xref = +/startxref\n(\d+)/.exec(txt)![1]; expect(txt.slice(xref, xref + 4)).toBe('xref'); const first = +/\n(\d{10}) 00000 n/.exec(txt.slice(xref))![1]; expect(txt.slice(first, first + 7)).toBe('1 0 obj');
   });
 });
+describe('HTTP segmentation provider', () => {
+  it('sends frame + blockout hint + palette, resolves keychain secrets, and scores with the returned mask', async () => {
+    const img = (px: Uint8ClampedArray): Image => ({ width: w, height: h, data: px }), id = img(softRenderer.render(demo, shot, 12, 'id', w, h)), palette = idPalette(demo); let sent: any = null, auth = '';
+    const fake = (async (_u: string, init?: RequestInit) => { sent = JSON.parse(init!.body as string); auth = (init!.headers as Record<string, string>).authorization; return new Response(JSON.stringify({ result: { mask: sent.hint } })); }) as unknown as typeof fetch; // a "perfect" segmenter echoes the hint
+    const seg = L.remoteSegmenter('sam', 'SAM', (f, p, hint) => L.segmentViaHttp({ url: 'https://seg.example/v1', headers: { authorization: 'Bearer {{secret:SEG}}' }, maskPath: 'result.mask' }, f, p, hint, { fetch: fake, secret: async (n) => (n === 'SEG' ? 'tok' : undefined) }));
+    const s = await L.scoreTake([id], [id], [id], palette, demo.bibles.style.palette, seg);
+    expect(auth).toBe('Bearer tok'); expect(sent.palette.length).toBe(palette.length); expect(typeof sent.image).toBe('string'); expect(s.iou).toBeCloseTo(1, 5); expect(s.segmenter).toBe('sam');
+  });
+});

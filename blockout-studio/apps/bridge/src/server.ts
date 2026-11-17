@@ -8,7 +8,8 @@ import * as Y from 'yjs';
 import { OpS, ProjectS, applyOp, batch, demoProject, runContinuity, shotFacts, shotFrames, describeOp, type Op, type Project } from '@blockout/core';
 import { encodePNG, passSize, softRenderer, PASSES, type PassName } from '@blockout/render';
 import { LocalBackend, TASK_NAMES, continuityLocal, listDialects, registerDialect, stalePrompts, type ClaudeBackend, type TaskName } from '@blockout/prompting';
-import { HttpProviderConfigS, httpProvider, type GenRequest } from '@blockout/pipeline';
+import { HttpProviderConfigS, HttpSegmenterConfigS, httpProvider, segmentViaHttp, type GenRequest } from '@blockout/pipeline';
+import { decodePNG, encodePNG as encPNG } from '@blockout/render';
 import { AnthropicBackend, ClaudeCodeBackend, McpBackend } from './claude';
 import { SecretStore } from './secrets';
 
@@ -61,6 +62,10 @@ export async function startBridge(o: BridgeOptions = {}): Promise<Bridge> {
     'secrets.list': () => secrets.names(), 'secrets.set': async (p) => { await secrets.set(p.name, p.value); log('user', `stored secret ${p.name}`); return { ok: true }; }, 'secrets.delete': async (p) => { await secrets.delete(p.name); return { ok: true }; },
     'providers.list': () => providers(), 'providers.save': (p) => { const c = HttpProviderConfigS.parse(p.config), all = providers().filter((x) => (x as { id: string }).id !== c.id); writeFileSync(provFile, JSON.stringify([...all, p.config], null, 1)); return { ok: true }; }, 'providers.delete': (p) => { writeFileSync(provFile, JSON.stringify(providers().filter((x) => (x as { id: string }).id !== p.id), null, 1)); return { ok: true }; },
     dialects: () => listDialects(),
+    'segmenter.get': () => { try { return JSON.parse(readFileSync(join(dataDir, 'segmenter.json'), 'utf8')); } catch { return null; } },
+    'segmenter.save': (p) => { if (p.config === null) { writeFileSync(join(dataDir, 'segmenter.json'), 'null'); return { ok: true }; } HttpSegmenterConfigS.parse(p.config); writeFileSync(join(dataDir, 'segmenter.json'), JSON.stringify(p.config, null, 1)); return { ok: true }; },
+    /** Run the user's segmentation endpoint here (keys stay in the keychain). image/hint are base64 PNGs; returns a base64 PNG label image. */
+    async segment(p) { const cfg = JSON.parse(readFileSync(join(dataDir, 'segmenter.json'), 'utf8')); if (!cfg) throw new Error('no segmenter configured'); const img = segmentViaHttp(cfg, decodePNG(unb64(p.image)), p.palette, p.hint ? decodePNG(unb64(p.hint)) : undefined, { secret: (n) => secrets.get(n) }); const m = await img; return { mask: b64(encPNG(m.data, m.width, m.height, 1)) }; },
     /** Run a user-configured HTTP provider here so the key never leaves the bridge and CORS is not an issue. */
     async httpGenerate(p, actor) { const plugin = httpProvider(p.config), r = p.request as Record<string, any>; const req: GenRequest = { ...r, passes: Object.fromEntries(Object.entries(r.passes ?? {}).map(([k, v]) => [k, (v as string[]).map(unb64)])), firstFrame: r.firstFrame ? unb64(r.firstFrame) : undefined, lastFrame: r.lastFrame ? unb64(r.lastFrame) : undefined, keyframe: r.keyframe ? unb64(r.keyframe) : undefined, mask: r.mask ? unb64(r.mask) : undefined, source: r.source ? (r.source as string[]).map(unb64) : undefined, references: r.references ?? [] } as GenRequest; log(actor, `sent ${r.shotId} to ${plugin.name}`); return plugin.generate(req, { onProgress: (f, note) => broadcast({ type: 'gen:progress', jobId: p.jobId, fraction: f, note }), signal: { aborted: false }, secret: (n) => secrets.get(n) }); },
     log: () => state.log.slice(-200),

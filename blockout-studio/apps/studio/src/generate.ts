@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { newId, shotFrames, type Project, type Shot, type Take } from '@blockout/core';
 import { decodePNG, encodePNG, idPalette, passSize, softRenderer, type PassName } from '@blockout/render';
-import { GenerationQueue, getProvider, httpProvider, listProviders, scoreTake, mockProvider, type GenRequest, type Job, type ProviderPlugin } from '@blockout/pipeline';
+import { GenerationQueue, getProvider, httpProvider, listProviders, scoreTake, mockProvider, remoteSegmenter, seededSegmenter, type GenRequest, type Job, type ProviderPlugin, type SegmentationProvider } from '@blockout/pipeline';
 import { activePrompt, compileShot } from '@blockout/prompting';
 import { S } from './store';
 import { assetUrl, getAsset, putAsset } from './persist';
@@ -11,7 +11,13 @@ import { onGenProgress, rpc, setTakeFrameResolver, useGateway } from './gateway'
 import { claude } from './gateway';
 
 export interface JobView { id: string; shotId: string; providerId: string; status: Job['status']; progress: number; note: string; estimate: number; takeId: string }
-export const useJobs = create<{ jobs: JobView[]; httpConfigs: unknown[] }>(() => ({ jobs: [], httpConfigs: [] }));
+export const useJobs = create<{ jobs: JobView[]; httpConfigs: unknown[]; segmenter: { name: string } | null }>(() => ({ jobs: [], httpConfigs: [], segmenter: null }));
+export const loadSegmenter = () => rpc<{ name: string } | null>('segmenter.get').then((segmenter) => useJobs.setState({ segmenter })).catch(() => {});
+/** The user's HTTP segmenter (via the bridge) when configured and reachable; the built-in seeded segmenter otherwise. */
+function activeSegmenter(): SegmentationProvider {
+  const cfg = useJobs.getState().segmenter; if (!cfg || !useGateway.getState().connected) return seededSegmenter;
+  return remoteSegmenter('http', cfg.name, async (frame, palette, hint) => { const r = await rpc<{ mask: string }>('segment', { image: b64(encodePNG(frame.data, frame.width, frame.height, 1)), hint: hint ? b64(encodePNG(hint.data, hint.width, hint.height, 1)) : null, palette }); const bin = atob(r.mask), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return decodePNG(u8); });
+}
 const spent = (p: Project) => Object.values(p.takes).reduce((a, t) => a + t.cost, 0);
 const queue: GenerationQueue = new GenerationQueue({ concurrency: 2, retries: 2, budget: () => ({ cap: S().project.budgetCap, spent: spent(S().project), committed: queue.committed() }), onChange: (j) => useJobs.setState((st) => ({ jobs: st.jobs.map((v) => (v.id === j.id ? { ...v, status: j.status, progress: j.progress, note: j.note } : v)) })) });
 
@@ -86,7 +92,7 @@ export async function autoScore(takeId: string) {
   const p = S().project, t = p.takes[takeId], shot = p.shots.find((x) => x.id === t?.shotId); if (!t || !shot || !t.frames.length) return;
   const res = await Promise.all(t.frames.map(async (id) => decodePNG(new Uint8Array(await (await getAsset(id))!.arrayBuffer())))), n = shotFrames(p, shot), [w, h] = passSize(p, res[0].height), picks = [0, n >> 1, n - 1];
   const ids = picks.map((f) => ({ width: w, height: h, data: softRenderer.render(p, shot, f, 'id', w, h) })), clay = picks.map((f) => ({ width: w, height: h, data: softRenderer.render(p, shot, f, 'clay', w, h) }));
-  const sc = await scoreTake(ids, clay, [res[0], res[res.length >> 1], res[res.length - 1]], idPalette(p), p.bibles.style.palette);
+  let sc; try { sc = await scoreTake(ids, clay, [res[0], res[res.length >> 1], res[res.length - 1]], idPalette(p), p.bibles.style.palette, activeSegmenter()); } catch (e) { S().notify(`Segmenter failed (${(e as Error).message}); using the built-in one`, 'error'); sc = await scoreTake(ids, clay, [res[0], res[res.length >> 1], res[res.length - 1]], idPalette(p), p.bibles.style.palette, seededSegmenter); }
   S().dispatch({ type: 'updateTake', id: takeId, patch: { iou: Math.round(sc.iou * 1000) / 1000 } }, { label: 'Score take' }); return sc;
 }
 /** Vision critique: sampled blockout + result frames go to Claude; a numeric fallback when no vision backend is available. */

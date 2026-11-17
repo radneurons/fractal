@@ -17,6 +17,7 @@
     "mocap:fetch": "node scripts/fetch-mocap-model.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "1.63.0",
     "@types/node": "^22.9.0",
     "fflate": "^0.8.3",
