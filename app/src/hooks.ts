@@ -48,12 +48,22 @@ export function installHooks(app: App): Hooks {
     applyTranslation: (text: string) => app.applyTranslation(text),
     exportLrc: () => app.exportLrc(),
     /** Export a clip and return it as base64 (the e2e scripts write it to disk and probe it). */
-    exportClip: async (o: Partial<ExportOptions> = {}) => {
-      const r = await exportVideo(app, { format: 'mp4', res: 720, fps: 30, start: 0, end: 2, quality: 12, ...o });
+    exportClip: async (o: Partial<ExportOptions> & { chunked?: boolean } = {}) => {
+      let last = 0;
+      const r = await exportVideo(app, { format: 'mp4', res: 720, fps: 30, start: 0, end: 2, quality: 12, ...o, onProgress: (p) => { if (p.frame - last >= 300) { last = p.frame; console.log(`export ${p.frame}/${p.frames} (${p.msPerFrame.toFixed(0)} ms/frame)`); } } });
       const buf = new Uint8Array(await r.blob.arrayBuffer());
+      (window as unknown as { __export: Uint8Array }).__export = buf;
+      if (o.chunked) return { ...r, blob: undefined, bytes: buf.length };
       let bin = '';
       for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
       return { ...r, blob: undefined, base64: btoa(bin), bytes: buf.length };
+    },
+    /** base64 of a slice of the last export (large files are read in chunks) */
+    readExport: (offset: number, length: number) => {
+      const buf = (window as unknown as { __export: Uint8Array }).__export.subarray(offset, offset + length);
+      let bin = '';
+      for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+      return btoa(bin);
     },
     skeleton: (text: string, font: string) => skeletonize(text, font).strokes.map((st) => ({ letter: st.letter, len: Math.round(st.len), n: st.cum.length, a: [Math.round(st.pts[0]), Math.round(st.pts[1])], b: [Math.round(st.pts[st.pts.length - 3]), Math.round(st.pts[st.pts.length - 2])] })),
     errors: [] as string[],

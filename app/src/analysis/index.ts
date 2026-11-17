@@ -15,7 +15,7 @@ import { trackPitch } from './pitch.ts';
 import { audioMood } from './mood.ts';
 import { integratedLufs } from './loudness.ts';
 
-export const ANALYSIS_VERSION = 7;
+export const ANALYSIS_VERSION = 8;
 
 export interface AudioInput {
   sampleRate: number;

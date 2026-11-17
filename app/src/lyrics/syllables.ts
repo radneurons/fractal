@@ -125,7 +125,8 @@ function vowelWeight(piece: string): number {
  * Time K syllables inside [start, end]. Boundary candidates are vocal onsets and pitch-plateau
  * changes; K−1 are chosen by dynamic programming against a vowel-length prior.
  */
-export function timeSyllables(pieces: string[], start: number, end: number, candidates: number[], melisma = false): Syllable[] {
+export function timeSyllables(pieces: string[], start: number, end: number, candidatesIn: (number | { t: number; w: number })[], melisma = false): Syllable[] {
+  const candW = candidatesIn.map((c) => (typeof c === 'number' ? { t: c, w: 1 } : c));
   const K = pieces.length;
   const dur = Math.max(0.03, end - start);
   if (K <= 1) return [{ text: pieces[0] ?? '', start, end }];
@@ -140,15 +141,17 @@ export function timeSyllables(pieces: string[], start: number, end: number, cand
     let acc = 0;
     for (let i = 0; i < K - 1; i++) { acc += w[i]; prior.push(start + (dur * acc) / tot); }
   }
-  const cand = candidates.filter((t) => t > start + 0.04 && t < end - 0.04).sort((a, b) => a - b);
+  const cw = candW.filter((c) => c.t > start + 0.04 && c.t < end - 0.04).sort((a, b) => a.t - b.t);
+  const cand = cw.map((c) => c.t);
   const NB = K - 1, NC = cand.length;
   const avg = dur / K;
   const maxDev = Math.max(0.06, 0.45 * avg);
-  const noCandCost = 0.4 * maxDev; // using the prior itself
+  const noCandCost = 0.6 * maxDev; // using the prior itself
   // dp[b][c] = best cost with boundary b at option c (c = NC means "prior")
   const INF = 1e9;
   const optTime = (b: number, c: number) => (c === NC ? prior[b] : cand[c]);
-  const optCost = (b: number, c: number) => (c === NC ? noCandCost : Math.abs(cand[c] - prior[b]) > maxDev ? INF : Math.abs(cand[c] - prior[b]));
+  // a candidate supported by both a vocal onset and a pitch change earns a bonus over a lone onset
+  const optCost = (b: number, c: number) => (c === NC ? noCandCost : Math.abs(cand[c] - prior[b]) > maxDev ? INF : Math.abs(cand[c] - prior[b]) - 0.12 * cw[c].w);
   let dp = new Float64Array(NC + 1), nx = new Float64Array(NC + 1);
   const back: Int32Array[] = [];
   for (let c = 0; c <= NC; c++) dp[c] = optCost(0, c);
@@ -181,18 +184,17 @@ export function timeSyllables(pieces: string[], start: number, end: number, cand
 }
 
 /** Candidate syllable boundaries inside a span: vocal onsets + pitch-plateau changes (≥ 80 cents). */
-export function syllableCandidates(a: Analysis | null, start: number, end: number): number[] {
+export function syllableCandidates(a: Analysis | null, start: number, end: number): { t: number; w: number }[] {
   if (!a) return [];
-  const out: number[] = [];
-  const on = a.vocalOnsets;
-  for (let i = lowerBound(on, start); i < on.length && on[i] < end; i++) out.push(on[i]);
+  const on: number[] = [], pc: number[] = [];
+  const vo = a.vocalOnsets;
+  for (let i = lowerBound(vo, start); i < vo.length && vo[i] < end; i++) on.push(vo[i]);
   const pl = pitchPlateaus(a.f0, start, end);
-  for (let i = 1; i < pl.length; i++) if (Math.abs(pl[i].midi - pl[i - 1].midi) >= 0.8) out.push(0.5 * (pl[i - 1].end + pl[i].start));
-  out.sort((x, y) => x - y);
-  // merge candidates closer than 40 ms
-  const merged: number[] = [];
-  for (const t of out) { if (merged.length && t - merged[merged.length - 1] < 0.04) continue; merged.push(t); }
-  return merged;
+  for (let i = 1; i < pl.length; i++) if (Math.abs(pl[i].midi - pl[i - 1].midi) >= 0.8) pc.push(0.5 * (pl[i - 1].end + pl[i].start));
+  // onsets are the candidates; a pitch change within 50 ms confirms one (weight 2); lone pitch changes count 1
+  const out = on.map((t) => ({ t, w: pc.some((p) => Math.abs(p - t) < 0.05) ? 2 : 1 }));
+  for (const p of pc) if (!on.some((t) => Math.abs(p - t) < 0.05)) out.push({ t: p, w: 1 });
+  return out.sort((x, y) => x.t - y.t);
 }
 
 /** Fill `syllableTimes` for a word (tags win). */

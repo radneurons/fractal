@@ -34,7 +34,10 @@ export class Stage {
   song: Song | null = null;
   w = 1280; h = 720;
   /** when set, overrides the preview size (export) */
-  forcedSize: { w: number; h: number } | null = null;
+  private forced: { w: number; h: number } | null = null;
+  /** export size; while set, 2D canvases rasterise in software so frames are bit-exact functions of t */
+  get forcedSize(): { w: number; h: number } | null { return this.forced; }
+  set forcedSize(v: { w: number; h: number } | null) { this.forced = v; (globalThis as { __LE_EXPORT?: boolean }).__LE_EXPORT = !!v; }
   segments: PlanSegment[] = [];
   mod: Modulation = new Modulation(null, null);
   artwork: ArtPalette | null = null;

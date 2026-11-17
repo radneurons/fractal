@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-export async function startServer(port = 4173) {
-  if (!existsSync(join(ROOT, 'dist/index.html'))) throw new Error('run `npx vite build` first');
-  const proc = spawn(process.execPath, [join(ROOT, 'node_modules/vite/bin/vite.js'), 'preview', '--port', String(port), '--strictPort'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+export async function startServer(port = 4173, dist = process.env.LE_DIST ?? 'dist') {
+  if (!existsSync(join(ROOT, dist, 'index.html'))) throw new Error('run `npx vite build` first');
+  const proc = spawn(process.execPath, [join(ROOT, 'node_modules/vite/bin/vite.js'), 'preview', '--port', String(port), '--strictPort', '--outDir', dist], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   proc.stdout.on('data', (d) => { out += d; });
   proc.stderr.on('data', (d) => { out += d; });

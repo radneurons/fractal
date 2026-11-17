@@ -4,7 +4,7 @@ import { FRAME_RATE, percentile, smoothAR, clamp } from './dsp.ts';
 import { detectOnsets, normaliseFlux } from './rhythm.ts';
 
 /** weights tuned on the fixtures and checked against Whisper-aligned real songs */
-export const VOCAL_WEIGHTS = { bias: -4.0, energy: 2.4, tonal: 1.2, voicing: 3.2, modulation: 1.6 };
+export const VOCAL_WEIGHTS = { bias: -5.2, energy: 2.2, tonal: 1.0, voicing: 2.6, modulation: 3.4, ratio: 0.5, release: 400, outRelease: 120 };
 
 export function vocalActivity(f: Frames): Float32Array {
   const n = f.nF;
@@ -21,7 +21,8 @@ export function vocalActivity(f: Frames): Float32Array {
     a = x + (a - x) * k8; b = x + (b - x) * k4;
     mod[i] = Math.abs(a - b);
   }
-  const modS = smoothAR(mod, FRAME_RATE, 40, 300);
+  // syllable-rate modulation with a long memory, so held notes after sung syllables stay active
+  const modS = smoothAR(mod, FRAME_RATE, 40, VOCAL_WEIGHTS.release);
   const modRef = Math.max(percentile(modS, 0.9), 1e-3);
   const w = VOCAL_WEIGHTS;
   const raw = new Float32Array(n);
@@ -31,10 +32,10 @@ export function vocalActivity(f: Frames): Float32Array {
     const tonal = 1 - clamp(Math.sqrt(f.vFlat[i]) * 2, 0, 1);
     const voicing = clamp(1 - f.yin[i] * 1.6, 0, 1);
     const m = clamp(modS[i] / modRef, 0, 1);
-    const z = w.bias + w.energy * e * (0.5 + 0.5 * ratio) + w.tonal * tonal + w.voicing * voicing + w.modulation * m;
+    const z = w.bias + w.energy * e * (1 - w.ratio + w.ratio * ratio) + w.tonal * tonal + w.voicing * voicing + w.modulation * m;
     raw[i] = e < 0.08 ? 0 : 1 / (1 + Math.exp(-z));
   }
-  return smoothAR(raw, FRAME_RATE, 30, 250);
+  return smoothAR(raw, FRAME_RATE, 30, VOCAL_WEIGHTS.outRelease);
 }
 
 /** Onsets of the vocal estimate (syllable boundary candidates). */

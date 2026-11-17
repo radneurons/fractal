@@ -92,16 +92,22 @@ export abstract class BaseEffect implements Effect {
 }
 
 /** Canvas2D effects implement draw(); the frame and the mask have their own canvases. */
+/** Deterministic (software) 2D rasterisation: on for exports and when `?soft2d` / LE_SOFT2D is set. */
+export function softCanvas(): boolean { const g = globalThis as { __LE_SOFT2D?: boolean; __LE_EXPORT?: boolean; location?: Location }; return !!g.__LE_SOFT2D || !!g.__LE_EXPORT || (!!g.location && /[?&]soft2d\b/.test(g.location.search)); }
+
 export abstract class Canvas2DEffect extends BaseEffect {
   private cv: (HTMLCanvasElement | OffscreenCanvas)[] = [];
   private gx: Ctx2D[] = [];
+  private soft: boolean[] = [];
   /** true while rendering the word mask */
   maskMode = false;
   protected abstract draw(t: number, g: Ctx2D, mask: boolean): void;
   protected ensure(i: number): Ctx2D {
-    if (!this.cv[i] || this.cv[i].width !== this.W || this.cv[i].height !== this.H) {
-      this.cv[i] = makeCanvas(this.W, this.H);
-      this.gx[i] = this.cv[i].getContext('2d', { alpha: true }) as Ctx2D;
+    const soft = softCanvas();
+    if (!this.cv[i] || this.cv[i].width !== this.W || this.cv[i].height !== this.H || this.soft[i] !== soft) {
+      this.cv[i] = makeCanvas(this.W, this.H); this.soft[i] = soft;
+      // software raster when asked: accelerated 2D canvases cache glyphs by history, which breaks render(t) purity
+      this.gx[i] = this.cv[i].getContext('2d', { alpha: true, willReadFrequently: softCanvas() }) as Ctx2D;
     }
     return this.gx[i];
   }
@@ -128,7 +134,7 @@ export abstract class GLEffect extends BaseEffect {
   scope!: GLScope;
   protected out: Target[] = [];
   /** scratch 2D canvases (text layers uploaded as textures) */
-  private scratch = new Map<string, { c: HTMLCanvasElement | OffscreenCanvas; g: Ctx2D }>();
+  private scratch = new Map<string, { c: HTMLCanvasElement | OffscreenCanvas; g: Ctx2D; soft: boolean }>();
   protected async init(ctx: EffectContext): Promise<void> {
     await super.init(ctx);
     this.scope?.dispose();
@@ -136,11 +142,12 @@ export abstract class GLEffect extends BaseEffect {
     this.out = [this.scope.target(this.W, this.H), this.scope.target(this.W, this.H)];
     this.scratch.clear();
   }
-  protected layer(name: string, w = this.W, h = this.H): { c: HTMLCanvasElement | OffscreenCanvas; g: Ctx2D } {
+  protected layer(name: string, w = this.W, h = this.H): { c: HTMLCanvasElement | OffscreenCanvas; g: Ctx2D; soft: boolean } {
     let e = this.scratch.get(name);
-    if (!e || e.c.width !== w || e.c.height !== h) {
+    const soft = softCanvas();
+    if (!e || e.c.width !== w || e.c.height !== h || e.soft !== soft) {
       const c = makeCanvas(w, h);
-      e = { c, g: c.getContext('2d', { alpha: true }) as Ctx2D };
+      e = { c, g: c.getContext('2d', { alpha: true, willReadFrequently: soft }) as Ctx2D, soft };
       this.scratch.set(name, e);
     }
     e.g.setTransform(1, 0, 0, 1, 0, 0);

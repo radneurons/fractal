@@ -101,7 +101,7 @@ void main(){
   if(gMask != 0){
     for(int k=0;k<64;k++){ vec3 p = ro + rd * t; float d = scene(p, id); if(d < 0.0015 * t){ hit = true; break; } t += d * 0.92; if(t > tmax || t > tg) break; }
   }
-  vec3 col; float depth = uFar;
+  vec3 col; float depth = uFar; float isWord = 0.0;
   vec3 sunCol = uSunCol;
   float fogK = uFog * 0.012;
   if(hit && t < tg){
@@ -113,7 +113,7 @@ void main(){
     col = base * (amb * occ * 0.8 + sunCol * dif * 1.6);
     if(uMat > 0.5 && uMat < 2.5){ vec3 r = reflect(rd, n); float fr = 0.04 + 0.96 * pow(1.0 - max(dot(n, -rd), 0.0), 5.0); col = mix(col, sky(r), fr * (uMat < 1.5 ? 0.55 : 0.85)); }
     if(uMat > 1.5 && uMat < 2.5) col += material(id, p, n, rd, 0.0) * 0.0 + (base - vec3(0.04, 0.035, 0.05)) * 0.0;
-    depth = t;
+    depth = t; isWord = 1.0;
   } else if(tg < 1e8){
     vec3 p = ro + rd * tg;
     vec2 g = p.xz;
@@ -129,8 +129,7 @@ void main(){
   if(depth < uFar){ float f = 1.0 - exp(-depth * fogK * exp(-max(ro.y, 0.0) * 0.08)); col = mix(col, mix(uSky0, uSky1, 0.4) * 1.05, clamp(f, 0.0, 1.0)); }
   col = col / (1.0 + col * 0.35);
   col = pow(col, vec3(0.92));
-  o = vec4(col, uTransparent > 0.5 ? (depth < uFar ? 1.0 : 0.0) : clamp(depth / uFar, 0.0, 1.0) * 0.0 + 1.0);
-  o.a = uTransparent > 0.5 ? o.a : 1.0;
+  o = vec4(col, uTransparent > 0.5 ? isWord : 1.0);
   // depth goes into a separate target pass (see FS_DEPTH)
 }`;
 const FS_UP = FS_HEAD + `uniform sampler2D uTex; uniform float uFocus, uDof; void main(){ o = texture(uTex, vUv); }`;
