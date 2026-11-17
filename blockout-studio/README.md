@@ -61,3 +61,12 @@ pnpm test:e2e      # Playwright: brief flow, docking, pop-outs, curves, GLB impo
 ```
 
 Per-phase notes, including known gaps and the honest performance numbers: `docs/phase-1.md` … `docs/phase-6.md`.
+
+## Status
+
+Every feature in the original brief is implemented and covered by tests (141 unit, contract and golden tests; 15 Playwright E2E tests, including the brief's own create → path → camera → export → generate → view flow).
+
+What is not certified:
+- **Performance budget.** The 60 fps / 4×-real-time targets are asserted only on a hardware GPU. CI here has software GL, where the CPU side measures about 1 ms per frame for the 20-character, 10-camera, 200-prop scene.
+- **Provider dialects** (Seedance, H3, Kling, …) are editable JSON with sensible limits and vocabularies, not vendor-certified specs; adjust them per model.
+- **Determinism across machines** is byte-exact with the software renderer. WebGL output is byte-exact on one GPU/driver, and the manifest records which.
