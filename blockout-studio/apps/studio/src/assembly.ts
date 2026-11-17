@@ -51,3 +51,4 @@ export async function exportStoryboard(): Promise<Uint8Array> {
   try { panels = (await claude('storyboard', {}, { label: 'Writing storyboard notes' })).value.panels; } catch { /* offline notes */ }
   return storyboardPDF(p.name, `${p.shots.length} shots · ${p.aspect} · ${p.fps} fps`, p.shots.map((s) => { const pn = panels.find((x) => x.shotId === s.id) ?? storyboardLocal(p).find((x) => x.shotId === s.id)!, mid = Math.floor(shotFrames(p, s) / 2); return { title: s.name, size: pn.size, action: pn.action, camera: pn.camera, meta: `${(s.end - s.start).toFixed(1)}s`, image: { width: w, height: h, data: exportRenderer().render(p, s, mid, 'clay', w, h) } }; }));
 }
+if (typeof window !== 'undefined') Object.assign(((window as unknown as Record<string, object>).__blockout ??= {}), { renderCut });

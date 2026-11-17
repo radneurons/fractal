@@ -56,13 +56,31 @@ export async function generate(shotId: string, providerId: string, o: GenOpts = 
     S().dispatch({ type: 'updateTake', id: takeId, patch: { status: 'running', passes } }, { label: 'Take running' });
     const job = await enq.done;
     if (job.status !== 'done' || !job.result) return job.status === 'cancelled' ? (S().dispatch({ type: 'updateTake', id: takeId, patch: { status: 'cancelled' } }), null) : fail(job.error ?? 'generation failed');
-    const frames: string[] = []; for (const [i, f] of (job.result.frames ?? []).entries()) { const id = `${takeId}_${String(i).padStart(4, '0')}.png`; await putAsset(id, new Blob([f as Uint8Array<ArrayBuffer>], { type: 'image/png' })); frames.push(id); }
+    let rawFrames = job.result.frames ?? [];
+    if (!rawFrames.length && job.result.videoUrl) { try { rawFrames = await downloadFrames(job.result.videoUrl, p.fps, shotFrames(p, shot), h); } catch (e) { S().notify(`Take saved as a link only: ${(e as Error).message}`, 'error'); } }
+    const frames: string[] = []; for (const [i, f] of rawFrames.entries()) { const id = `${takeId}_${String(i).padStart(4, '0')}.png`; await putAsset(id, new Blob([f as Uint8Array<ArrayBuffer>], { type: 'image/png' })); frames.push(id); }
     S().dispatch({ type: 'updateTake', id: takeId, patch: { status: 'done', cost: job.result.cost, frames, videoUrl: job.result.videoUrl, width: job.result.width, height: job.result.height, fps: job.result.fps } }, { label: `Take ready for ${shot.name}` });
     if (frames.length) void autoScore(takeId);
     return S().project.takes[takeId];
   } catch (e) { return fail((e as Error).message); }
 }
 export const cancelJob = (id: string) => queue.cancel(id);
+/** Bring a provider's remote video home: download through the bridge, then decode frames at the project fps. */
+export async function downloadFrames(url: string, fps: number, count: number, height: number): Promise<Uint8Array[]> {
+  let blob: Blob; if (useGateway.getState().connected) { const r = await rpc<{ base64: string; contentType: string }>('fetchMedia', { url }), bin = atob(r.base64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); blob = new Blob([u8], { type: r.contentType }); } else blob = await (await fetch(url)).blob();
+  return extractFrames(blob, fps, count, height);
+}
+export async function extractFrames(blob: Blob, fps: number, count: number, height: number): Promise<Uint8Array[]> {
+  const url = URL.createObjectURL(blob), v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
+  try {
+    await new Promise<void>((res, rej) => { v.onloadeddata = () => res(); v.onerror = () => rej(new Error('the video could not be decoded in this browser')); });
+    const h = Math.min(height, v.videoHeight), w = Math.round((v.videoWidth * h) / v.videoHeight / 2) * 2, cv = document.createElement('canvas'); cv.width = w; cv.height = h; const g = cv.getContext('2d', { willReadFrequently: true })!, out: Uint8Array[] = [];
+    const n = Math.max(1, Math.min(count, Math.floor(v.duration * fps) || count));
+    for (let i = 0; i < n; i++) { const t = Math.min(v.duration - 0.001, (i + 0.5) / fps); await new Promise<void>((res) => { v.onseeked = () => res(); v.currentTime = t; }); g.drawImage(v, 0, 0, w, h); const b = await new Promise<Blob | null>((r) => cv.toBlob(r, 'image/png')); out.push(new Uint8Array(await b!.arrayBuffer())); }
+    return out;
+  } finally { URL.revokeObjectURL(url); v.removeAttribute('src'); }
+}
+if (typeof window !== 'undefined') Object.assign(((window as unknown as Record<string, object>).__blockout ??= {}), { generate, loadHttpProviders });
 /** Numeric adherence score (mask IoU, flicker, palette) — runs locally after every take. */
 export async function autoScore(takeId: string) {
   const p = S().project, t = p.takes[takeId], shot = p.shots.find((x) => x.id === t?.shotId); if (!t || !shot || !t.frames.length) return;

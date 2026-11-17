@@ -49,7 +49,7 @@ pnpm test          # unit, golden-image, contract (recorded Claude fixtures), MC
 ```
 
 ```bash
-pnpm test:e2e      # Playwright: brief flow, collaboration, phone camera, audio, export determinism, performance
+pnpm test:e2e      # Playwright: brief flow, docking, collaboration, phone camera, audio + cut mix, HTTP-provider takes, export determinism, performance
 ```
 
 Per-phase notes, including known gaps and the honest performance numbers: `docs/phase-1.md` … `docs/phase-6.md`.

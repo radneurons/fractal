@@ -14,5 +14,5 @@
 
 **Known gaps**
 - The mannequin is procedural (boxes/capsules on a joint hierarchy), not a skinned CC0 GLB. That was a deliberate trade for byte-exact determinism and zero binary assets; retargeting works on joint eulers, so a skinned mesh can be bound to the same 17 joints later.
-- Panels are resizable and persisted, but not freely re-dockable.
+- Panels re-dock through the Layout menu (added after phase 6); they cannot float in separate windows.
 - GLB props are accepted by the schema and rendered as a proxy box.

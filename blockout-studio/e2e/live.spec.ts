@@ -45,7 +45,27 @@ test('audio import draws a waveform, adds beat markers, and the rendered cut car
   for (const t of [1, 2.5, 4]) expect(Math.min(...r.beats.map((x: number) => Math.abs(x - t)))).toBeLessThan(0.05);
 
   // the final cut carries the mixed audio
-  const cut = await page.evaluate(async () => { const m = await import('/src/assembly.ts'); const r = await m.renderCut(144); const txt = new TextDecoder('latin1').decode(r.bytes); return { ext: r.ext, audio: r.audio, frames: r.frames, size: r.bytes.length, tagged: /Opus|mp4a|A_OPUS|OpusHead/.test(txt) }; });
+  const cut = await page.evaluate(async () => { const r = await (window as any).__blockout.renderCut(144); const txt = new TextDecoder('latin1').decode(r.bytes); return { ext: r.ext, audio: r.audio, frames: r.frames, size: r.bytes.length, tagged: /Opus|mp4a|A_OPUS|OpusHead/.test(txt) }; });
   console.log('cut', JSON.stringify(cut));
   expect(cut.frames).toBe(14 * 24); expect(cut.audio).toBeTruthy(); if (cut.ext !== 'zip') expect(cut.tagged).toBe(true);
+});
+
+test('HTTP provider take: bridge downloads the video, frames are decoded locally, then scored', async ({ page }) => {
+  test.setTimeout(300_000);
+  const { createServer } = await import('node:http');
+  await page.goto('/?fresh'); await expect.poll(() => page.evaluate(() => !!(window as any).__blockout?.renderCut)).toBe(true);
+  const video = await page.evaluate(async () => { const r = await (window as any).__blockout.renderCut(144); return Array.from(r.bytes as Uint8Array); });
+  let polls = 0; const server = createServer((req, res) => {
+    if (req.url === '/submit') { res.setHeader('content-type', 'application/json'); return res.end(JSON.stringify({ id: 'j1' })); }
+    if (req.url === '/jobs/j1') { res.setHeader('content-type', 'application/json'); return res.end(JSON.stringify(++polls < 2 ? { status: 'running' } : { status: 'succeeded', output: { url: `http://127.0.0.1:${(server.address() as any).port}/v.mp4` } })); }
+    if (req.url === '/v.mp4') { res.setHeader('content-type', 'video/mp4'); return res.end(Buffer.from(video)); }
+    res.statusCode = 404; res.end();
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r)); const port = (server.address() as any).port;
+  try {
+    await page.evaluate(async (port) => { await fetch('http://127.0.0.1:8787/rpc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method: 'providers.save', params: { config: { id: 'e2e-http', name: 'E2E HTTP', dialect: 'seedance', submit: { url: `http://127.0.0.1:${port}/submit`, body: { prompt: '{{prompt}}' } }, poll: { url: `http://127.0.0.1:${port}/jobs/{{id}}`, intervalMs: 50 }, resultPath: 'output.url', costPerSecond: 0.01 } } }) }); await (window as any).__blockout.loadHttpProviders(); }, port);
+    const take = await page.evaluate(async () => { const t = await (window as any).__blockout.generate('s1', 'e2e-http', { height: 144 }); return t && { status: t.status, frames: t.frames.length, url: t.videoUrl }; });
+    expect(take).toMatchObject({ status: 'done', frames: 72 }); expect(take!.url).toMatch(/v\.mp4$/);
+    await expect.poll(() => page.evaluate(() => (Object.values(window.__studio.getState().project.takes).find((t: any) => t.providerId === 'e2e-http') as any)?.iou ?? -1), { timeout: 30_000 }).toBeGreaterThan(0.3); // the video *is* the blockout of shot 1
+  } finally { server.close(); await page.evaluate(() => fetch('http://127.0.0.1:8787/rpc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method: 'providers.delete', params: { id: 'e2e-http' } }) })); }
 });

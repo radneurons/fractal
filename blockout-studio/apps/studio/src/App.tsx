@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as Tabs from '@radix-ui/react-tabs';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { demoProject, emptyProject } from '@blockout/core';
 import { S, useStudio } from './store';
@@ -42,12 +43,46 @@ function TopBar({ openCommand }: { openCommand: () => void }) {
     <button className="btn" onClick={() => { if (confirm('Start a new empty project? (Current one stays in autosave until overwritten.)')) S().load(emptyProject('p' + Date.now().toString(36), 'Untitled')); }}>New</button>
     <button className="btn" onClick={() => S().load(demoProject())} title="Reload the Field Duel demo">Demo</button>
     <button className="btn" onClick={() => download('changelog.md', changeLogMarkdown(name, S().changeLog), 'text/markdown')} title="Download the human-readable change log">Log</button>
+    <LayoutMenu />
     <button className="btn" aria-label="Toggle theme" onClick={() => S().set({ theme: theme === 'dark' ? 'light' : 'dark' })}>{theme === 'dark' ? '☾' : '☀'}</button>
   </header>;
 }
 
+export interface Layout { sceneRight: boolean; sidebarLeft: boolean; resultTop: boolean }
+const LAYOUT_KEY = 'blockout:layout';
+const readLayout = (): Layout => { try { return { sceneRight: false, sidebarLeft: false, resultTop: false, ...JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? '{}') }; } catch { return { sceneRight: false, sidebarLeft: false, resultTop: false }; } };
+let layoutState = readLayout(); const layoutSubs = new Set<() => void>();
+export function setLayout(l: Partial<Layout>) { layoutState = { ...layoutState, ...l }; try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layoutState)); } catch { /* private mode */ } layoutSubs.forEach((f) => f()); }
+const useLayout = () => React.useSyncExternalStore((f) => { layoutSubs.add(f); return () => layoutSubs.delete(f); }, () => layoutState);
+function Sidebar() {
+  const tab = useStudio((s) => s.rightTab);
+  return <Tabs.Root value={tab} onValueChange={(v) => S().set({ rightTab: v })} className="flex h-full flex-col bg-panel">
+    <Tabs.List className="flex h-7 shrink-0 border-b border-line" aria-label="Sidebar">{TABS.map(([v, l]) => <Tabs.Trigger key={v} value={v} data-testid={`tab-${v}`} className="flex-1 border-b-2 border-transparent px-1 text-xxs uppercase tracking-wide text-dim data-[state=active]:border-accent data-[state=active]:text-fg">{l}</Tabs.Trigger>)}</Tabs.List>
+    {TABS.map(([v, , C]) => <Tabs.Content key={v} value={v} className="min-h-0 flex-1 overflow-hidden"><C /></Tabs.Content>)}
+  </Tabs.Root>;
+}
+/** Dockable main area: the scene view, the viewer stack and the sidebar can trade places; sizes persist per arrangement. */
+function MainArea() {
+  const L = useLayout(), id = `${+L.sceneRight}${+L.sidebarLeft}${+L.resultTop}`;
+  const scene = <Panel key="scene" id="scene" defaultSize={46} minSize={20} order={L.sidebarLeft ? (L.sceneRight ? 3 : 2) : L.sceneRight ? 2 : 1}><SceneView /></Panel>;
+  const stack = <Panel key="stack" id="stack" defaultSize={30} minSize={14} order={L.sidebarLeft ? (L.sceneRight ? 2 : 3) : L.sceneRight ? 1 : 2}>
+    <PanelGroup direction="vertical" autoSaveId={`blockout:mid:${+L.resultTop}`}>{L.resultTop ? <><Panel id="result" order={1} defaultSize={50} minSize={15}><ResultView /></Panel><PanelResizeHandle className="handle-v" /><Panel id="blockout" order={2} defaultSize={50} minSize={15}><BlockoutView /></Panel></> : <><Panel id="blockout" order={1} defaultSize={50} minSize={15}><BlockoutView /></Panel><PanelResizeHandle className="handle-v" /><Panel id="result" order={2} defaultSize={50} minSize={15}><ResultView /></Panel></>}</PanelGroup></Panel>;
+  const side = <Panel key="side" id="side" defaultSize={24} minSize={16} order={L.sidebarLeft ? 1 : 3}><Sidebar /></Panel>;
+  const main = L.sceneRight ? [stack, scene] : [scene, stack], all = L.sidebarLeft ? [side, ...main] : [...main, side];
+  return <PanelGroup key={id} direction="horizontal" autoSaveId={`blockout:h:${id}`} data-testid="main-area" data-layout={id}>{all.flatMap((p, i) => (i ? [<PanelResizeHandle key={'h' + i} className="handle-h" />, p] : [p]))}</PanelGroup>;
+}
+function LayoutMenu() {
+  const L = useLayout();
+  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="btn" data-testid="layout-menu" aria-label="Layout">▦ Layout</button></DropdownMenu.Trigger>
+    <DropdownMenu.Portal><DropdownMenu.Content align="end" className="z-50 rounded border border-line bg-panel p-1 shadow-xl">
+      {([['sceneRight', 'Scene view on the right'], ['sidebarLeft', 'Sidebar on the left'], ['resultTop', 'Result above Blockout']] as const).map(([k, label]) => <DropdownMenu.CheckboxItem key={k} checked={L[k]} onCheckedChange={(v) => setLayout({ [k]: !!v })} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-fg outline-none data-[highlighted]:bg-accent/30"><span className="w-3">{L[k] ? '✓' : ''}</span>{label}</DropdownMenu.CheckboxItem>)}
+      <DropdownMenu.Separator className="my-1 h-px bg-line" />
+      <DropdownMenu.Item onSelect={() => { setLayout({ sceneRight: false, sidebarLeft: false, resultTop: false }); try { Object.keys(localStorage).filter((k) => k.startsWith('react-resizable-panels:blockout')).forEach((k) => localStorage.removeItem(k)); } catch { /* */ } location.reload(); }} className="cursor-pointer rounded px-2 py-1 text-xs text-fg outline-none data-[highlighted]:bg-accent/30">Reset layout</DropdownMenu.Item>
+    </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>;
+}
+
 export function App() {
-  const [cmd, setCmd] = useState(false), theme = useStudio((s) => s.theme), tab = useStudio((s) => s.rightTab), toast = useStudio((s) => s.toast);
+  const [cmd, setCmd] = useState(false), theme = useStudio((s) => s.theme), toast = useStudio((s) => s.toast);
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => {
     let stop = () => {}; const off = installHotkeys(() => setCmd(true));
@@ -60,22 +95,7 @@ export function App() {
     <TopBar openCommand={() => setCmd(true)} />
     <PanelGroup direction="vertical" autoSaveId="blockout:v" className="min-h-0 flex-1">
       <Panel defaultSize={70} minSize={30}>
-        <PanelGroup direction="horizontal" autoSaveId="blockout:h">
-          <Panel defaultSize={46} minSize={20} order={1}><SceneView /></Panel>
-          <PanelResizeHandle className="handle-h" />
-          <Panel defaultSize={30} minSize={14} order={2}>
-            <PanelGroup direction="vertical" autoSaveId="blockout:mid">
-              <Panel defaultSize={50} minSize={15}><BlockoutView /></Panel><PanelResizeHandle className="handle-v" /><Panel defaultSize={50} minSize={15}><ResultView /></Panel>
-            </PanelGroup>
-          </Panel>
-          <PanelResizeHandle className="handle-h" />
-          <Panel defaultSize={24} minSize={16} order={3}>
-            <Tabs.Root value={tab} onValueChange={(v) => S().set({ rightTab: v })} className="flex h-full flex-col bg-panel">
-              <Tabs.List className="flex h-7 shrink-0 border-b border-line" aria-label="Sidebar">{TABS.map(([v, l]) => <Tabs.Trigger key={v} value={v} data-testid={`tab-${v}`} className="flex-1 border-b-2 border-transparent px-1 text-xxs uppercase tracking-wide text-dim data-[state=active]:border-accent data-[state=active]:text-fg">{l}</Tabs.Trigger>)}</Tabs.List>
-              {TABS.map(([v, , C]) => <Tabs.Content key={v} value={v} className="min-h-0 flex-1 overflow-hidden"><C /></Tabs.Content>)}
-            </Tabs.Root>
-          </Panel>
-        </PanelGroup>
+        <MainArea />
       </Panel>
       <PanelResizeHandle className="handle-v" />
       <Panel defaultSize={30} minSize={12}><Timeline /></Panel>

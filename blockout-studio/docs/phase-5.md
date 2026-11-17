@@ -26,7 +26,12 @@
 
 `pnpm test:e2e` covers the brief's flow: create a character → draw a path → add a camera → export a shot package → run the mock provider → view the take.
 
+**Follow-up (after phase 6)**
+- **Scoring:** a seeded segmenter replaces the saliency heuristic. Eroded blockout masks seed per-entity colour clusters learned from the result frame itself; the background is learned from a ring around each silhouette. The headline IoU is character-weighted, with props reported per entity. Spatially exact mock takes of the demo now score 0.67–0.99 (were ~0.17), and the unit test checks that a 10% drift scores clearly worse.
+- **Mock provider:** paints characters in costume tones taken from the ID pass, as a real model would from the bible, so on-mark takes are distinguishable from the ground.
+- **HTTP-provider takes:** the bridge downloads the result video (http(s) only, 512 MB cap); the studio decodes it at the project fps into local frames, then scores and critiques it like any other take. E2E-tested against a fake provider server.
+- **Audio in the final cut:** tracks are mixed into cut time, following trims, J-cut leads, L-cut tails and edge fades (`mixCutAudio`, unit-tested), and encoded with WebCodecs `AudioEncoder` (AAC where available, otherwise Opus) next to the video. When no audio encoder exists, a WAV goes into a zip with the video. E2E-tested.
+
 **Known gaps**
-- The built-in segmenter is a model-free saliency heuristic. It reads the stylized mock takes at only ~17% IoU even though they are spatially exact. For meaningful staging scores, plug in a real segmenter (e.g. an HTTP SAM endpoint) through `SegmentationProvider`.
-- Takes from HTTP providers are stored as remote video URLs, without local frames, so IoU and frame-level critique need a download step that is not implemented yet.
-- The final cut is picture only; audio tracks are listed in OTIO but not mixed into the MP4.
+- The seeded segmenter is still model-free. It needs subjects whose colours differ from their surroundings, and it judges where colour regions sit, not identity. Plug a real segmenter (e.g. an HTTP SAM endpoint) into `SegmentationProvider` for production scoring; identity remains the vision critique's job.
+- Frame decoding uses the browser's `<video>` element, so the provider's codec must be playable in the studio's browser.

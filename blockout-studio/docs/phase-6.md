@@ -28,8 +28,9 @@
   - a simulated phone pairs, streams over WebRTC, calibrates and records a pan into camera keys;
   - an audio file is imported and its beats detected at 120 BPM.
 
+**Follow-up: docking.** The ▦ Layout menu swaps the scene view and the viewer stack, moves the sidebar left or right, and puts Result above or below Blockout. The arrangement persists, and panel sizes are remembered per arrangement (E2E-tested). Panels still cannot float in separate windows.
+
 **Known gaps**
 - Mocap needs network access on first use (the MediaPipe WASM and model come from public CDNs) and a webcam, so CI tests the solver, not the camera path. Hands and face are not captured; landmarks carry no bone twist.
 - iOS only exposes motion sensors over HTTPS; serve the studio with a certificate (for example `vite --https`) for iPhones.
 - Collaboration undo is per user and inverse-based, so undoing your edit after someone else changed the same thing can be skipped as a conflict (it is reported, not silently applied).
-- Panels resize and the layout persists, but panels cannot be re-docked into other positions.
