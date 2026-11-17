@@ -66,7 +66,7 @@ export function TakesPanel() {
     <Section title="Assembly & export">
       <p className="mb-1 text-xxs text-dim">The cut uses each shot's selected (✓) or circled (◎) take, falling back to the blockout clay pass, with the shot strip's trims and crossfades.</p>
       <div className="flex flex-wrap gap-1">
-        <button className="btn-primary" data-testid="render-cut" disabled={!!busy} onClick={async () => { setBusy('cut'); try { const r = await renderCut(540, (d, t) => S().notify(`Rendering cut ${Math.round((d / t) * 100)}%`)); download(`${project.name.replace(/\W+/g, '-')}-cut.${r.ext}`, r.bytes); S().notify(`Cut rendered: ${r.frames} frames (${r.ext}).`); } catch (e) { S().notify((e as Error).message, 'error'); } setBusy(null); }}>{busy === 'cut' ? 'Rendering…' : 'Render final cut'}</button>
+        <button className="btn-primary" data-testid="render-cut" disabled={!!busy} onClick={async () => { setBusy('cut'); try { const r = await renderCut(540, (d, t) => S().notify(`Rendering cut ${Math.round((d / t) * 100)}%`)); download(`${project.name.replace(/\W+/g, '-')}-cut.${r.ext}`, r.bytes); S().notify(`Cut rendered: ${r.frames} frames (${r.ext}${r.audio ? `, audio ${r.audio}` : ', no audio tracks'}).`); } catch (e) { S().notify((e as Error).message, 'error'); } setBusy(null); }}>{busy === 'cut' ? 'Rendering…' : 'Render final cut'}</button>
         <button className="btn" data-testid="export-otio" onClick={() => download('cut.otio', exportOTIO(), 'application/json')}>OTIO</button>
         <button className="btn" onClick={() => download('cut.fcpxml', exportFCPXML(), 'application/xml')}>FCPXML</button>
         <button className="btn" onClick={() => download('cut.edl', exportEDL(), 'text/plain')}>EDL</button>

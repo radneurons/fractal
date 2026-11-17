@@ -24,3 +24,14 @@ describe('collaboration over the op stream (Yjs)', () => {
   });
   it('a late joiner adopts the room state', () => { const a = new OpStream('a'); a.init(demoProject()); a.push({ type: 'setLens', cameraId: 'cam1', focal: 20 }); const c = new OpStream('c'); Y.applyUpdate(c.doc, Y.encodeStateAsUpdate(a.doc)); expect(c.project!.cameras.cam1.keys[0].focal).toBe(20); });
 });
+import { mixCutAudio, encodeWAV } from './audio';
+describe('cut audio mix', () => {
+  it('follows picture edits: trims, reordering, and J-cut leads', () => {
+    const sr = 1000, tone = new Float32Array(10 * sr).map((_, i) => (i < 2000 ? 0.5 : i < 4000 ? -0.5 : 0.25)); // scene: 0–2s = +0.5, 2–4s = −0.5, 4s+ = 0.25
+    // cut: scene 2–4s first, then scene 1–2s with a 0.5s J-cut lead (its audio starts under the previous picture)
+    const [L] = mixCutAudio([{ sceneStart: 2, sceneEnd: 4, recStart: 0, lead: 0, tail: 0 }, { sceneStart: 1, sceneEnd: 2, recStart: 2, lead: 0.5, tail: 0 }], 3, [{ offset: 0, gain: 1, sampleRate: sr, channels: [tone] }], sr);
+    expect(L[500]).toBeCloseTo(-0.5, 2); expect(L[2500]).toBeCloseTo(0.5, 2);
+    expect(L[1800]).toBeCloseTo(-0.5 + 0.5 * 0.6, 2); // inside the lead: −0.5 plus the next shot's audio (+0.5) fading in, 60% of the way
+    expect(encodeWAV([L, L], sr).length).toBe(44 + 3000 * 4);
+  });
+});

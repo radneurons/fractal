@@ -23,3 +23,30 @@ export function detectBeats(samples: Float32Array, sampleRate: number, o: { minB
   const beats: number[] = []; for (let t = bestPhase; t < n / 100; t += period) beats.push(Math.round(t * 1000) / 1000);
   return { onsets, bpm, beats };
 }
+
+// ---------- cut audio ----------
+export interface PcmTrack { offset: number; gain: number; sampleRate: number; channels: Float32Array[] }
+export interface CutAudioClip { sceneStart: number; sceneEnd: number; recStart: number; lead: number; tail: number }
+/** Mix scene-time audio tracks into cut time. Each clip contributes the scene audio under its picture, extended by its
+ *  J-cut lead and L-cut tail, with short fades at the edges (and fades across overlaps) so cuts never click. Stereo out. */
+export function mixCutAudio(clips: CutAudioClip[], duration: number, tracks: PcmTrack[], rate = 48000): Float32Array[] {
+  const N = Math.max(1, Math.round(duration * rate)), L = new Float32Array(N), R = new Float32Array(N), edge = 0.012;
+  for (const c of clips) {
+    const r0 = c.recStart - c.lead, s0 = c.sceneStart - c.lead, len = c.sceneEnd + c.tail - s0, fin = Math.max(edge, c.lead), fout = Math.max(edge, c.tail);
+    const a = Math.max(0, Math.round(r0 * rate)), b = Math.min(N, Math.round((r0 + len) * rate));
+    for (let i = a; i < b; i++) {
+      const tc = i / rate - r0, ts = s0 + tc, g = Math.min(1, tc / fin, (len - tc) / fout); if (g <= 0) continue;
+      for (const tr of tracks) { const x = (ts - tr.offset) * tr.sampleRate, k = Math.floor(x), f = x - k, ch = tr.channels; if (k < 0 || k + 1 >= ch[0].length) continue;
+        const l = ch[0][k] * (1 - f) + ch[0][k + 1] * f, r = ch.length > 1 ? ch[1][k] * (1 - f) + ch[1][k + 1] * f : l; L[i] += l * g * tr.gain; R[i] += r * g * tr.gain; }
+    }
+  }
+  for (let i = 0; i < N; i++) { L[i] = Math.max(-1, Math.min(1, L[i])); R[i] = Math.max(-1, Math.min(1, R[i])); }
+  return [L, R];
+}
+/** 16-bit PCM WAV. */
+export function encodeWAV(channels: Float32Array[], rate: number): Uint8Array {
+  const n = channels[0].length, nc = channels.length, buf = new ArrayBuffer(44 + n * nc * 2), v = new DataView(buf), w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * nc * 2, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, nc, true); v.setUint32(24, rate, true); v.setUint32(28, rate * nc * 2, true); v.setUint16(32, nc * 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * nc * 2, true);
+  for (let i = 0, o = 44; i < n; i++) for (let c = 0; c < nc; c++, o += 2) v.setInt16(o, Math.round(Math.max(-1, Math.min(1, channels[c][i])) * 32767), true);
+  return new Uint8Array(buf);
+}

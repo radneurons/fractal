@@ -8,7 +8,7 @@ import { compileFrame, GROUND_ID, SCATTER_ID } from '@blockout/core';
 
 /** Passes whose pixel values are data: always stored losslessly (PNG), never through a video codec. */
 export const EXACT_PASSES: PassName[] = ['id', 'depthMetric', 'fx', 'flow'];
-export interface VideoSink { add(source: unknown, frame: number): Promise<void> | void; finish(): Promise<{ ext: string; bytes: Uint8Array; codec: string }> }
+export interface VideoSink { add(source: unknown, frame: number): Promise<void> | void; finish(): Promise<{ ext: string; bytes: Uint8Array; codec: string }>; audioCodec?: string | null }
 export interface PackageOpts {
   renderer: PassRenderer; passes: PassName[]; height: number; prompts?: Record<string, string>; negative?: string; seed?: number;
   /** Browser: returns a WebCodecs-backed sink, or null to fall back to a PNG sequence. */

@@ -25,7 +25,7 @@ export const listProviders = (kind?: ProviderKind) => [...registry.values()].fil
 const lum = (r: number, g: number, b: number) => (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
 function ramp(palette: string[]): Vec3[] { const cols = (palette.length >= 2 ? palette : ['#1b1b2a', '#3a6ea5', '#e8c45a', '#f7f1e3']).map(hexToRgb); return cols.sort((a, b) => lum(a[0], a[1], a[2]) - lum(b[0], b[1], b[2])); }
 /** Stylize a clay frame: luminance -> palette ramp, posterized, with seeded paper grain and ink edges. Pure function of (pixels, palette, seed, frame). */
-export function stylize(clay: Image, palette: string[], seed: number, frame: number, edges?: Image, mask?: Image): Image {
+export function stylize(clay: Image, palette: string[], seed: number, frame: number, edges?: Image, mask?: Image, ids?: { img: Image; costumes: Map<number, Vec3> }): Image {
   const R = ramp(palette), n = clay.width * clay.height, out = new Uint8ClampedArray(n * 4), rnd = mulberry32(seed * 7919 + 13), grain = new Float32Array(4096); for (let i = 0; i < 4096; i++) grain[i] = rnd() - 0.5;
   const steps = 7, off = (seed * 31 + frame * 0) & 4095;
   for (let i = 0; i < n; i++) {
@@ -33,8 +33,15 @@ export function stylize(clay: Image, palette: string[], seed: number, frame: num
     let l = lum(clay.data[i * 4], clay.data[i * 4 + 1], clay.data[i * 4 + 2]); l = Math.min(0.999, Math.max(0, l + grain[(i * 2654435761 + off) & 4095] * 0.05)); l = (Math.floor(l * steps) + 0.5) / steps;
     const f = l * (R.length - 1), k = Math.min(R.length - 2, Math.floor(f)), t = f - k, e = edges && edges.data[i * 4] > 128 ? 0.35 : 1, warm = clay.data[i * 4] - clay.data[i * 4 + 2] > 40 ? 1.06 : 1;
     out[i * 4] = (R[k][0] + (R[k + 1][0] - R[k][0]) * t) * e * warm; out[i * 4 + 1] = (R[k][1] + (R[k + 1][1] - R[k][1]) * t) * e; out[i * 4 + 2] = (R[k][2] + (R[k + 1][2] - R[k][2]) * t) * e; out[i * 4 + 3] = 255;
+    if (ids) { const d = ids.img.data, cost = ids.costumes.get((d[i * 4] << 16) | (d[i * 4 + 1] << 8) | d[i * 4 + 2]); if (cost) { const sh = 0.45 + 0.75 * l; out[i * 4] = cost[0] * sh * e; out[i * 4 + 1] = cost[1] * sh * e; out[i * 4 + 2] = cost[2] * sh * e; } }
   }
   return { width: clay.width, height: clay.height, data: out };
+}
+/** Costume tone per character: a deterministic, saturated colour from the mask colour's hue (what a real model gets from the bible). */
+export function costumes(req: Pick<GenRequest, 'references'>): Map<number, Vec3> {
+  const m = new Map<number, Vec3>(); for (const r of req.references) { const [R, G, B] = hexToRgb(r.color), mx = Math.max(R, G, B), mn = Math.min(R, G, B); let h = 0; if (mx !== mn) h = mx === R ? ((G - B) / (mx - mn)) % 6 : mx === G ? (B - R) / (mx - mn) + 2 : (R - G) / (mx - mn) + 4;
+    const hue = ((h * 60 + 360) % 360) / 60, c = 150, x = c * (1 - Math.abs((hue % 2) - 1)), [r1, g1, b1] = hue < 1 ? [c, x, 0] : hue < 2 ? [x, c, 0] : hue < 3 ? [0, c, x] : hue < 4 ? [0, x, c] : hue < 5 ? [x, 0, c] : [c, 0, x]; m.set((R << 16) | (G << 8) | B, [r1 + 40, g1 + 40, b1 + 40]); }
+  return m;
 }
 const wait = (ctx: GenContext, ms: number) => (ctx.sleep ?? ((m: number) => new Promise<void>((r) => setTimeout(r, m))))(ms);
 export const mockProvider = registerProvider({
@@ -48,7 +55,8 @@ export const mockProvider = registerProvider({
       if (ctx.signal.aborted) throw new Error('cancelled');
       let img = decodePNG(clay[f]); const tw = Math.min(img.width, 512); if (img.width > tw) img = resize(img, tw, Math.round((img.height * tw) / img.width / 2) * 2);
       let edges = req.passes.canny?.[f] ? decodePNG(req.passes.canny[f]) : undefined; if (edges && edges.width !== img.width) edges = resize(edges, img.width, img.height);
-      const st = stylize(img, req.palette, req.seed, f, edges); w = st.width; h = st.height; frames.push(encodePNG(st.data, w, h, 2));
+      let idImg = req.passes.id?.[f] ? decodePNG(req.passes.id[f]) : undefined; if (idImg && idImg.width !== img.width) idImg = resize(idImg, img.width, img.height);
+      const st = stylize(img, req.palette, req.seed, f, edges, undefined, idImg ? { img: idImg, costumes: costumes(req) } : undefined); w = st.width; h = st.height; frames.push(encodePNG(st.data, w, h, 2));
       ctx.onProgress((f + 1) / clay.length); if (f % 6 === 5) await wait(ctx, 0);
     }
     return { frames, width: w, height: h, fps: req.fps, cost: this.estimate(req), meta: { seed: req.seed } };

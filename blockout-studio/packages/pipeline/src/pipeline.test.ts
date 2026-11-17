@@ -5,7 +5,7 @@ import * as L from './index';
 
 const demo = demoProject(), [w, h] = passSize(demo, 72), shot = demo.shots[3];
 const frames = (pass: 'clay' | 'id' | 'canny', n = 6) => Array.from({ length: n }, (_, f) => encodePNG(softRenderer.render(demo, shot, f * 4, pass, w, h), w, h, 1));
-const req = (seed = 7): L.GenRequest => ({ shotId: 's4', prompt: 'p', negative: '', seed, fps: 24, frames: 6, width: w, height: h, duration: 2.5, passes: { clay: frames('clay'), canny: frames('canny') }, palette: demo.bibles.style.palette, references: [] });
+const req = (seed = 7): L.GenRequest => ({ shotId: 's4', prompt: 'p', negative: '', seed, fps: 24, frames: 6, width: w, height: h, duration: 2.5, passes: { clay: frames('clay'), canny: frames('canny'), id: frames('id') }, palette: demo.bibles.style.palette, references: [{ color: '#56b4e9', name: 'Kenji' }, { color: '#e69f00', name: 'Ren' }] });
 const ctx = (): L.GenContext => ({ onProgress() {}, signal: { aborted: false }, secret: async (n) => (n === 'KEY' ? 'sk-test' : undefined), sleep: async () => {} });
 
 describe('mock provider', () => {
@@ -50,7 +50,10 @@ describe('scoring', () => {
   });
   it('scores a mock take end to end', async () => {
     const res = (await L.mockProvider.generate(req(), ctx())).frames!.map(decodePNG), ids = frames('id').map(decodePNG), clay = frames('clay').map(decodePNG), s = await L.scoreTake(ids, clay, res, palette, demo.bibles.style.palette);
-    expect(s.iou).toBeGreaterThan(0.15); expect(s.iou).toBeLessThanOrEqual(1); expect(s.paletteDistance).toBeLessThan(0.25); expect(s.flicker).toBeLessThan(0.05);
+    expect(s.iou).toBeGreaterThan(0.6); expect(s.iou).toBeLessThanOrEqual(1); expect(s.segmenter).toBe('seeded');
+    // the same take with the figures 10% of the frame off their marks must score clearly worse
+    const shift = (im: Image): Image => { const d = new Uint8ClampedArray(im.data.length), k = Math.round(im.width * 0.1); for (let y = 0; y < im.height; y++) for (let x = 0; x < im.width; x++) { const sx = Math.max(0, x - k); for (let c = 0; c < 4; c++) d[(y * im.width + x) * 4 + c] = im.data[(y * im.width + sx) * 4 + c]; } return { width: im.width, height: im.height, data: d }; };
+    const off = await L.scoreTake(ids, clay, res.map(shift), palette, demo.bibles.style.palette); expect(off.iou).toBeLessThan(s.iou - 0.25); expect(s.paletteDistance).toBeLessThan(0.25); expect(s.flicker).toBeLessThan(0.05);
   });
 });
 describe('interchange', () => {

@@ -32,7 +32,8 @@ test('phone virtual camera: pair, stream orientation (WebRTC), calibrate, record
   expect(after.n).toBeGreaterThan(before + 3); expect(after.last).toMatch(/Phone camera take/); expect(Math.abs(after.yaws.at(-1) - after.yaws[0])).toBeGreaterThan(0.2); // the pan was recorded
 });
 
-test('audio import draws a waveform and adds beat markers that keys snap to', async ({ page }) => {
+test('audio import draws a waveform, adds beat markers, and the rendered cut carries the mix', async ({ page }) => {
+  test.setTimeout(300_000);
   const sr = 22050, dur = 6, n = sr * dur, data = Buffer.alloc(44 + n * 2);
   data.write('RIFF', 0); data.writeUInt32LE(36 + n * 2, 4); data.write('WAVEfmt ', 8); data.writeUInt32LE(16, 16); data.writeUInt16LE(1, 20); data.writeUInt16LE(1, 22); data.writeUInt32LE(sr, 24); data.writeUInt32LE(sr * 2, 28); data.writeUInt16LE(2, 32); data.writeUInt16LE(16, 34); data.write('data', 36); data.writeUInt32LE(n * 2, 40);
   for (let b = 0.5; b < dur; b += 0.5) for (let i = 0; i < 800; i++) { const k = Math.floor(b * sr) + i; if (k < n) data.writeInt16LE(Math.round(Math.sin(i * 0.3) * Math.exp(-i / 200) * 30000), 44 + k * 2); }
@@ -42,4 +43,9 @@ test('audio import draws a waveform and adds beat markers that keys snap to', as
   const r = await page.evaluate(() => { const p = window.__studio.getState().project; return { beats: Object.values(p.markers).filter((m: any) => m.kind === 'beat').map((m: any) => m.t).sort((a: number, b: number) => a - b), label: Object.values(p.markers).find((m: any) => m.kind === 'beat') as any, peaks: (Object.values(p.audio)[0] as any).peaks.length }; });
   expect(r.label.label).toMatch(/^1(19|20|21)(\.\d)? BPM$/); expect(r.beats.length).toBeGreaterThanOrEqual(10); expect(r.peaks).toBeGreaterThan(100);
   for (const t of [1, 2.5, 4]) expect(Math.min(...r.beats.map((x: number) => Math.abs(x - t)))).toBeLessThan(0.05);
+
+  // the final cut carries the mixed audio
+  const cut = await page.evaluate(async () => { const m = await import('/src/assembly.ts'); const r = await m.renderCut(144); const txt = new TextDecoder('latin1').decode(r.bytes); return { ext: r.ext, audio: r.audio, frames: r.frames, size: r.bytes.length, tagged: /Opus|mp4a|A_OPUS|OpusHead/.test(txt) }; });
+  console.log('cut', JSON.stringify(cut));
+  expect(cut.frames).toBe(14 * 24); expect(cut.audio).toBeTruthy(); if (cut.ext !== 'zip') expect(cut.tagged).toBe(true);
 });

@@ -21,20 +21,55 @@ export const saliencySegmenter: SegmentationProvider = { id: 'saliency', name: '
   }
   return { width: w, height: h, data: out }; } };
 
+
+/** Seeded segmentation (no model): the blockout masks seed per-entity colour models *learned from the result frame itself*
+ *  (eroded mask interiors), the background model comes from outside the dilated masks, and pixels in a band around the expected
+ *  silhouettes are assigned to the closest model (diagonal Gaussian) with a 3×3 majority clean-up. On-mark subjects read
+ *  their own colours and score high; a subject that drifted leaves the band, its interior samples the background, and IoU drops. */
+export const seededSegmenter: SegmentationProvider = { id: 'seeded', name: 'Blockout-seeded colour segmentation (no model)', segment(frame, palette: { color: string; entityId: string; kind?: string }[], hint) {
+  const { width: w, height: h } = frame, n = w * h, out = new Uint8ClampedArray(n * 4); for (let i = 0; i < n; i++) out[i * 4 + 3] = 255;
+  if (!hint) return { width: w, height: h, data: out };
+  const H = hint.width !== w ? resize(hint, w, h) : hint, ents = palette.filter((p) => !/ground|scatter|fx/.test(p.kind ?? p.entityId)), cols = ents.map((e) => hexToRgb(e.color)), idx = new Map(cols.map((c, i) => [key(c[0], c[1], c[2]), i]));
+  const lab = new Int16Array(n).fill(-1); for (let i = 0; i < n; i++) { const k = idx.get(key(H.data[i * 4], H.data[i * 4 + 1], H.data[i * 4 + 2])); if (k !== undefined) lab[i] = k; }
+  const r = Math.max(1, Math.round(h / 90)), edge = new Uint8Array(n);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if ((x + 1 < w && lab[i] !== lab[i + 1]) || (y + 1 < h && lab[i] !== lab[i + w])) edge[i] = 1; }
+  const dilate = (src: Uint8Array, rad: number) => { const a = new Uint8Array(n), b = new Uint8Array(n); for (let y = 0; y < h; y++) { let run = -1e9; for (let x = 0; x < w; x++) { if (src[y * w + x]) run = x; if (x - run <= rad) a[y * w + x] = 1; } run = 1e9; for (let x = w - 1; x >= 0; x--) { if (src[y * w + x]) run = x; if (run - x <= rad) a[y * w + x] = 1; } }
+    for (let x = 0; x < w; x++) { let run = -1e9; for (let y = 0; y < h; y++) { if (a[y * w + x]) run = y; if (y - run <= rad) b[y * w + x] = 1; } run = 1e9; for (let y = h - 1; y >= 0; y--) { if (a[y * w + x]) run = y; if (run - y <= rad) b[y * w + x] = 1; } } return b; };
+  const nearEdge = dilate(edge, r), fg = new Uint8Array(n); for (let i = 0; i < n; i++) fg[i] = lab[i] >= 0 ? 1 : 0; const band = dilate(fg, 4 * r);
+  const BG = ents.length, K = BG + 1, ring = new Uint8Array(n); for (let i = 0; i < n; i++) ring[i] = band[i] && lab[i] < 0 && !nearEdge[i] ? 1 : 0;
+  // per-model colour clusters (k-means, deterministic init by luminance quantiles) learned from the RESULT frame
+  type Cl = { mu: number[]; v: number[] }[];
+  const fit = (pick: (i: number) => boolean, k: number): Cl => {
+    const px: number[][] = []; let seen = 0; for (let i = 0; i < n; i++) if (pick(i)) { seen++; if (px.length < 4000 || (seen * 2654435761) % 7 === 0) px.length < 6000 && px.push([frame.data[i * 4], frame.data[i * 4 + 1], frame.data[i * 4 + 2]]); }
+    if (!px.length) return []; const L = (q: number[]) => q[0] * 0.3 + q[1] * 0.59 + q[2] * 0.11, sorted = [...px].sort((x, y) => L(x) - L(y)); k = Math.min(k, px.length);
+    let mu = Array.from({ length: k }, (_, j) => [...sorted[Math.floor(((j + 0.5) / k) * sorted.length)]]), as = new Int32Array(px.length);
+    for (let it = 0; it < 8; it++) { px.forEach((q, i) => { let best = 0, bd = Infinity; mu.forEach((m, j) => { const d = (q[0] - m[0]) ** 2 + (q[1] - m[1]) ** 2 + (q[2] - m[2]) ** 2; if (d < bd) { bd = d; best = j; } }); as[i] = best; }); mu = mu.map((m, j) => { const mem = px.filter((_, i) => as[i] === j); return mem.length ? [0, 1, 2].map((c) => mem.reduce((t, q) => t + q[c], 0) / mem.length) : m; }); }
+    return mu.map((m, j) => { const mem = px.filter((_, i) => as[i] === j); return { mu: m, v: [0, 1, 2].map((c) => Math.max(60, mem.reduce((t, q) => t + (q[c] - m[c]) ** 2, 0) / Math.max(1, mem.length))) }; }).filter((_, j) => px.some((__, i) => as[i] === j));
+  };
+  const area = new Int32Array(BG), core = new Int32Array(BG); for (let i = 0; i < n; i++) if (lab[i] >= 0) { area[lab[i]]++; if (!nearEdge[i]) core[lab[i]]++; }
+  const models: Cl[] = ents.map((_, m) => fit((i) => lab[i] === m && (core[m] >= 12 ? !nearEdge[i] : true), 3)); /* small or far subjects: no erosion */ models.push(fit((i) => ring[i] === 1, 5));
+  const cost = (i: number, cl: Cl) => { let best = Infinity; for (const g of cl) { let s = 0; for (let c = 0; c < 3; c++) { const d = frame.data[i * 4 + c] - g.mu[c]; s += (d * d) / g.v[c] + Math.log(g.v[c]); } if (s < best) best = s; } return best; };
+  const res = new Int16Array(n).fill(-1);
+  for (let i = 0; i < n; i++) { if (!band[i]) continue; let best = BG, bc = models[BG].length ? cost(i, models[BG]) : Infinity; for (let m = 0; m < BG; m++) { if (!models[m].length) continue; const c = cost(i, models[m]); if (c < bc) { bc = c; best = m; } } res[i] = best === BG ? -1 : best; }
+  const vote = new Int16Array(K); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (!band[i]) continue; vote.fill(0); for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < w && yy < h) { const v = res[yy * w + xx]; vote[v < 0 ? BG : v]++; } } let best = BG; for (let m = 0; m < K; m++) if (vote[m] > vote[best]) best = m; if (best !== BG) { const c = cols[best]; out[i * 4] = c[0]; out[i * 4 + 1] = c[1]; out[i * 4 + 2] = c[2]; } }
+  return { width: w, height: h, data: out }; } };
+
 export interface IoUResult { mean: number; perEntity: Record<string, number>; coverage: number }
 /** IoU per entity between two label images (blockout id pass vs segmented result). Ground/sky are ignored. */
 export function maskIoU(blockoutId: Image, seg: Image, palette: { color: string; entityId: string; kind?: string }[]): IoUResult {
   const B = seg.width !== blockoutId.width ? resize(seg, blockoutId.width, blockoutId.height) : seg, n = blockoutId.width * blockoutId.height;
   const ents = palette.filter((p) => !/ground|scatter|fx/.test(p.kind ?? p.entityId)), idx = new Map(ents.map((e, i) => { const c = hexToRgb(e.color); return [key(c[0], c[1], c[2]), i]; })), inter = new Float64Array(ents.length), uni = new Float64Array(ents.length); let fg = 0;
   for (let i = 0; i < n; i++) { const a = idx.get(key(blockoutId.data[i * 4], blockoutId.data[i * 4 + 1], blockoutId.data[i * 4 + 2])), b = idx.get(key(B.data[i * 4], B.data[i * 4 + 1], B.data[i * 4 + 2])); if (a !== undefined) { uni[a]++; fg++; } if (b !== undefined && b !== a) uni[b]++; if (a !== undefined && a === b) inter[a]++; }
-  const perEntity: Record<string, number> = {}; let sum = 0, cnt = 0; ents.forEach((e, i) => { if (uni[i] > 0) { perEntity[e.entityId] = inter[i] / uni[i]; sum += perEntity[e.entityId]; cnt++; } });
+  const perEntity: Record<string, number> = {}; let sum = 0, cnt = 0, csum = 0, ccnt = 0; ents.forEach((e, i) => { if (uni[i] > 0) { perEntity[e.entityId] = inter[i] / uni[i]; sum += perEntity[e.entityId]; cnt++; if (e.kind === 'character') { csum += perEntity[e.entityId]; ccnt++; } } });
+  // headline = characters (staging is about where the people are); props count only when no character is in frame
+  if (ccnt) return { mean: csum / ccnt, perEntity, coverage: fg / n };
   return { mean: cnt ? sum / cnt : 0, perEntity, coverage: fg / n };
 }
 /** Mean absolute luminance change between consecutive frames (0..1). Compare result vs blockout to isolate generator flicker. */
 export function flicker(frames: Image[]): number { if (frames.length < 2) return 0; let acc = 0; for (let f = 1; f < frames.length; f++) { const a = frames[f - 1].data, b = frames[f].data; let d = 0; const n = a.length / 4; for (let i = 0; i < a.length; i += 16) d += Math.abs(a[i] + a[i + 1] + a[i + 2] - b[i] - b[i + 1] - b[i + 2]) / 765; acc += d / (n / 4); } return acc / (frames.length - 1); }
 /** Mean distance (0..1) from each pixel to its nearest style-bible palette colour. */
 export function paletteDistance(frame: Image, palette: string[]): number { const cols = palette.filter((c) => /^#[0-9a-f]{6}$/i.test(c)).map(hexToRgb); if (!cols.length) return 0; let acc = 0, n = 0; for (let i = 0; i < frame.data.length; i += 4 * 7) { let bd = Infinity; for (const c of cols) bd = Math.min(bd, Math.hypot(frame.data[i] - c[0], frame.data[i + 1] - c[1], frame.data[i + 2] - c[2])); acc += bd / 441.7; n++; } return acc / n; }
-export async function scoreTake(blockoutId: Image[], blockoutClay: Image[], result: Image[], palette: { color: string; entityId: string; kind?: string }[], stylePalette: string[], seg: SegmentationProvider = saliencySegmenter) {
+export async function scoreTake(blockoutId: Image[], blockoutClay: Image[], result: Image[], palette: { color: string; entityId: string; kind?: string }[], stylePalette: string[], seg: SegmentationProvider = seededSegmenter) {
   const picks = [0, Math.floor(result.length / 2), result.length - 1].filter((v, i, a) => v >= 0 && a.indexOf(v) === i), per: Record<string, number[]> = {}; let mean = 0, cov = 0;
   for (const f of picks) { const bi = Math.min(blockoutId.length - 1, Math.round((f / Math.max(1, result.length - 1)) * (blockoutId.length - 1))), r = maskIoU(blockoutId[bi], await seg.segment(result[f], palette, blockoutId[bi]), palette); mean += r.mean; cov += r.coverage; for (const [k, v] of Object.entries(r.perEntity)) (per[k] ??= []).push(v); }
   return { iou: mean / picks.length, coverage: cov / picks.length, perEntity: Object.fromEntries(Object.entries(per).map(([k, v]) => [k, v.reduce((a, b) => a + b, 0) / v.length])), flicker: Math.max(0, flicker(result) - flicker(blockoutClay)), paletteDistance: paletteDistance(result[picks[1] ?? 0], stylePalette), segmenter: seg.id };
