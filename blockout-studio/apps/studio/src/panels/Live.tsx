@@ -19,23 +19,24 @@ export async function importAudio(file: File) {
 }
 
 function Mocap() {
-  const sel = useStudio((s) => s.selection), video = useRef<HTMLVideoElement>(null), [state, setState] = useState('idle'), frames = useRef<Vec3[][]>([]), stop = useRef<() => void>(() => {});
+  const sel = useStudio((s) => s.selection), stats = useRef({ examined: 0, error: '' }), video = useRef<HTMLVideoElement>(null), [state, setState] = useState('idle'), frames = useRef<Vec3[][]>([]), stop = useRef<() => void>(() => {});
   const ch = sel?.kind === 'character' ? S().project.characters[sel.id] : null;
   const start = async () => {
     try {
-      setState('loading MediaPipe Pose…'); const vision = await import('@mediapipe/tasks-vision'), fs = await vision.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm');
-      const pose = await vision.PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task', delegate: 'GPU' }, runningMode: 'VIDEO', numPoses: 1 });
+      setState('loading MediaPipe Pose…'); const vision = await import('@mediapipe/tasks-vision'), fs = await vision.FilesetResolver.forVisionTasks(`${location.origin}/mediapipe/wasm`), local = '/models/pose_landmarker_full.task', hasLocal = await fetch(local, { method: 'HEAD' }).then((r) => r.ok && !(r.headers.get('content-type') ?? '').includes('html')).catch(() => false);
+      const modelAssetPath = hasLocal ? local : 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task', mk = (delegate: 'GPU' | 'CPU') => vision.PoseLandmarker.createFromOptions(fs, { baseOptions: { modelAssetPath, delegate }, runningMode: 'VIDEO', numPoses: 1, minPoseDetectionConfidence: 0.3, minPosePresenceConfidence: 0.3 });
+      const pose = await mk('GPU').catch(() => mk('CPU'));
       const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }), v = video.current!; v.srcObject = stream; await v.play(); frames.current = []; setState('recording — perform, then Stop');
-      const fps = S().project.fps; let last = -1, raf = 0; const t0 = performance.now();
-      const loop = () => { raf = requestAnimationFrame(loop); const now = performance.now(), f = Math.floor(((now - t0) / 1000) * fps); if (f === last) return; last = f; const r = pose.detectForVideo(v, now), w = r.worldLandmarks?.[0]; if (w) frames.current.push(w.map((p) => [p.x, -p.y, -p.z] as Vec3)); };
+      const fps = S().project.fps; let last = -1, raf = 0, examined = 0; const t0 = performance.now(); stats.current = { examined: 0, error: '' };
+      const loop = () => { raf = requestAnimationFrame(loop); const now = performance.now(), f = Math.floor(((now - t0) / 1000) * fps); if (f === last || v.readyState < 2) return; last = f; try { const r = pose.detectForVideo(v, now), w = r.worldLandmarks?.[0]; stats.current.examined = ++examined; if (w) frames.current.push(w.map((p) => [p.x, -p.y, -p.z] as Vec3)); } catch (e) { stats.current.error = (e as Error).message; } };
       loop(); stop.current = () => { cancelAnimationFrame(raf); stream.getTracks().forEach((t) => t.stop()); pose.close(); };
     } catch (e) { setState(`error: ${(e as Error).message}`); }
   };
-  const finish = () => { stop.current(); if (!ch || frames.current.length < 6) return setState(`captured ${frames.current.length} frames — too short`);
+  const finish = () => { stop.current(); if (!ch || frames.current.length < 6) return setState(`person found in ${frames.current.length} of ${stats.current.examined} frames — too few to build a clip${stats.current.error ? ` (${stats.current.error})` : ''}`);
     const clip = buildMocapClip(newId('clip'), `${ch.name} take ${new Date().toLocaleTimeString()}`, frames.current, S().project.fps, ch.height), key = ch.keys.find((k) => k.id === sel?.keyId) ?? [...ch.keys].reverse().find((k) => k.t <= S().t);
-    S().dispatch({ type: 'batch', label: `Mocap clip for ${ch.name}`, ops: [{ type: 'addClip', clip }, ...(key ? [{ type: 'setPathKey' as const, characterId: ch.id, keyId: key.id, patch: { clip: clip.id } }] : [])] }); setState(`clip "${clip.name}" (${clip.frames.length} frames) ${key ? `applied at ${key.t.toFixed(2)}s` : 'added'}`); };
+    S().dispatch({ type: 'batch', label: `Mocap clip for ${ch.name}`, ops: [{ type: 'addClip', clip }, ...(key ? [{ type: 'setPathKey' as const, characterId: ch.id, keyId: key.id, patch: { clip: clip.id } }] : [])] }); setState(`person found in ${frames.current.length} of ${stats.current.examined} frames → clip "${clip.name}" (${clip.frames.length} frames) ${key ? `applied at ${key.t.toFixed(2)}s` : 'added'}`); };
   return <Section title="Webcam mocap">
-    <p className="text-xxs text-dim">MediaPipe Pose in the browser → retargeted onto {ch ? <b>{ch.name}</b> : 'the selected character'} as a new clip, smoothed and foot-locked. The model downloads from Google's CDN on first use.</p>
+    <p className="text-xxs text-dim">MediaPipe Pose in the browser → retargeted onto {ch ? <b>{ch.name}</b> : 'the selected character'} as a new clip, smoothed and foot-locked. Runs locally: the WASM ships with the app; run `pnpm mocap:fetch` once to keep the model local too (otherwise it loads from Google's CDN).</p>
     <video ref={video} className="mt-1 w-full rounded bg-black" muted playsInline style={{ display: state.startsWith('recording') ? 'block' : 'none', transform: 'scaleX(-1)' }} />
     <div className="mt-1 flex gap-1"><button className="btn-primary" disabled={!ch || state.startsWith('recording')} onClick={() => void start()}>Record</button><button className="btn" disabled={!state.startsWith('recording')} onClick={finish}>Stop</button></div><p className="mt-0.5 text-xxs">{state}</p>
   </Section>;

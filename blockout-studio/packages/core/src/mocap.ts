@@ -13,7 +13,7 @@ export function landmarksToJoints(lm: Vec3[]): Partial<Record<Joint, Vec3>> {
   return { hips, chest: add(hips, scale(sub(sh, hips), 0.62)), neck: sh, head: add(sh, scale(sub(ear, sh), 0.55)), upperArmL: lm[LM.lShoulder], foreArmL: lm[LM.lElbow], handL: lm[LM.lWrist], upperArmR: lm[LM.rShoulder], foreArmR: lm[LM.rElbow], handR: lm[LM.rWrist], upLegL: lm[LM.lHip], legL: lm[LM.lKnee], footL: lm[LM.lAnkle], upLegR: lm[LM.rHip], legR: lm[LM.rKnee], footR: lm[LM.rAnkle] };
 }
 const CHILD: Partial<Record<Joint, Joint>> = { neck: 'head', upperArmL: 'foreArmL', foreArmL: 'handL', upperArmR: 'foreArmR', foreArmR: 'handR', upLegL: 'legL', legL: 'footL', upLegR: 'legR', legR: 'footR' };
-function eulerXYZ(q: Quat): Vec3 { // inverse of qFromEuler (XYZ)
+export function eulerXYZ(q: Quat): Vec3 { // inverse of qFromEuler (XYZ)
   const [x, y, z, w] = q, m11 = 1 - 2 * (y * y + z * z), m12 = 2 * (x * y - w * z), m13 = 2 * (x * z + w * y), m22 = 1 - 2 * (x * x + z * z), m23 = 2 * (y * z - w * x), m32 = 2 * (y * z + w * x), m33 = 1 - 2 * (x * x + y * y);
   const ey = Math.asin(Math.max(-1, Math.min(1, m13))); return Math.abs(m13) < 0.9999999 ? [Math.atan2(-m23, m33), ey, Math.atan2(-m12, m11)] : [Math.atan2(m32, m22), ey, 0];
 }

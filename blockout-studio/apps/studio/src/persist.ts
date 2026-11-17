@@ -12,12 +12,12 @@ export function assetUrl(id?: string): string | undefined { return id ? (assetUr
 export async function loadAssets() { for (const k of await keys()) if (typeof k === 'string' && k.startsWith(ASSET)) { const b = await get<Blob>(k); if (b) assetUrls.set(k.slice(ASSET.length), URL.createObjectURL(b)); } }
 
 export const changeLogMarkdown = (name: string, log: LogEntry[]) => `# ${name} — change log\n\n` + log.map((l) => `- ${new Date(l.at).toISOString().replace('T', ' ').slice(0, 19)} · **${l.author}** · ${l.label}`).join('\n') + '\n';
-let timer: ReturnType<typeof setTimeout> | null = null;
+let timer: ReturnType<typeof setTimeout> | null = null, lastLogged = 0, editsSince = 0;
 export function startAutosave() {
   return useStudio.subscribe((s, prev) => {
-    if (s.project === prev.project) return;
+    if (s.project === prev.project) return; editsSince++;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => { const st = S(); set(KEY, { project: st.project, changeLog: st.changeLog, savedAt: Date.now(), clean: false }).then(() => S().set({ savedAt: Date.now() })).catch(() => {}); }, 600);
+    timer = setTimeout(() => { if (Date.now() - lastLogged > 300000) { S().logEvent(`Autosaved (${editsSince} change${editsSince === 1 ? '' : 's'} since the last log entry)`, 'system'); lastLogged = Date.now(); editsSince = 0; } const st = S(); set(KEY, { project: st.project, changeLog: st.changeLog, savedAt: Date.now(), clean: false }).then(() => S().set({ savedAt: Date.now() })).catch(() => {}); }, 600);
   });
 }
 export async function recover(): Promise<boolean> {
@@ -30,6 +30,7 @@ export async function recover(): Promise<boolean> {
 export const clearAutosave = () => del(KEY);
 
 export async function exportBlockout(): Promise<Uint8Array> {
+  S().logEvent(`Saved ${S().project.name}.blockout`, 'user');
   const s = S(), files: Record<string, Uint8Array> = { 'project.json': strToU8(JSON.stringify(s.project, null, 1)), 'changelog.md': strToU8(changeLogMarkdown(s.project.name, s.changeLog)), 'changelog.json': strToU8(JSON.stringify(s.changeLog)) };
   for (const k of await keys()) if (typeof k === 'string' && k.startsWith(ASSET)) { const b = await get<Blob>(k); if (b) files['assets/' + k.slice(ASSET.length)] = new Uint8Array(await b.arrayBuffer()); }
   return zipSync(files, { level: 6, mtime: new Date('2000-01-01T00:00:00Z') });

@@ -20,3 +20,13 @@ describe('mocap retargeting', () => {
     const clip = buildMocapClip('m1', 'test', frames, 24); expect(clip.frames).toHaveLength(24); expect(clip.frames[5].upLegL).toBeDefined(); expect(clip.frames[5]._root).toBeDefined();
   });
 });
+
+import { demoProject, jointFrames, poseKeyFor, qMul, qFromAxisAngle, applyOp, characterSkeleton } from './index';
+describe('pose mode', () => {
+  it('keying a gizmo rotation puts the joint exactly at the requested world orientation', () => {
+    const p = demoProject(), c = p.characters.kenji, t = 4.0, before = jointFrames(p, c, t).foreArmR, want = qMul(qFromAxisAngle([1, 0, 0], -0.6), before.quat);
+    const rot = poseKeyFor(p, c, t, 'foreArmR', want), p2 = applyOp(p, { type: 'addPoseKey', characterId: 'kenji', key: { id: 'pk', t, joint: 'foreArmR', rot, ease: 'linear' } }).project;
+    const got = jointFrames(p2, p2.characters.kenji, t).foreArmR.quat, dotq = Math.abs(got[0] * want[0] + got[1] * want[1] + got[2] * want[2] + got[3] * want[3]);
+    expect(dotq).toBeGreaterThan(0.999); expect(characterSkeleton(p2, p2.characters.kenji, t).pos.handR).not.toEqual(characterSkeleton(p, c, t).pos.handR);
+  });
+});

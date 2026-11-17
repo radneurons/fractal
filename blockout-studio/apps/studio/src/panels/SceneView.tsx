@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { GizmoHelper, GizmoViewport, Html, Line, OrbitControls, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { compileFrame, evalCamera, evalCharacter, samplePath, terrainHeight, characterPosition, qRotate, newId, nextIdColor, CLIP_DEFS, type Project, type Vec3, type Op } from '@blockout/core';
+import { compileFrame, evalCamera, evalCharacter, samplePath, terrainHeight, characterPosition, qRotate, newId, nextIdColor, jointFrames, poseKeyFor, CLIP_DEFS, type Joint, type Project, type Vec3, type Op } from '@blockout/core';
 import { GLStage, LightRig } from '@blockout/render';
 import { S, useStudio, activeShot, type Mode, OVERLAYS } from '../store';
 import { Toggle } from '../ui';
@@ -73,6 +73,37 @@ function Paths({ project, ghost }: { project: Project; ghost?: boolean }) {
   })}</>;
 }
 
+/** Motion trails: where each character (and moving camera) was over the last 1.5 s. */
+/** Pose mode: joints of the selected character are clickable; the chosen one gets a rotate gizmo; releasing keys an additive pose layer. */
+function PoseRig() {
+  const mode = useStudio((s) => s.mode), sel = useStudio((s) => s.selection), project = useStudio((s) => s.project), t = useStudio((s) => s.t), joint = useStudio((s) => s.poseJoint) as Joint | null, ref = useRef<THREE.Group>(null!);
+  const c = mode === 'pose' && sel?.kind === 'character' ? project.characters[sel.id] : undefined, frames = useMemo(() => (c ? jointFrames(project, c, t) : null), [c, project, t]);
+  useEffect(() => { if (ref.current && frames && joint) { ref.current.position.set(...frames[joint].pos); ref.current.quaternion.set(...frames[joint].quat); } });
+  if (!c || !frames) return null;
+  const commit = () => { if (!joint) return; const q = ref.current.quaternion, rot = poseKeyFor(project, c, t, joint, [q.x, q.y, q.z, q.w]), half = 0.5 / project.fps, old = c.poseKeys.filter((k) => k.joint === joint && Math.abs(k.t - t) < half);
+    S().dispatch({ type: 'batch', label: `Pose ${c.name} · ${joint} at ${t.toFixed(2)}s`, ops: [...old.map((k) => ({ type: 'removePoseKey' as const, characterId: c.id, keyId: k.id })), { type: 'addPoseKey', characterId: c.id, key: { id: newId('pk'), t, joint, rot, ease: 'easeInOut' } }] }); };
+  return <>
+    {(Object.keys(frames) as Joint[]).map((j) => <mesh key={j} position={frames[j].pos} renderOrder={10} onPointerDown={(e) => { e.stopPropagation(); S().set({ poseJoint: j }); }}><sphereGeometry args={[j === joint ? 0.06 : 0.04, 10, 8]} /><meshBasicMaterial color={j === joint ? '#ffffff' : c.idColor} depthTest={false} transparent opacity={0.9} /></mesh>)}
+    {joint && <><group ref={ref} /><TransformControls object={ref} mode="rotate" space="local" size={0.6} onMouseUp={commit} />
+      <Html position={frames[joint].pos} center distanceFactor={10} style={{ pointerEvents: 'none' }}><div className="mt-8 whitespace-nowrap rounded bg-black/70 px-1 text-[10px] text-white">{joint} · release to key at {t.toFixed(2)}s</div></Html></>}
+  </>;
+}
+function Trails() {
+  const project = useStudio((s) => s.project), t = useStudio((s) => s.t), on = useStudio((s) => s.overlays.trails); if (!on) return null;
+  const span = 1.5, steps = 18, ts = Array.from({ length: steps + 1 }, (_, i) => Math.max(0, t - span + (span * i) / steps));
+  return <>{Object.values(project.characters).map((c) => { const pts = ts.map((tt) => { const p = evalCharacter(project, c, tt).pos; return [p[0], p[1] + c.height * 0.5, p[2]] as [number, number, number]; }); const moved = Math.hypot(pts[0][0] - pts[steps][0], pts[0][2] - pts[steps][2]) > 0.05; return moved ? <Line key={c.id} points={pts} color={c.idColor} lineWidth={3} transparent opacity={0.55} /> : null; })}
+    {Object.values(project.cameras).map((c) => { const pts = ts.map((tt) => evalCamera(project, c, tt).pos as [number, number, number]); return Math.hypot(pts[0][0] - pts[steps][0], pts[0][1] - pts[steps][1], pts[0][2] - pts[steps][2]) > 0.05 ? <Line key={c.id} points={pts} color="#5ea8ff" lineWidth={2} transparent opacity={0.45} /> : null; })}</>;
+}
+/** Focus-plane gizmo for the active/selected camera: the plane in focus, plus near/far limits of acceptable sharpness. */
+function FocusPlane() {
+  const project = useStudio((s) => s.project), t = useStudio((s) => s.t), sel = useStudio((s) => s.selection), shot = useStudio(activeShot), on = useStudio((s) => s.overlays.frusta);
+  const id = sel?.kind === 'camera' ? sel.id : shot?.cameraId, cam = id ? project.cameras[id] : undefined; if (!on || !cam) return null;
+  const cs = evalCamera(project, cam, t), coc = 0.03 * (cam.sensorWidth / 36), H = (cs.focal * cs.focal) / (cs.fstop * coc) / 1000, d = cs.focus, near = (H * d) / (H + d), far = d < H ? (H * d) / (H - d) : Infinity;
+  const plane = (dist: number, color: string, opacity: number, label?: string) => { const th = Math.tan(cs.fovY / 2), h = 2 * th * dist, w = h * cs.aspect, c = qRotate(cs.quat, [0, 0, -dist]); return <group key={label ?? color + dist} position={[cs.pos[0] + c[0], cs.pos[1] + c[1], cs.pos[2] + c[2]]} quaternion={cs.quat as unknown as THREE.Quaternion}>
+    <mesh><planeGeometry args={[w, h]} /><meshBasicMaterial color={color} transparent opacity={opacity} side={THREE.DoubleSide} depthWrite={false} /></mesh>
+    {label && <Html position={[0, -h / 2, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}><div className="whitespace-nowrap rounded bg-black/60 px-1 text-[10px] text-white">{label}</div></Html>}</group>; };
+  return <>{plane(d, '#f0b43c', 0.16, `focus ${d.toFixed(1)} m · f/${cs.fstop.toFixed(1)} · sharp ${near.toFixed(1)}–${far === Infinity ? '∞' : far.toFixed(1)} m`)}{near > 0.2 && plane(near, '#f0b43c', 0.05)}{far < 300 && plane(far, '#f0b43c', 0.05)}</>;
+}
 function CameraGizmos({ project, ghost }: { project: Project; ghost?: boolean }) {
   const t = useStudio((s) => s.t), sel = useStudio((s) => s.selection), show = useStudio((s) => s.overlays.frusta), shot = useStudio(activeShot);
   if (!show && !ghost) return null;
@@ -147,12 +178,12 @@ function Peers() {
   return <>{peers.map((p) => p.cursor && <group key={p.id} position={p.cursor}><mesh><coneGeometry args={[0.12, 0.4, 8]} /><meshBasicMaterial color={p.color} /></mesh><Html center distanceFactor={12} style={{ pointerEvents: 'none' }}><div className="mt-6 whitespace-nowrap rounded px-1 text-[10px] text-white" style={{ background: p.color }}>{p.name}</div></Html></group>)}</>;
 }
 
-const MODES: [Mode, string, string][] = [['select', 'Select', 'Select & transform (W/E/R)'], ['path', 'Path', 'Click the ground to lay the selected character\'s path'], ['sculpt', 'Sculpt', 'Drag on terrain to sculpt'], ['scatter', 'Scatter', 'Click to scatter set dressing']];
+const MODES: [Mode, string, string][] = [['select', 'Select', 'Select & transform (W/E/R)'], ['path', 'Path', 'Click the ground to lay the selected character\'s path'], ['pose', 'Pose', 'Click a joint of the selected character, rotate it, release to key it at the playhead'], ['sculpt', 'Sculpt', 'Drag on terrain to sculpt'], ['scatter', 'Scatter', 'Click to scatter set dressing']];
 export function SceneView() {
   const project = useStudio((s) => s.project), ghost = useStudio((s) => s.ghost), mode = useStudio((s) => s.mode), ov = useStudio((s) => s.overlays), focus = useStudio((s) => s.focus), sculpt = useStudio((s) => s.sculpt), scatterKind = useStudio((s) => s.scatterKind);
   return <div className={`relative h-full w-full ${focus === 'scene' ? 'ring-1 ring-inset ring-accent/40' : ''}`} data-testid="scene-view" onPointerDown={() => S().set({ focus: 'scene' })}>
     <Canvas shadows camera={{ position: [7, 6, 13], fov: 42, near: 0.1, far: 800 }} dpr={[1, 1.5]} onPointerMissed={() => S().mode === 'select' && S().select(null)} gl={{ antialias: true, powerPreference: 'high-performance' }}>
-      <Stage /><Paths project={project} /><CameraGizmos project={project} /><AxisAndEyelines /><Gizmo /><Peers />
+      <Stage /><Paths project={project} /><CameraGizmos project={project} /><Trails /><FocusPlane /><AxisAndEyelines /><Gizmo /><PoseRig /><Peers />
       {ghost && <><Paths project={ghost} ghost /><CameraGizmos project={ghost} ghost /></>}
       <OrbitControls makeDefault target={[0, 1, 0]} maxPolarAngle={Math.PI / 2 - 0.02} enableDamping={false} mouseButtons={{ LEFT: mode === 'sculpt' ? (-1 as unknown as THREE.MOUSE) : THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }} />
       <ViewSync /><GizmoHelper alignment="bottom-left" margin={[48, 48]}><GizmoViewport labelColor="white" axisHeadScale={0.9} /></GizmoHelper>

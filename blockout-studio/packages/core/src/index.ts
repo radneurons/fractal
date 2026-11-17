@@ -9,3 +9,4 @@ export * from './continuity';
 export * from './presets';
 export * from './demo';
 export * from './mocap';
+export * from './pose';

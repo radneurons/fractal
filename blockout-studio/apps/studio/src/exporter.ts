@@ -28,4 +28,4 @@ export async function benchClay(height = 1080, frames = 48, encode = true): Prom
   const fps = n / ((performance.now() - t0) / 1000);
   return { fps, xRealtime: fps / p.fps, width: w, height: h, renderer: gl.info, encoded: !!sink };
 }
-if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__blockout = { exportShotPackage, benchClay, hashBytes };
+if (typeof window !== 'undefined') Object.assign(((window as unknown as Record<string, object>).__blockout ??= {}), { exportShotPackage, benchClay, hashBytes });

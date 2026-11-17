@@ -2,8 +2,11 @@ import React from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { ASPECTS, CAMERA_PRESETS, CLIPS, EASINGS, FX_KINDS, HELD, JOINTS, PROP_KINDS, SHAKES, makeCamera, newId, nextIdColor, sunState, characterPosition, evalCharacter, type CameraPreset, type Op, type Project, type Vec3 } from '@blockout/core';
 import { S, useStudio, activeShot } from '../store';
+import { importGLB } from '../models';
 import { Field, Num, Section as Sec, Sel, Text, Vec } from '../ui';
 
+/** Common sensor widths (mm). Field of view follows sensor width and the project aspect. */
+export const SENSORS: [string, number][] = [['Full frame 36', 36], ['Super 35', 24.89], ['APS-C', 23.6], ['Micro 4/3', 17.3], ['Large format (Alexa 65)', 54.12], ['IMAX 15/70', 70.41], ['1-inch', 13.2], ['Phone (1/1.3")', 9.8]];
 const D = (op: Op, label?: string) => S().dispatch(op, label ? { label } : undefined);
 const focusPoint = (): Vec3 => { const v = S().viewCam; return v ? [Math.round(v.target[0] * 10) / 10, 0, Math.round(v.target[2] * 10) / 10] : [0, 0, 0]; };
 
@@ -40,6 +43,7 @@ export function keyframeAtPlayhead() {
 const ADD: [string, () => void][] = [
   ['Character', () => addCharacter()], ...CAMERA_PRESETS.map((p) => [`Camera · ${p}`, () => addCameraPreset(p)] as [string, () => void]), ['Shot', () => addShot()],
   ...PROP_KINDS.filter((k) => k !== 'glb').map((k) => [`Prop · ${k}`, () => { const p = S().project, id = newId('prop'); D({ type: 'addProp', prop: { id, name: k, kind: k, pos: focusPoint(), rot: [0, 0, 0], scale: k === 'plane' ? [4, 1, 4] : [1, 1, 1], idColor: nextIdColor(p), ...(k === 'building' ? { plan: { points: [[-3, -2], [3, -2], [3, 2], [-3, 2]] as [number, number][], height: 3, roof: true } } : {}) } }); S().select({ kind: 'prop', id }); }] as [string, () => void]),
+  ['Prop · GLB model…', () => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.glb,model/gltf-binary'; inp.onchange = () => { const f = inp.files?.[0]; if (f) void importGLB(f, focusPoint()); }; inp.click(); }],
   ...FX_KINDS.map((k) => [`Effect · ${k}`, () => { const s = S(), p = s.project, id = newId('fx'), host = s.selection?.kind === 'character' ? s.selection.id : undefined; D({ type: 'addFx', fx: { id, name: k, kind: k, pos: host ? [0, 0, 0] : focusPoint(), size: k === 'rain' ? [12, 6, 12] : [1, 1, 1], attachTo: host, start: 0, end: 9999, idColor: nextIdColor(p), trail: 1.5 } }); S().select({ kind: 'fx', id }); }] as [string, () => void]),
 ];
 export function AddMenu() {
@@ -89,7 +93,7 @@ function CameraPanel({ p, id, keyId }: { p: Project; id: string; keyId?: string 
     <Sec title="Camera" right={<button className="btn" onClick={() => { if (D({ type: 'removeCamera', id })) S().select(null); }}>Delete</button>}>
       <Field label="Name"><Text value={c.name} onChange={(name) => up({ name })} /></Field>
       <Field label="Lens mm"><div className="flex flex-wrap gap-1">{[18, 24, 35, 50, 85, 135].map((f) => <button key={f} data-testid={`lens-${f}`} className={`btn ${c.keys.every((x) => Math.round(x.focal) === f) ? 'border-accent text-accent' : ''}`} onClick={() => D({ type: 'setLens', cameraId: id, focal: f })}>{f}</button>)}</div></Field>
-      <Field label="Sensor mm"><Num value={c.sensorWidth} step={1} min={4} onChange={(sensorWidth) => up({ sensorWidth })} /></Field>
+      <Field label="Sensor"><div className="flex gap-1"><Sel label="Sensor preset" value={String(SENSORS.find(([, w]) => Math.abs(w - c.sensorWidth) < 0.05)?.[1] ?? 'custom')} options={[...SENSORS.map(([n, w]) => [String(w), n] as [string, string]), ['custom', 'Custom']]} onChange={(v) => v !== 'custom' && up({ sensorWidth: +v })} /><Num label="Sensor width mm" value={c.sensorWidth} step={0.1} min={4} onChange={(sensorWidth) => up({ sensorWidth })} /></div></Field>
       <Field label="Look at"><Sel value={c.lookAt?.characterId ?? ''} options={[['', 'key targets'], ...chars.map((o) => [o.id, o.name] as [string, string])]} onChange={(v) => up({ lookAt: v ? { characterId: v, offset: [0, 1.4, 0] } : undefined })} /></Field>
       <Field label="Attach to"><div className="flex gap-1"><Sel value={c.attach?.characterId ?? ''} options={[['', 'world'], ...chars.map((o) => [o.id, o.name] as [string, string])]} onChange={(v) => { if (!v) return up({ attach: undefined }); const cp = characterPosition(p, p.characters[v], c.keys[0].t); D({ type: 'updateCamera', id, patch: { attach: { characterId: v, lag: 0.2 }, keys: c.attach ? c.keys : c.keys.map((x) => ({ ...x, pos: [x.pos[0] - cp[0], x.pos[1] - cp[1], x.pos[2] - cp[2]] as Vec3, target: [x.target[0] - cp[0], x.target[1] - cp[1], x.target[2] - cp[2]] as Vec3 })) } }, `Attach ${c.name}`); }} />{c.attach && <Num label="Lag s" value={c.attach.lag} step={0.05} min={0} onChange={(lag) => up({ attach: { ...c.attach!, lag } })} />}</div></Field>
       <Field label="Shake"><div className="flex gap-1"><Sel value={c.shake.profile} options={SHAKES} onChange={(profile) => up({ shake: { ...c.shake, profile } })} /><Num label="Shake amount" value={c.shake.amount} step={0.1} min={0} max={4} onChange={(amount) => up({ shake: { ...c.shake, amount } })} /></div></Field>

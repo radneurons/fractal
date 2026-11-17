@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { evalCamera, evalCharacter, newId, type Op, type Project } from '@blockout/core';
+import { evalCamera, evalCharacter, newId, type Op, type Project, type Vec3 } from '@blockout/core';
 import { S, useStudio, cutDuration } from '../store';
 import { Toggle, fmtTime } from '../ui';
 
@@ -36,23 +36,26 @@ function Timecode() { const t = useStudio((s) => s.t), fps = useStudio((s) => s.
 function Curves({ pps, width }: { pps: number; width: number }) {
   const project = useStudio((s) => s.project), sel = useStudio((s) => s.selection), H = 96;
   const curves = useMemo(() => {
-    const out: { name: string; color: string; pts: [number, number][]; unit: string; keys?: { id: string; t: number; v: number }[] }[] = [], N = Math.max(40, Math.min(400, Math.round(project.duration * 12)));
+    const out: { name: string; color: string; pts: [number, number][]; unit: string; keys?: { id: string; t: number; v: number }[]; edit?: (keyId: string, v0: number, dy: number, scale: number) => Op }[] = [], N = Math.max(40, Math.min(400, Math.round(project.duration * 12)));
     const ts = Array.from({ length: N + 1 }, (_, i) => (project.duration * i) / N);
     if (sel?.kind === 'character' && project.characters[sel.id]) { const c = project.characters[sel.id]; out.push({ name: 'speed', unit: 'm/s', color: c.idColor, pts: ts.map((t) => [t, evalCharacter(project, c, t).speed]) }); out.push({ name: 'height', unit: 'm', color: '#8b92a0', pts: ts.map((t) => [t, evalCharacter(project, c, t).pos[1]]) }); }
-    if (sel?.kind === 'camera' && project.cameras[sel.id]) { const c = project.cameras[sel.id]; out.push({ name: 'focal', unit: 'mm', color: '#5ea8ff', pts: ts.map((t) => [t, evalCamera(project, c, t).focal]), keys: c.keys.map((k) => ({ id: k.id, t: k.t, v: k.focal })) }); out.push({ name: 'height', unit: 'm', color: '#50c88c', pts: ts.map((t) => [t, evalCamera(project, c, t).pos[1]]) }); out.push({ name: 'roll', unit: '°', color: '#f0b43c', pts: ts.map((t) => [t, (evalCamera(project, c, t).roll * 180) / Math.PI]) }); }
+    if (sel?.kind === 'camera' && project.cameras[sel.id]) { const c = project.cameras[sel.id], ck = (f: (k: (typeof c.keys)[number]) => number) => c.keys.map((k) => ({ id: k.id, t: k.t, v: f(k) }));
+      out.push({ name: 'focal', unit: 'mm', color: '#5ea8ff', pts: ts.map((t) => [t, evalCamera(project, c, t).focal]), keys: ck((k) => k.focal), edit: (id, v0, dy) => ({ type: 'setCameraKey', cameraId: c.id, keyId: id, patch: { focal: Math.max(8, Math.min(600, Math.round(v0 * Math.exp(dy / 80)))) } }) });
+      if (!c.attach) out.push({ name: 'height', unit: 'm', color: '#50c88c', pts: ts.map((t) => [t, evalCamera(project, c, t).pos[1]]), keys: ck((k) => k.pos[1]), edit: (id, v0, dy, sc) => { const k = c.keys.find((x) => x.id === id)!, y = Math.round((v0 + dy * sc) * 100) / 100, d = y - k.pos[1]; return { type: 'setCameraKey', cameraId: c.id, keyId: id, patch: { pos: [k.pos[0], y, k.pos[2]], ...(c.lookAt ? {} : { target: [k.target[0], Math.round((k.target[1] + d) * 100) / 100, k.target[2]] as Vec3 }) } }; } });
+      out.push({ name: 'roll', unit: '°', color: '#f0b43c', pts: ts.map((t) => [t, (evalCamera(project, c, t).roll * 180) / Math.PI]), keys: ck((k) => (k.roll * 180) / Math.PI), edit: (id, v0, dy, sc) => ({ type: 'setCameraKey', cameraId: c.id, keyId: id, patch: { roll: (Math.round(v0 + dy * sc) * Math.PI) / 180 } }) }); }
     return out;
   }, [project, sel]);
   if (!curves.length) return <div className="flex h-24 items-center justify-center border-t border-line text-dim">Select a character or camera to see its curves.</div>;
   return <div className="relative border-t border-line" style={{ height: H }} data-testid="curve-editor">
     <div className="absolute left-0 top-0 z-10 flex h-full flex-col justify-center gap-0.5 bg-panel px-2" style={{ width: LABEL_W }}>{curves.map((c) => { const vs = c.pts.map((p) => p[1]); return <div key={c.name} className="flex items-center gap-1 text-xxs"><span className="inline-block h-2 w-2 rounded-full" style={{ background: c.color }} />{c.name}<span className="text-dim">{Math.min(...vs).toFixed(1)}–{Math.max(...vs).toFixed(1)}{c.unit}</span></div>; })}</div>
     <svg className="absolute top-0" style={{ left: LABEL_W }} width={width} height={H}>{curves.map((c) => {
-      const vs = c.pts.map((p) => p[1]), lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1, y = (v: number) => H - 6 - ((v - lo) / span) * (H - 12);
+      const vs = c.pts.map((p) => p[1]), lo = Math.min(...vs), hi = Math.max(...vs), flat = hi - lo < 1e-6, span = flat ? Math.max(1, Math.abs(hi) * 0.2) : hi - lo, y = (v: number) => (flat ? H / 2 - ((v - lo) / span) * (H - 12) : H - 6 - ((v - lo) / span) * (H - 12));
       return <g key={c.name}><polyline fill="none" stroke={c.color} strokeWidth={1.5} points={c.pts.map(([t, v]) => `${t * pps},${y(v)}`).join(' ')} />
-        {c.keys?.map((k) => <circle key={k.id} cx={k.t * pps} cy={y(k.v)} r={4} fill={c.color} stroke="#fff" style={{ cursor: 'ns-resize' }} onPointerDown={(e) => {
-          e.stopPropagation(); const y0 = e.clientY, v0 = k.v, camId = sel!.id;
-          const mv = (ev: PointerEvent) => S().dispatch({ type: 'setCameraKey', cameraId: camId, keyId: k.id, patch: { focal: Math.max(8, Math.min(600, Math.round(v0 * Math.exp((y0 - ev.clientY) / 80)))) } }, { coalesce: 'curve' + k.id, label: 'Adjust focal length' });
+        {c.keys?.map((k) => <circle key={k.id} cx={k.t * pps} cy={y(k.v)} r={4} fill={c.color} stroke="#fff" style={{ cursor: 'ns-resize' }} data-testid={`curve-key-${c.name}`} onPointerDown={(e) => {
+          if (!c.edit) return; e.stopPropagation(); const y0 = e.clientY, v0 = k.v, perPx = span / (H - 12), edit = c.edit;
+          const mv = (ev: PointerEvent) => S().dispatch(edit(k.id, v0, y0 - ev.clientY, perPx), { coalesce: `curve${c.name}${k.id}`, label: `Adjust ${c.name}` });
           const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); }; window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
-        }}><title>{`focal ${k.v.toFixed(0)}mm — drag vertically`}</title></circle>)}</g>;
+        }}><title>{`${c.name} ${k.v.toFixed(1)}${c.unit} — drag vertically`}</title></circle>)}</g>;
     })}</svg>
   </div>;
 }

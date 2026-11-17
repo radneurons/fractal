@@ -8,7 +8,8 @@ import type { Joint } from './schema';
 
 export type MeshKind = 'box' | 'sphere' | 'cylinder' | 'cone' | 'plane';
 export type Layer = 'entity' | 'set' | 'fx';
-export interface Drawable { key: string; entityId: string; kind: MeshKind; matrix: Mat4; idColor: string; layer: Layer }
+/** `assetId`: an imported model the WebGL backend draws in place of the unit-box proxy (normalised to that box). */
+export interface Drawable { key: string; entityId: string; kind: MeshKind; matrix: Mat4; idColor: string; layer: Layer; assetId?: string }
 export interface InstanceSet { key: string; entityId: string; kind: MeshKind; idColor: string; matrices: Mat4[] }
 export interface FrameScene { t: number; drawables: Drawable[]; instances: InstanceSet[]; terrain: Terrain; skeletons: Record<string, Skeleton>; states: Record<string, CharState> }
 
@@ -61,7 +62,8 @@ export function propDrawables(p: Prop, ground: number, out: Drawable[] = []): Dr
   const push = (part: string, kind: MeshKind, local: Mat4) => out.push({ key: `${p.id}:${part}`, entityId: p.id, kind, matrix: mMul(base, local), idColor: p.idColor, layer: 'set' });
   const T = (pos: Vec3, s: Vec3, q: Quat = [0, 0, 0, 1]) => mCompose(pos, q, s);
   switch (p.kind) {
-    case 'box': case 'glb': push('m', 'box', T([0, 0.5, 0], [1, 1, 1])); break;
+    case 'box': push('m', 'box', T([0, 0.5, 0], [1, 1, 1])); break;
+    case 'glb': push('m', 'box', T([0, 0.5, 0], [1, 1, 1])); if (p.assetId) out[out.length - 1].assetId = p.assetId; break;
     case 'sphere': push('m', 'sphere', T([0, 0.5, 0], [1, 1, 1])); break;
     case 'cylinder': push('m', 'cylinder', T([0, 0.5, 0], [1, 1, 1])); break;
     case 'cone': push('m', 'cone', T([0, 0.5, 0], [1, 1, 1])); break;

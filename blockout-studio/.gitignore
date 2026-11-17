@@ -5,3 +5,4 @@ test-results
 playwright-report
 *.tsbuildinfo
 .blockout-data
+apps/studio/public/models

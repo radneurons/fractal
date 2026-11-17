@@ -20,6 +20,8 @@ import { download } from './ui';
 import { exportShotPackage } from './exporter';
 import { connectBridge, startProjectSync } from './gateway';
 import { initBaselines } from './director';
+import { startModelSync } from './models';
+import { startPopoutHost } from './popout';
 
 const TABS: [string, string, React.FC][] = [['inspector', 'Inspector', Inspector], ['prompt', 'Prompt', PromptPanel], ['bibles', 'Bibles', BiblesPanel], ['takes', 'Takes', TakesPanel], ['claude', 'Claude', ClaudePanel], ['live', 'Live', LivePanel]];
 
@@ -85,11 +87,11 @@ export function App() {
   const [cmd, setCmd] = useState(false), theme = useStudio((s) => s.theme), toast = useStudio((s) => s.toast);
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => {
-    let stop = () => {}; const off = installHotkeys(() => setCmd(true));
+    let stop = () => {}, stopModels = () => {}; const off = installHotkeys(() => setCmd(true));
     const noRecover = new URLSearchParams(location.search).has('fresh');
-    (noRecover ? Promise.resolve(false) : recover()).then((ok) => { if (ok) S().notify('Recovered your last session from autosave.'); stop = startAutosave(); initBaselines(S().project); connectBridge(); });
-    const offSync = startProjectSync();
-    return () => { off(); stop(); offSync(); };
+    (noRecover ? Promise.resolve(false) : recover()).then((ok) => { if (ok) S().notify('Recovered your last session from autosave.'); stop = startAutosave(); initBaselines(S().project); connectBridge(); stopModels = startModelSync(); });
+    const offSync = startProjectSync(), offPop = startPopoutHost();
+    return () => { off(); stop(); offSync(); stopModels(); offPop(); };
   }, []);
   return <div className="flex h-full flex-col">
     <TopBar openCommand={() => setCmd(true)} />

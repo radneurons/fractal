@@ -4,6 +4,8 @@ import { GLPassRenderer, PASSES, type PassName } from '@blockout/render';
 import { S, useStudio, activeShot } from '../store';
 import { Sel, Toggle } from '../ui';
 import { assetUrl } from '../persist';
+import { openPopout } from '../popout';
+const isPopout = () => new URLSearchParams(location.search).has('view');
 
 /** Live view through a camera using the *export* renderer, so what you see is exactly what the passes contain. */
 export function BlockoutCanvas({ pass, cameraId, style, className, maxWidth = 960 }: { pass: PassName; cameraId: string | null; style?: React.CSSProperties; className?: string; maxWidth?: number }) {
@@ -40,7 +42,7 @@ export function BlockoutView() {
   return <div className={`flex h-full flex-col ${focus === 'blockout' ? 'ring-1 ring-inset ring-accent/40' : ''}`} onPointerDown={() => S().set({ focus: 'blockout' })} data-testid="blockout-view">
     <div className="panel-h"><span className="text-fg">Blockout</span><span className="truncate normal-case">{cameraId ? project.cameras[cameraId]?.name : 'no camera'}</span><span className="flex-1" />
       {(['thirds', 'golden', 'safe'] as const).map((o) => <Toggle key={o} on={ov[o]} onChange={(v) => S().set({ overlays: { ...ov, [o]: v } })}>{o}</Toggle>)}
-      <div className="w-28"><Sel label="Pass" value={pass} options={PASSES} onChange={(v) => S().set({ blockoutPass: v })} /></div></div>
+      <div className="w-28"><Sel label="Pass" value={pass} options={PASSES} onChange={(v) => S().set({ blockoutPass: v })} /></div>{!isPopout() && <button className="btn !px-1" title="Pop out into its own window (e.g. a second monitor)" data-testid="popout-blockout" onClick={() => openPopout('blockout')}>⧉</button>}</div>
     <div className="relative min-h-0 flex-1 bg-black">
       <BlockoutCanvas pass={pass} cameraId={cameraId} /><div className="pointer-events-none absolute inset-0 flex items-center justify-center"><div className="relative max-h-full max-w-full" style={{ aspectRatio: String(ASPECTS[project.aspect]), width: '100%' }}><FrameGuides /></div></div>
       {facts && <div className="absolute bottom-1 left-1 flex flex-wrap gap-1" data-testid="facts-badge">
@@ -60,7 +62,7 @@ export function ResultView() {
   const frameOf = (tk: typeof take) => tk && shot ? tk.frames[Math.max(0, Math.min(tk.frames.length - 1, Math.round((t - shot.start) * tk.fps)))] : undefined;
   return <div className="flex h-full flex-col" data-testid="result-view">
     <div className="panel-h"><span className="text-fg">Result</span><span className="truncate normal-case">{take ? `${take.providerId} · seed ${take.seed}${take.circled ? ' · ◎' : ''}${other ? '  vs  ' + other.providerId + ' · seed ' + other.seed : ''}` : 'no take yet'}</span><span className="flex-1" />
-      <span>blockout</span><input aria-label="Blockout overlay opacity" type="range" min={0} max={100} value={opacity * 100} onChange={(e) => S().set({ resultOpacity: +e.target.value / 100 })} className="w-20" /></div>
+      <span>blockout</span><input aria-label="Blockout overlay opacity" type="range" min={0} max={100} value={opacity * 100} onChange={(e) => S().set({ resultOpacity: +e.target.value / 100 })} className="w-20" />{!isPopout() && <button className="btn !px-1" title="Pop out into its own window" data-testid="popout-result" onClick={() => openPopout('result')}>⧉</button>}</div>
     <div className="relative min-h-0 flex-1 bg-black">
       {take ? <div className="absolute inset-0 flex items-center justify-center">
         <div className="relative max-h-full max-w-full" style={{ aspectRatio: String(ASPECTS[project.aspect]), height: '100%' }}>

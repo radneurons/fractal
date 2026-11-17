@@ -11,7 +11,7 @@ export interface Proposal {
 }
 export interface ChatMsg { id: string; role: 'user' | 'claude' | 'system' | 'log'; text: string; at: number; proposalId?: string; issues?: ContinuityIssue[] }
 export type Tool = 'translate' | 'rotate' | 'scale';
-export type Mode = 'select' | 'path' | 'sculpt' | 'scatter';
+export type Mode = 'select' | 'path' | 'pose' | 'sculpt' | 'scatter';
 export const OVERLAYS = ['thirds', 'golden', 'safe', 'axis', 'eyelines', 'onion', 'trails', 'frusta', 'paths'] as const;
 export type Overlay = (typeof OVERLAYS)[number];
 
@@ -22,13 +22,13 @@ export interface Studio {
   overlays: Record<Overlay, boolean>; blockoutPass: PassName; theme: 'dark' | 'light'; snap: boolean; rightTab: string;
   proposals: Proposal[]; ghostId: string | null; ghost: Project | null; chat: ChatMsg[]; toast: { text: string; kind: 'info' | 'error' } | null;
   sculpt: { op: 'raise' | 'lower' | 'smooth' | 'flatten'; radius: number; strength: number }; scatterKind: 'grass' | 'rock' | 'tree';
-  viewCam: { pos: [number, number, number]; target: [number, number, number]; fov: number } | null; resultOpacity: number; exportHeight: number; currentTakeId: string | null; compareTakeId: string | null;
+  viewCam: { pos: [number, number, number]; target: [number, number, number]; fov: number } | null; resultOpacity: number; exportHeight: number; poseJoint: string | null; currentTakeId: string | null; compareTakeId: string | null;
   dispatch(op: Op, meta?: { label?: string; author?: string; coalesce?: string }): boolean;
   undo(): void; redo(): void; load(p: Project, log?: LogEntry[]): void;
   setTime(t: number): void; step(frames: number): void; togglePlay(mode?: 'scene' | 'cut'): void; tick(dt: number): void;
   select(s: Selection | null): void; setActiveShot(id: string | null, seek?: boolean): void; set(p: Partial<Studio>): void;
   addProposal(p: Omit<Proposal, 'id' | 'status' | 'at'> & { id?: string }): string; previewProposal(id: string | null): void; applyProposal(id: string, ops?: Op[]): boolean; rejectProposal(id: string): void;
-  say(role: ChatMsg['role'], text: string, extra?: Partial<ChatMsg>): void; notify(text: string, kind?: 'info' | 'error'): void;
+  say(role: ChatMsg['role'], text: string, extra?: Partial<ChatMsg>): void; logEvent(label: string, author?: string): void; notify(text: string, kind?: 'info' | 'error'): void;
 }
 let lastCoalesce = { key: '', at: 0 };
 /** Observers of locally-originated ops (collaboration rides on this). */
@@ -49,7 +49,7 @@ export const useStudio = create<Studio>((set, get) => ({
   selection: null, activeShotId: 's1', focus: 'scene', tool: 'translate', mode: 'select',
   overlays: { thirds: true, golden: false, safe: false, axis: true, eyelines: false, onion: false, trails: true, frusta: true, paths: true }, blockoutPass: 'clay', theme: 'dark', snap: true, rightTab: 'inspector',
   proposals: [], ghostId: null, ghost: null, chat: [], toast: null,
-  sculpt: { op: 'raise', radius: 6, strength: 0.4 }, scatterKind: 'grass', viewCam: null, resultOpacity: 0, exportHeight: 720, currentTakeId: null, compareTakeId: null,
+  sculpt: { op: 'raise', radius: 6, strength: 0.4 }, scatterKind: 'grass', viewCam: null, resultOpacity: 0, exportHeight: 720, poseJoint: null, currentTakeId: null, compareTakeId: null,
   dispatch(op, meta = {}) {
     try {
       let { project, history } = get(); const now = Date.now();
@@ -97,12 +97,15 @@ export const useStudio = create<Studio>((set, get) => ({
   },
   applyProposal(id, ops) {
     const s = get(), pr = s.proposals.find((x) => x.id === id); if (!pr) return false;
-    const label = `${pr.source === 'user' ? '' : 'Claude: '}${pr.title}`;
-    const ok = (ops ?? pr.ops).length === 0 || s.dispatch(batch(label, ops ?? pr.ops), { author: pr.source === 'user' ? 'user' : 'claude', label });
+    const label = `${pr.source === 'user' ? '' : 'Claude: '}${pr.title}`, list = ops ?? pr.ops;
+    // session memory: remember what Claude decided and the user accepted (kept to the last 30 decisions), in the same undo entry
+    const decisions = Object.values(s.project.memory).filter((m) => m.kind === 'decision').sort((a, b) => a.at - b.at), mem: Op[] = pr.source !== 'user' && list.length ? [{ type: 'addMemory', memory: { id: nid('dec_'), kind: 'decision', text: `${pr.title}${pr.rationale ? ` — ${pr.rationale.split('\n')[0].slice(0, 160)}` : ''}`, at: Date.now() } }, ...decisions.slice(0, Math.max(0, decisions.length - 29)).map((m) => ({ type: 'removeMemory' as const, id: m.id }))] : [];
+    const ok = list.length === 0 || s.dispatch(batch(label, [...list, ...mem]), { author: pr.source === 'user' ? 'user' : 'claude', label });
     set({ proposals: get().proposals.map((x) => (x.id === id ? { ...x, status: ok ? 'applied' : 'failed', error: ok ? undefined : get().toast?.text } : x)), ghost: null, ghostId: null });
     return ok;
   },
   rejectProposal(id) { set({ proposals: get().proposals.map((x) => (x.id === id ? { ...x, status: 'rejected' } : x)), ...(get().ghostId === id ? { ghost: null, ghostId: null } : {}) }); },
+  logEvent(label, author = 'user') { set({ changeLog: [...get().changeLog, { at: Date.now(), label, author }].slice(-2000) }); },
   say(role, text, extra = {}) { set({ chat: [...get().chat, { id: nid('m'), role, text, at: Date.now(), ...extra }].slice(-400) }); },
   notify(text, kind = 'info') { set({ toast: { text, kind } }); setTimeout(() => { if (get().toast?.text === text) set({ toast: null }); }, 4500); },
 }));

@@ -32,6 +32,13 @@ void main(){
 const MODES = { id: 0, fx: 0, depth: 1, depthMetric: 2, normals: 3, flow: 4 } as const;
 
 export type StageLook = 'view' | PassName;
+/** Imported models (GLB), normalised to fill the unit cube centred at the origin, i.e. exactly the proxy box they replace. */
+export const modelRegistry = { map: new Map<string, THREE.Object3D>(), version: 0,
+  register(id: string, obj: THREE.Object3D): { size: [number, number, number] } {
+    const box = new THREE.Box3().setFromObject(obj), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3()), k = new THREE.Vector3(1 / Math.max(size.x, 1e-6), 1 / Math.max(size.y, 1e-6), 1 / Math.max(size.z, 1e-6));
+    const wrap = new THREE.Group(); obj.position.sub(c); const inner = new THREE.Group(); inner.add(obj); inner.scale.copy(k); wrap.add(inner); wrap.updateMatrixWorld(true);
+    this.map.set(id, wrap); this.version++; return { size: [size.x, size.y, size.z] };
+  } };
 export class GLStage {
   readonly group = new THREE.Group();
   private meshes = new Map<string, THREE.Mesh>(); private inst = new Map<string, { mesh: THREE.InstancedMesh; src: unknown }>();
@@ -62,17 +69,22 @@ export class GLStage {
     if (L === 'clay' || L === 'pose' || L === 'canny') return u.layer === 'ground' ? this.clayGround : this.clay;
     return this.dataMat(MODES[L as keyof typeof MODES], u.idColor);
   }
-  private apply(mesh: THREE.Mesh) { const m = this.materialFor(mesh.userData as never); mesh.visible = !!m; if (m) mesh.material = m; }
+  private apply(mesh: THREE.Object3D) { const m = this.materialFor(mesh.userData as never); mesh.visible = !!m; if (!m) return; if ((mesh as THREE.Mesh).isMesh) (mesh as THREE.Mesh).material = m; else mesh.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).material = m; }); }
   setLook(look: StageLook, selected: string | null = null) { if (look === this.look && selected === this.selected) { for (const m of this.data.values()) { m.uniforms.near.value = this.uniforms.near; m.uniforms.far.value = this.uniforms.far; m.uniforms.maxDisp.value = this.uniforms.maxDisp; } return; } this.look = look; this.selected = selected; this.group.traverse((o) => { if ((o as THREE.Mesh).isMesh) this.apply(o as THREE.Mesh); }); }
 
   sync(scene: FrameScene, prev?: FrameScene) {
     const seen = new Set<string>(), prevM = prev ? new Map(prev.drawables.map((d) => [d.key, d.matrix])) : null;
     for (const d of scene.drawables) {
       seen.add(d.key); let mesh = this.meshes.get(d.key);
-      if (!mesh || mesh.userData.kind !== d.kind || mesh.userData.idColor !== d.idColor) {
+      const model = d.assetId ? modelRegistry.map.get(d.assetId) : undefined, mv = model ? modelRegistry.version : 0;
+      if (!mesh || mesh.userData.kind !== d.kind || mesh.userData.idColor !== d.idColor || mesh.userData.modelVersion !== mv) {
+        if (mesh) this.group.remove(mesh);
+        if (model) { const g = model.clone(true) as unknown as THREE.Mesh; g.matrixAutoUpdate = false; g.userData = { kind: d.kind, idColor: d.idColor, layer: d.layer, entityId: d.entityId, prev: new THREE.Matrix4(), modelVersion: mv }; g.traverse((o) => { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; if (o !== g) o.userData = { ...o.userData, entityId: d.entityId }; }); this.apply(g); this.meshes.set(d.key, g); this.group.add(g); mesh = g; }
+      }
+      if (!mesh || mesh.userData.kind !== d.kind || mesh.userData.idColor !== d.idColor || mesh.userData.modelVersion !== mv) {
         if (mesh) this.group.remove(mesh);
         mesh = new THREE.Mesh(geo(d.kind)); mesh.matrixAutoUpdate = false; mesh.castShadow = d.layer !== 'fx'; mesh.receiveShadow = d.layer !== 'fx'; mesh.frustumCulled = false;
-        mesh.userData = { kind: d.kind, idColor: d.idColor, layer: d.layer, entityId: d.entityId, prev: new THREE.Matrix4() };
+        mesh.userData = { kind: d.kind, idColor: d.idColor, layer: d.layer, entityId: d.entityId, prev: new THREE.Matrix4(), modelVersion: mv };
         mesh.onBeforeRender = (_r, _s, _c, _g, mat) => { const u = (mat as THREE.ShaderMaterial).uniforms; if (u?.prevModel) { u.prevModel.value = mesh!.userData.prev; (mat as THREE.ShaderMaterial).uniformsNeedUpdate = true; } };
         this.apply(mesh); this.meshes.set(d.key, mesh); this.group.add(mesh);
       }

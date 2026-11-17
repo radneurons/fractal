@@ -42,7 +42,7 @@ World: metres, +Y up, ground at y=0, characters face +Z at yaw 0. Path key posit
 /** Stable context: identical between calls until the bibles/memory change, so it is cacheable. */
 export function stableContext(p: Project): string {
   const chars = Object.values(p.characters).map((c) => { const b = p.bibles.characters[c.id]; return `- ${c.name} (id ${c.id}, mask colour ${c.idColor}, ${c.height} m, holds ${c.held.kind}): ${b ? [b.appearance, b.wardrobe, b.weapon, b.silhouette].filter(Boolean).join('; ') || 'no description' : 'no description'}`; }).join('\n');
-  const mem = Object.values(p.memory).map((m) => `- [${m.kind}] ${m.text}`).join('\n');
+  const mem = Object.values(p.memory).filter((m) => m.kind === 'preference').map((m) => `- ${m.text}`).join('\n');
   return `# Blockout Studio project context\n\n## How edits work\n${OP_REFERENCE}\n\n## Style bible\n${JSON.stringify(p.bibles.style, null, 1)}\n\n## Character bible\n${chars || '(no characters)'}\n\n## Director's standing preferences (session memory)\n${mem || '(none recorded)'}\n`;
 }
 const SYSTEM = `You are the director, cinematographer, prompt writer and critic inside Blockout Studio, a 3D previs tool for generative video.
@@ -94,7 +94,8 @@ export function outputJsonSchema(task: TaskName): Record<string, unknown> {
 }
 export function buildRequest<T extends TaskName>(p: Project, task: T, input: TaskInputs[T], images?: TaskImage[]): TaskRequest {
   const def = TASKS[task];
-  return { task, system: `${SYSTEM}\n\nTask: ${def.title}. ${def.instructions}`, stable: stableContext(p), user: def.user(p, input), jsonSchema: outputJsonSchema(task), images };
+  const decisions = Object.values(p.memory).filter((m) => m.kind === 'decision').sort((a, b) => a.at - b.at).slice(-12).map((m) => `- ${m.text}`).join('\n');
+  return { task, system: `${SYSTEM}\n\nTask: ${def.title}. ${def.instructions}`, stable: stableContext(p), user: (decisions ? `Recent decisions the director accepted (stay consistent with them):\n${decisions}\n\n` : '') + def.user(p, input), jsonSchema: outputJsonSchema(task), images };
 }
 export class TaskValidationError extends Error { constructor(msg: string, readonly raw?: string) { super(msg); this.name = 'TaskValidationError'; } }
 /** Extract the first balanced JSON object from model text (tolerates fences and preamble). */
