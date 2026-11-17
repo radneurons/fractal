@@ -67,7 +67,7 @@ Measured on this machine (headless Chromium + SwiftShader for browser tests). �
 | §4 | beats, meter, key, key change, chords, f0, melisma/vibrato, loudness | ✅ | test-analysis, test-analysis3 on both fixtures |
 | §4A.2 | vocal activity F1 ≥ 0.85 | 🟡 | 0.847 on demo-song (0.921 waltz). The demo intro is a sustained centred triad pad in the vocal register; without source separation it reads as a held vowel. Reported as a known gap by the test, not hidden |
 | §5 | lyrics formats, voices, syllables, translation | ✅ | test-lyrics, test-syllables |
-| §5 | Whisper auto-sync + alignment | ✅ | test-align (robustness cases from §17); used to align the three example songs |
+| §5 | Whisper auto-sync + alignment | ✅ | test-align (robustness cases from §17, deaf-span retry). Hardened on the three example songs: anchor-chain consistency (no crushed lines from stray one-word matches), re-transcription of stretches Whisper went deaf to, held notes kept. Word match after retries: 91 % / 74 % / 72 % |
 | §6 | Director roles/elements/concepts | ✅ | test-lyrics |
 | §8 | 16 effects with masks, transparency, reduce motion | ✅ | e2e, e2e-golden, e2e-hybrid |
 | §8.12 | MONOLITH depth of field | ✅ | depth in the march target's alpha + mip blur by thin-lens CoC, focus on the sung word (`dof` param) |
