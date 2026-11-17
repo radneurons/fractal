@@ -6,6 +6,7 @@ import { analyze } from '../src/analysis/index.ts';
 import { parseLyrics } from '../src/lyrics/parse.ts';
 import { buildLyrics, syllablePeriod } from '../src/lyrics/build.ts';
 import { alignToRecognised, phrasesToWords, type RecWord } from '../src/align/align.ts';
+import { findDeafSpans, mergeRetry } from '../src/align/align.ts';
 import { countSyllables } from '../src/lyrics/syllables.ts';
 import { mulberry32 } from '../src/analysis/dsp.ts';
 
@@ -68,5 +69,17 @@ const stats = (ly: ReturnType<typeof fresh>) => {
   const first = ly.words.findIndex((_, i) => truth[i].start >= 40);
   const off = Math.abs(ly.words[first].start - truth[first].start);
   check('line missed inside a break starts at the section (< 1.5 s off)', off < 1.5, `${ly.words[first].start.toFixed(2)} vs ${truth[first].start.toFixed(2)}`);
+}
+{
+  // a recogniser that went deaf for 60 s of singing (a "[MUSIC]" hallucination) is found and re-merged
+  const fps = 60, dur = 120;
+  const vocal = new Float32Array(dur * fps).fill(0.9);
+  const words = [{ text: 'hello', start: 5, end: 5.4 }, { text: '[MUSIC]', start: 10, end: 70 }, { text: 'again', start: 80, end: 80.5 }, { text: 'end', start: 110, end: 110.4 }];
+  const spans = findDeafSpans(words, vocal, fps, dur);
+  check('deaf span found where vocals are active and no word was heard', spans.length === 2 && Math.abs(spans[0][0] - 4.4) < 0.01 && Math.abs(spans[0][1] - 81) < 0.01, JSON.stringify(spans));
+  const quiet = new Float32Array(dur * fps).fill(0.1);
+  check('no deaf span in an instrumental stretch', findDeafSpans(words, quiet, fps, dur).length === 0);
+  const merged = mergeRetry(words, [{ text: '♪', start: 20, end: 21 }, { text: 'we', start: 30, end: 30.3 }, { text: 'rise', start: 30.4, end: 30.9 }], spans[0]);
+  check('retry merges in order and drops noise', merged.map((w) => w.text).join(' ') === 'we rise end', merged.map((w) => w.text).join(' '));
 }
 done();

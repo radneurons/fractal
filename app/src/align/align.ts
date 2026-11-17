@@ -35,6 +35,8 @@ export interface AlignResult { matchRate: number; exact: number; fuzzy: number; 
 
 const SKIP_LYRIC = -0.6, SKIP_REC = -0.4, SKIP_BACKING = -0.15;
 const SYL = 0.28;
+/** the fastest plausible sung rate between two anchors (s per syllable) */
+const MIN_SYL = 0.1;
 
 /** Overwrites word times/confidence in `ly` from the recognised words. */
 export function alignToRecognised(ly: Lyrics, recRaw: RecWord[], a: Analysis | null, opts: { approx?: boolean } = {}): AlignResult {
@@ -44,7 +46,9 @@ export function alignToRecognised(ly: Lyrics, recRaw: RecWord[], a: Analysis | n
   // sung starts late, not early. Keep its END and pull the start in (then onto a vocal onset if one is near).
   for (const r of rec) {
     const plausible = 0.35 + 0.45 * Math.max(1, Math.round(r.text.length / 3));
-    if (r.end - r.start > Math.max(1.5, plausible * 2)) {
+    // …unless the voice is already sounding at the recognised start: then it is a held note, not leading silence
+    const heldNote = !!a && [0.05, 0.15, 0.3].every((dt) => (a.vocal[Math.round((r.start + dt) * a.fps)] ?? 0) > 0.5);
+    if (r.end - r.start > Math.max(1.5, plausible * 2) && !heldNote) {
       let st = r.end - plausible;
       if (a) {
         const on = a.vocalOnsets.length ? a.vocalOnsets : a.onsets;
@@ -78,6 +82,32 @@ export function alignToRecognised(ly: Lyrics, recRaw: RecWord[], a: Analysis | n
     const t = T[i * (m + 1) + j];
     if (t === 1) { if (matchScore(W[i - 1].text, rec[j - 1].text) > 0) anchor[i - 1] = j - 1; i--; j--; }
     else if (t === 2) i--; else j--;
+  }
+  // ---- anchor consistency: keep the best chain of anchors that leaves a singable time for the words between ----
+  // A sparse transcript lets the DP scatter single common words ("we", "the") across many lines; pinned as anchors
+  // they crush whole verses into a fraction of a second. Weighted longest chain over the candidates: two kept
+  // anchors must leave ≥ MIN_SYL s per syllable between them; runs of consecutive matches weigh more than strays.
+  {
+    const cand: number[] = [];
+    for (let i = 0; i < n; i++) if (anchor[i] >= 0) cand.push(i);
+    const sylBefore = new Float64Array(n + 1);
+    for (let i = 0; i < n; i++) sylBefore[i + 1] = sylBefore[i] + (W[i].backing ? 0 : Math.max(1, W[i].syllables));
+    const run = (i: number) => (i > 0 && anchor[i - 1] === anchor[i] - 1) || (i < n - 1 && anchor[i + 1] === anchor[i] + 1);
+    const weight = (i: number) => { const ex = W[i].text === rec[anchor[i]].text; return (ex ? 1 : 0.6) * (run(i) ? 1 : W[i].text.length >= 5 ? 0.5 : 0.2); };
+    const K = cand.length, best = new Float64Array(K), from = new Int32Array(K).fill(-1);
+    for (let q = 0; q < K; q++) {
+      const iq = cand[q], tq = rec[anchor[iq]].start;
+      best[q] = weight(iq);
+      for (let p = q - 1; p >= 0; p--) {
+        const ip = cand[p], tp = rec[anchor[ip]].start;
+        if (tq - tp < MIN_SYL * (sylBefore[iq] - sylBefore[ip]) || tq <= tp + 0.02) continue;
+        if (best[p] + weight(iq) > best[q]) { best[q] = best[p] + weight(iq); from[q] = p; }
+      }
+    }
+    let bq = -1; for (let q = 0; q < K; q++) if (bq < 0 || best[q] > best[bq]) bq = q;
+    const keep = new Uint8Array(n);
+    for (let q = bq; q >= 0; q = from[q]) keep[cand[q]] = 1;
+    for (const i of cand) if (!keep[i]) anchor[i] = -1;
   }
   // ---- anchors (strictly increasing in time) ----
   let exact = 0, fuzzy = 0, last = -Infinity;
@@ -143,9 +173,19 @@ export function alignToRecognised(ly: Lyrics, recRaw: RecWord[], a: Analysis | n
         if (byLine.length > 1 && end - t > tn * 1.5) {
           // several whole lines were missed: spread them through the gap (following vocal activity when it
           // is informative), each sung at a natural rate
-          const warp = vocalWarp(a, t, end);
+          let warp = vocalWarp(a, t, end);
           const wts = byLine.map((g) => g.reduce((s, w) => s + (w.backing ? 0 : w.syllables), 0) + 2);
           const totW = wts.reduce((s, c) => s + c, 0);
+          // a warp that crushes any line below a singable rate (vocal activity concentrated in one spot, e.g. a
+          // long stretch the recogniser missed) is worse than an even spread: fall back to linear
+          if (warp) {
+            let acc0 = 0;
+            for (let k = 0; k < byLine.length; k++) {
+              const u0 = acc0 / totW; acc0 += wts[k];
+              const syl = Math.max(1, wts[k] - 2);
+              if ((warp(acc0 / totW) - warp(u0)) / syl < 0.12) { warp = null; break; }
+            }
+          }
           let acc = 0;
           byLine.forEach((g, k) => {
             const u0 = acc / totW; acc += wts[k];
@@ -199,4 +239,32 @@ export function phrasesToWords(phrases: { text: string; start: number; end: numb
     }
   }
   return out;
+}
+
+const isNoise = (t: string) => !normaliseWord(t) || /^\[.*\]$|^[♪♫\s]+$/.test(t.trim());
+
+/**
+ * Stretches the recogniser was deaf to: ≥ minGap (12) s without a real word while vocal activity says someone is
+ * singing (> 40 % of frames). Whisper sometimes drops a whole 30 s window to a "[MUSIC]" hallucination; these spans
+ * are re-transcribed on their own (autoSync) and merged back with mergeRetry.
+ */
+export function findDeafSpans(words: RecWord[], vocal: ArrayLike<number>, fps: number, duration: number, minGap = 12): [number, number][] {
+  const real = words.filter((w) => !isNoise(w.text)).sort((x, y) => x.start - y.start);
+  const edges = [0, ...real.flatMap((w) => [w.start, w.end]), duration];
+  const out: [number, number][] = [];
+  for (let k = 0; k + 1 < edges.length; k += 2) {
+    const s = edges[k], e = edges[k + 1];
+    if (e - s < minGap) continue;
+    let on = 0, n = 0;
+    for (let i = Math.floor(s * fps); i < Math.min(vocal.length, Math.ceil(e * fps)); i++) { n++; if (vocal[i] > 0.5) on++; }
+    if (n && on / n > 0.4) out.push([Math.max(0, s - 1), Math.min(duration, e + 1)]);
+  }
+  return out;
+}
+
+/** Replace the recognised words inside `span` by a retry's words (already on the song clock), noise dropped. */
+export function mergeRetry(words: RecWord[], retry: RecWord[], span: [number, number]): RecWord[] {
+  const keep = words.filter((w) => w.start < span[0] || w.start >= span[1]);
+  const add = retry.filter((w) => !isNoise(w.text) && w.start >= span[0] && w.start < span[1]);
+  return [...keep, ...add].sort((x, y) => x.start - y.start);
 }

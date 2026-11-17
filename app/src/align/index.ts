@@ -1,6 +1,6 @@
 // Auto-sync front end: resample → Whisper worker → alignment.
 import type { Analysis, Lyrics } from '../types.ts';
-import { alignToRecognised, phrasesToWords, type AlignResult, type RecWord } from './align.ts';
+import { alignToRecognised, phrasesToWords, findDeafSpans, mergeRetry, type AlignResult, type RecWord } from './align.ts';
 import { countSyllables } from '../lyrics/syllables.ts';
 import { syllablePeriod } from '../lyrics/build.ts';
 
@@ -46,7 +46,18 @@ export function transcribe(pcm: Float32Array, model: string, language: string | 
 
 export async function autoSync(audio: AudioBuffer, ly: Lyrics, a: Analysis, model: string, language: string | undefined, onStatus: (msg: string, p: number) => void, signal?: AbortSignal): Promise<AlignResult & { mode: string }> {
   const pcm = await prepareForAsr(audio);
+  const pcmKeep = pcm.slice(); // transcribe() transfers its buffer to the worker
   const rec = await transcribe(pcm, model, language, onStatus, signal);
+  // a second pass over long sung stretches the recogniser returned nothing for (each on its own, ≤ 120 s)
+  if (rec.mode === 'word') {
+    const spans = findDeafSpans(rec.words, a.vocal, a.fps, a.duration).slice(0, 6);
+    for (const [k, sp] of spans.entries()) {
+      const s0 = sp[0], s1 = Math.min(sp[1], sp[0] + 120);
+      onStatus(`Listening again to ${Math.round(s0)}–${Math.round(s1)} s (${k + 1}/${spans.length})`, 0.9);
+      const part = await transcribe(pcmKeep.slice(Math.floor(s0 * 16000), Math.floor(s1 * 16000)), model, language, () => {}, signal);
+      rec.words = mergeRetry(rec.words, part.words.map((w) => ({ ...w, start: w.start + s0, end: w.end + s0 })), [s0, s1]);
+    }
+  }
   const words = rec.mode === 'word' ? rec.words : phrasesToWords(rec.words, countSyllables, syllablePeriod(a));
   const res = alignToRecognised(ly, words, a, { approx: rec.mode !== 'word' });
   return { ...res, mode: rec.mode };
