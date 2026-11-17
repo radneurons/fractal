@@ -3,7 +3,8 @@
 /** What the online analyser knows right now (all times on the live audio clock, seconds). */
 export interface OnlineState {
   t: number;
-  /** current frame features, 0..1 */
+  /** current frame features, 0..1; `bands` = sub, bass, lowMid, mid, highMid, high, air (the offline bands) */
+  bands: number[];
   low: number; mid: number; high: number;
   loudness: number; centroid: number;
   vocal: number;

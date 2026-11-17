@@ -394,6 +394,33 @@ export class Stage {
     this.g.drawImage(this.host.canvas as HTMLCanvasElement, 0, 0);
   }
 
+  clearLive(): void { this.g.setTransform(1, 0, 0, 1, 0, 0); this.g.fillStyle = '#000'; this.g.fillRect(0, 0, this.w, this.h); }
+  /** Live mode (§14): the output size for the current settings, and resizing the compositor to it. */
+  liveSize(): { w: number; h: number } {
+    const { w, h } = this.size();
+    if (this.w !== w || this.h !== h || this.canvas.width !== w || this.canvas.height !== h) { this.w = w; this.h = h; this.canvas.width = w; this.canvas.height = h; this.comp.resize(w, h); }
+    return { w, h };
+  }
+  /**
+   * Live mode: present one effect frame with post and the online flash guard (`att` < 1 squashes contrast toward
+   * mid-grey, as the offline guard does). Returns the 64×36 bottom-up RGBA grid of what was shown, for the guard.
+   */
+  presentLive(f: Frame, frameNo: number, att: number): Uint8Array {
+    const W = this.w, H = this.h, s = this.state.settings;
+    if (this.host.lost) { this.g.fillStyle = '#000'; this.g.fillRect(0, 0, W, H); return new Uint8Array(64 * 36 * 4); }
+    let tex = this.comp.tex(f, 'live');
+    const post = { ...this.state.post };
+    const guardMix = s.flashGuard && att < 1 ? 0.04 + 0.96 * att ** 0.7 : 1;
+    if (!postIsNeutral(post) || guardMix < 0.999) tex = this.post.apply(tex, W, H, post, frameNo, { mix: guardMix, mean: [0.35, 0.35, 0.35] }, att);
+    const small = this.comp.readSmall(tex, 64, 36);
+    this.comp.present(tex, !(s.transparentBackground && f.opaque === false));
+    this.g.setTransform(1, 0, 0, 1, 0, 0);
+    this.g.globalCompositeOperation = 'copy';
+    this.g.drawImage(this.host.canvas as HTMLCanvasElement, 0, 0, W, H, 0, 0, W, H);
+    this.g.globalCompositeOperation = 'source-over';
+    return small;
+  }
+
   /** Render t and return the 64×36 guard grid (bottom-up RGBA) of the composited frame. */
   renderSmall(t: number): Uint8Array {
     this.renderAt(t, { noTitle: true });

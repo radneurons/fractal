@@ -50,6 +50,7 @@ export interface ShellHooks {
   lyricsDialog(): void;
   projectTab(host: HTMLElement): void;
   autoDirect(): void;
+  liveMode(): void;
   flashBadge(host: HTMLElement): void;
   hud(host: HTMLElement): void;
 }
@@ -392,7 +393,7 @@ export function buildShell(root: HTMLElement, app: App, canvas: HTMLCanvasElemen
     for (const s of app.song?.analysis.sections ?? []) { const n = (count.get(s.label) ?? 0) + 1; count.set(s.label, n); c.push({ label: `Go to ${s.label} ${n} (${fmtTime(s.start, false)})`, run: () => app.player.seek(s.start) }); }
     for (const t of tabs) c.push({ label: `Open tab: ${t}`, run: () => setTab(t) });
     c.push({ label: 'Play / pause', run: () => app.player.toggle() }, { label: 'Export video…', run: () => hooks.exportDialog() }, { label: 'Edit lyrics…', run: () => hooks.lyricsDialog() },
-      { label: 'Auto-Director…', run: () => hooks.autoDirect() }, { label: 'Toggle performance HUD', run: () => { hud.hidden = !hud.hidden; } }, { label: 'Toggle large UI (125 %)', run: () => document.documentElement.classList.toggle('large-ui') },
+      { label: 'Auto-Director…', run: () => hooks.autoDirect() }, { label: 'Live mode (presenter)…', run: () => hooks.liveMode() }, { label: 'Toggle performance HUD', run: () => { hud.hidden = !hud.hidden; } }, { label: 'Toggle large UI (125 %)', run: () => document.documentElement.classList.toggle('large-ui') },
       { label: 'Load demo song', run: () => demoBtn.click() }, { label: 'Load demo waltz', run: () => void app.loadDemo('demo-waltz') });
     return c;
   }

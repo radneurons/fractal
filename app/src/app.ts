@@ -33,6 +33,8 @@ export class App {
   lastError = '';
   /** export in progress: the preview loop stays out of the way */
   exporting = false;
+  /** live mode owns the stage (live/runtime.ts drives it) */
+  live = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.stage = new Stage(canvas, this.state);
@@ -40,7 +42,7 @@ export class App {
     this.player.onState = () => { this.stage.playing = this.player.playing; this.emit('transport'); };
     const loop = () => {
       this.raf = requestAnimationFrame(loop);
-      if (this.exporting || !this.song) return;
+      if (this.exporting || this.live || !this.song) return;
       this.stage.media.syncPreview(this.state.layers, this.player.time, this.player.playing);
       this.stage.renderAt(this.player.time);
       this.emit('frame');

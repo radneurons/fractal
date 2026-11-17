@@ -115,6 +115,7 @@ const api = buildShell(root, app, canvas, {
   lyricsDialog: () => lyricsDialog(app, services),
   projectTab: (host) => projectTab(app, host, services),
   autoDirect: () => autoDirectDialog(app, services),
+  liveMode: () => void openLive(),
   flashBadge: (host) => flashBadge(app, host),
   hud: (host) => drawHud(app, host),
 });
@@ -158,6 +159,17 @@ void (async () => {
   } catch { /* no storage */ }
 })();
 
+// ---------- live mode (§14): ?live = presenter, ?live&output = chrome-free output ----------
+let live: import('./ui/live.ts').LiveHandle | null = null;
+async function openLive(output = false): Promise<import('./ui/live.ts').LiveHandle> {
+  const { mountLive } = await import('./ui/live.ts');
+  await app.ready;
+  live?.close();
+  live = mountLive(app, canvas, { output });
+  return live;
+}
+if (params.has('live')) void openLive(params.has('output'));
+
 // ---------- automation hooks ----------
 const LE = installHooks(app);
 Object.assign(LE, {
@@ -169,6 +181,8 @@ Object.assign(LE, {
     return plan;
   },
   openProject: (id: string) => services.openProject(id),
+  openLive: (output = false) => openLive(output),
+  live: () => live,
   exportProject: async () => { const zip = packProject({ doc: doc(), audio: app.audioBlob ? new Uint8Array(await app.audioBlob.arrayBuffer()) : null, media: {}, analysis: app.song?.analysis ?? null, lrc: app.exportLrc() }); return Array.from(zip); },
   importProject: async (bytes: number[]) => { const b = unpackProject(new Uint8Array(bytes)); if (b.audio) await openDoc(b.doc, new Blob([b.audio as BlobPart]), uid('proj')); return b.doc; },
   /** runs the photosensitivity pre-pass and returns the report */

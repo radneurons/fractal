@@ -82,3 +82,25 @@ table.matrix { border-collapse: collapse; font-size: 0.8rem; } .matrix th span {
 .batch progress { width: 8rem; }
 @media (max-width: 900px) { .main { flex-direction: column; overflow: auto; } .panel { width: 100%; border-left: none; border-top: 1px solid var(--line); } .stage-wrap { min-height: 46vw; } .hint { display: none; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---------- live mode (§14) ---------- */
+.live-view { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; background: var(--bg); }
+.live-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.45rem 0.7rem; background: var(--panel); border-bottom: 1px solid var(--line); }
+.live-bar strong { color: #fff; background: #d0021b; border-radius: 4px; padding: 0.05rem 0.45rem; letter-spacing: 0.08em; }
+.live-meter { width: 120px; height: 10px; background: #101014; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.live-meter .fill { height: 100%; width: 0; background: linear-gradient(90deg, #3ecf6e 0 70%, #ffd166 70% 88%, #ff5a1f 88%); }
+.live-main { flex: 1; display: flex; min-height: 0; }
+.live-stage { flex: 1; display: flex; align-items: center; justify-content: center; background: #000; min-width: 0; }
+.live-stage canvas { max-width: 100%; max-height: 100%; }
+.live-side { width: min(360px, 38vw); padding: 0.7rem; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; display: flex; flex-direction: column; gap: 0.5rem; }
+.live-lamp { width: 18px; height: 18px; border-radius: 50%; background: #2a2a31; transition: background 60ms; }
+.live-lamp.on { background: var(--accent2); } .live-lamp.down { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.live-bpm { font-variant-numeric: tabular-nums; }
+.live-cur { font-size: 1.35rem; line-height: 1.35; min-height: 2.8em; }
+.live-cur .w { color: var(--dim); } .live-cur .w.on { color: #fff; }
+.live-next { margin: 0; padding-left: 1.2rem; color: var(--dim); }
+.live-side .warn { color: var(--accent2); }
+.live-view.output .live-stage { background: #000; }
+body.live-output { cursor: none; }
+.live-solo { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; }
+@media (max-width: 720px) { .live-main { flex-direction: column; } .live-side { width: auto; border-left: none; border-top: 1px solid var(--line); max-height: 45vh; } }

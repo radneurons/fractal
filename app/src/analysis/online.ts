@@ -14,6 +14,8 @@ const LAG_MIN = Math.floor((FR * 60) / 220), LAG_MAX = Math.ceil((FR * 60) / 40)
 /** onset time = frame start + this many samples (centre-of-mass of the attack inside a Hann window) */
 const LEAD = N * 0.6;
 const PLL_GAIN = 0.15;
+/** the offline band edges (sub, bass, lowMid, mid, highMid, high, air) as bins of the 1024-point frame */
+const BAND_BIN = [20, 60, 250, 500, 2000, 4000, 8000].map((f) => Math.max(1, Math.round(f / (SR / N))));
 
 function prior(bpm: number): number { const o = Math.log2(bpm / 120); return Math.exp(-0.5 * (o / 0.9) ** 2); }
 
@@ -49,6 +51,7 @@ export class OnlineAnalyser {
   private h60 = { low: new Ring(240), mid: new Ring(240), high: new Ring(240), loudness: new Ring(240) };
   private next60 = 0;
   private peak = { low: 1e-6, mid: 1e-6, high: 1e-6, loud: 1e-6 };
+  private e7 = new Float64Array(7); private peak7 = new Float64Array(7); private band7 = new Float32Array(7);
   private cur = { low: 0, mid: 0, high: 0, loud: 0, centroid: 0, vocal: 0, flat: 1 };
   private lastOnset = -Infinity;
   // tempo
@@ -95,15 +98,18 @@ export class OnlineAnalyser {
     for (let i = 0; i < N; i++) { re[i] = this.buf[i] * win[i]; im[i] = 0; }
     this.fft.forward(re, im);
     const binHz = SR / N;
-    const bLow = Math.round(150 / binHz), bMid = Math.round(2000 / binHz), bVoc0 = Math.round(200 / binHz), bVoc1 = Math.round(4000 / binHz);
-    let fl = 0, bfl = 0, eL = 0, eM = 0, eH = 0, cNum = 0, cDen = 0, logS = 0, linS = 0, nF = 0;
+    const bLow = Math.round(150 / binHz), bVoc0 = Math.round(200 / binHz), bVoc1 = Math.round(4000 / binHz);
+    let fl = 0, bfl = 0, cNum = 0, cDen = 0, logS = 0, linS = 0, nF = 0;
+    const e7 = this.e7; e7.fill(0);
+    let band = 0;
     for (let k = 1; k < NB; k++) {
       const p = re[k] * re[k] + im[k] * im[k];
       const m = Math.log(1 + 100 * Math.sqrt(p));
       const d = m - this.prevMag[k];
       if (d > 0) { fl += d; if (k <= bLow) bfl += d; }
       this.prevMag[k] = m;
-      if (k <= bLow) eL += p; else if (k <= bMid) eM += p; else eH += p;
+      while (band < 6 && k >= BAND_BIN[band + 1]) band++;
+      e7[band] += p;
       cNum += k * p; cDen += p;
       if (k >= bVoc0 && k <= bVoc1 && (k & 1) === 0) { logS += Math.log(p + 1e-12); linS += p + 1e-12; nF++; }
     }
@@ -112,7 +118,9 @@ export class OnlineAnalyser {
     this.flux.push(fl); this.bassFlux.push(bfl);
     // features (dB-ish, normalised by slowly decaying peaks)
     const dbs = (e: number) => Math.max(0, 10 * Math.log10(e + 1e-10) + 100);
+    const eL = e7[0] + e7[1], eM = e7[2] + e7[3], eH = e7[4] + e7[5] + e7[6];
     const L = dbs(eL), M = dbs(eM), Hh = dbs(eH), Lo = dbs(eL + eM + eH);
+    for (let b = 0; b < 7; b++) { const v = dbs(e7[b]); this.peak7[b] = Math.max(v, this.peak7[b] * 0.99995); this.band7[b] = clamp((v - (this.peak7[b] - 40)) / 40, 0, 1); }
     const decay = (k: 'low' | 'mid' | 'high' | 'loud', v: number) => { this.peak[k] = Math.max(v, this.peak[k] * 0.99995); return clamp((v - (this.peak[k] - 45)) / 45, 0, 1); };
     this.cur.low = decay('low', L); this.cur.mid = decay('mid', M); this.cur.high = decay('high', Hh); this.cur.loud = decay('loud', Lo);
     this.cur.centroid = cDen > 0 ? clamp((cNum / cDen) * binHz / 5000, 0, 1) : 0;
@@ -270,12 +278,25 @@ export class OnlineAnalyser {
     if (last - before > 5 && last - lo > 7 && t - this.dropAt > bar * 4) { this.dropAt = t; this.pushEvent(this.events.drops, t); }
   }
 
+  private sentUpTo = { onsets: -Infinity, beats: -Infinity, downbeats: -Infinity, drops: -Infinity };
+  /** Events detected since the previous drain (each list is time-ordered). */
+  drain(): { onsets: number[]; beats: number[]; downbeats: number[]; drops: number[] } {
+    const out = { onsets: [] as number[], beats: [] as number[], downbeats: [] as number[], drops: [] as number[] };
+    for (const k of ['onsets', 'beats', 'downbeats', 'drops'] as const) {
+      const arr = this.events[k], last = this.sentUpTo[k];
+      let i = arr.length; while (i > 0 && arr[i - 1] > last) i--;
+      out[k] = arr.slice(i);
+      if (out[k].length) this.sentUpTo[k] = out[k][out[k].length - 1];
+    }
+    return out;
+  }
+
   state(): OnlineState {
     const t = this.time;
     const P = this.period || 0.5;
     const last = this.tNext > 0 ? this.tNext - P : t;
     return {
-      t, low: this.cur.low, mid: this.cur.mid, high: this.cur.high, loudness: this.cur.loud, centroid: this.cur.centroid, vocal: this.cur.vocal,
+      t, bands: Array.from(this.band7), low: this.cur.low, mid: this.cur.mid, high: this.cur.high, loudness: this.cur.loud, centroid: this.cur.centroid, vocal: this.cur.vocal,
       onset: Math.exp(-(t - this.lastOnset) * 9),
       bpm: this.bpm, tempoConfidence: this.conf,
       nextBeat: this.tNext, lastBeat: last, beatPhase: clamp((t - last) / P, 0, 1),
