@@ -2,19 +2,20 @@
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export async function startServer(port = 4173, dist = process.env.LE_DIST ?? 'dist') {
-  if (!existsSync(join(ROOT, dist, 'index.html'))) throw new Error('run `npx vite build` first');
+  if (!existsSync(resolve(ROOT, dist, 'index.html'))) throw new Error('run `npx vite build` first');
   const proc = spawn(process.execPath, [join(ROOT, 'node_modules/vite/bin/vite.js'), 'preview', '--port', String(port), '--strictPort', '--outDir', dist], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+  process.once('exit', () => { try { proc.kill(); } catch { /* gone */ } });
   let out = '';
   proc.stdout.on('data', (d) => { out += d; });
   proc.stderr.on('data', (d) => { out += d; });
   const url = `http://localhost:${port}/`;
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 200; i++) {
     try { const r = await fetch(url); if (r.ok) return { url, stop: () => proc.kill() }; } catch { /* not up yet */ }
     await new Promise((r) => setTimeout(r, 150));
   }

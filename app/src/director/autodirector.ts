@@ -4,7 +4,7 @@ import { allEffects } from '../effects/registry.ts';
 import { hash01, sample } from '../analysis/dsp.ts';
 
 export interface SectionFeatures { energy: number; wordsPerSec: number; tempo: number; valence: number; arousal: number; speech: boolean; vocal: number; repeatOf: number; label: Section['label']; vec: Affinity }
-export interface AutoPlan { segments: PlanSegment[]; features: SectionFeatures[]; layers: Layer[]; seed: number; score: number }
+export interface AutoPlan { segments: PlanSegment[]; features: SectionFeatures[]; /** the sections the plan was solved over (long ones split) */ sections: Section[]; layers: Layer[]; seed: number; score: number }
 
 export function describeSections(a: Analysis, ly: Lyrics): SectionFeatures[] {
   return a.sections.map((s, i) => {
@@ -17,7 +17,12 @@ export function describeSections(a: Analysis, ly: Lyrics): SectionFeatures[] {
     const valence = sample(a.mood.valence, mid), arousal = sample(a.mood.arousal, mid);
     const speech = a.isSpeech || s.label === 'speech';
     const energy = Math.max(0, Math.min(1, s.energy));
-    const repeatOf = a.sections.findIndex((o, k) => k < i && o.cluster === s.cluster);
+    // Repeats reuse their first occurrence's effect — but back-to-back repeats of one cluster (a chorus sung twice,
+    // a song that is mostly hook) alternate between the cluster's main effect and one consistent alternate, so
+    // "never twice in a row" still holds and choruses stay recognisable. Slot = cluster + parity within the run.
+    const slot = (k: number) => { let r = 0; while (k - r - 1 >= 0 && a.sections[k - r - 1].cluster === a.sections[k].cluster) r++; return `${a.sections[k].cluster}:${r % 2}`; };
+    const mine = slot(i);
+    const repeatOf = a.sections.findIndex((_o, k) => k < i && slot(k) === mine);
     const vec: Affinity = {
       energyHigh: energy, energyLow: 1 - energy, speech: speech ? 1 : 0,
       denseLyrics: Math.min(1, wps / 3), sparseLyrics: Math.max(0, 1 - wps / 1.5),
@@ -45,7 +50,34 @@ export function transitionFor(a: Analysis, i: number): TransitionKind {
   return 'wipe';
 }
 
-export function autoDirect(a: Analysis, ly: Lyrics, seed = 1776, opts: { variety?: number; exclude?: string[]; hasTranslation?: boolean } = {}): AutoPlan {
+/**
+ * Sections longer than 45 s are split (SPEC §9.6) into parts of ≤ ~40 s at a lyric line start near the equal
+ * division (else the nearest downbeat). Part k of a cluster gets its own cluster id, so a later repeat of the same
+ * long section reuses the same sequence of effects.
+ */
+export function splitLongSections(a: Analysis, ly: Lyrics, maxLen = 45): Section[] {
+  const out: Section[] = [];
+  for (const s of a.sections) {
+    const dur = s.end - s.start;
+    if (dur <= maxLen) { out.push({ ...s, cluster: s.cluster * 100 }); continue; }
+    const n = Math.ceil(dur / 40);
+    const cuts = [s.start];
+    for (let k = 1; k < n; k++) {
+      const target = s.start + (dur * k) / n;
+      const line = ly.lines.map((l) => l.start).filter((t) => t > cuts[cuts.length - 1] + 8 && t < s.end - 8).sort((x, y) => Math.abs(x - target) - Math.abs(y - target))[0];
+      const db = a.downbeats.filter((t) => t > cuts[cuts.length - 1] + 8 && t < s.end - 8).sort((x, y) => Math.abs(x - target) - Math.abs(y - target))[0];
+      // a line start just after a downbeat is the natural cut; else the downbeat; else the plain division
+      const c = line !== undefined && Math.abs(line - target) < 6 ? (db !== undefined && line - db >= 0 && line - db < 2.5 ? db : line) : db ?? target;
+      cuts.push(c);
+    }
+    cuts.push(s.end);
+    for (let k = 0; k < cuts.length - 1; k++) out.push({ ...s, start: cuts[k], end: cuts[k + 1], cluster: s.cluster * 100 + k });
+  }
+  return out;
+}
+
+export function autoDirect(a0: Analysis, ly: Lyrics, seed = 1776, opts: { variety?: number; exclude?: string[]; hasTranslation?: boolean } = {}): AutoPlan {
+  const a: Analysis = { ...a0, sections: splitLongSections(a0, ly) };
   const variety = opts.variety ?? 5;
   const effects = allEffects().filter((e) => !(opts.exclude ?? []).includes(e.meta.id));
   const feats = describeSections(a, ly);
@@ -67,8 +99,7 @@ export function autoDirect(a: Analysis, ly: Lyrics, seed = 1776, opts: { variety
         // repeated sections reuse their first occurrence's effect (choruses stay recognisable)
         if (rep >= 0 && node.picks[rep] !== e) continue;
         const prev = node.picks[s - 1];
-        const long = a.sections[s].end - a.sections[s].start > 45;
-        if (prev === e && rep < 0 && !long) continue; // never the same effect twice in a row
+        if (prev === e && rep < 0) continue; // never the same effect twice in a row (long sections are already split)
         if (!node.used.has(e) && node.used.size >= variety) continue;
         const used = node.used.has(e) ? node.used : new Set(node.used).add(e);
         next.push({ picks: [...node.picks, e], score: node.score + score[s][e] * (a.sections[s].end - a.sections[s].start), used });
@@ -96,5 +127,5 @@ export function autoDirect(a: Analysis, ly: Lyrics, seed = 1776, opts: { variety
     layers.push({ id: 'auto-swarm', kind: 'effect', effect: 'swarm', instanceId: 'auto:swarm', enabled: true, blend: 'screen', opacity: 0.35, mask: 'none', sectionOnly: 'drop' });
   if (opts.hasTranslation && ids.has('karaoke') && !segments.some((s) => s.effect === 'karaoke'))
     layers.push({ id: 'auto-karaoke', kind: 'effect', effect: 'karaoke', instanceId: 'auto:karaoke', enabled: true, blend: 'normal', opacity: 1, mask: 'none' });
-  return { segments, features: feats, layers, seed, score: best.score };
+  return { segments, features: feats, sections: a.sections, layers, seed, score: best.score };
 }
