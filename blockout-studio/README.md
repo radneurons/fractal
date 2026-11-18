@@ -74,5 +74,5 @@ Every feature in the original brief is implemented and covered by tests (141 uni
 
 What is not certified:
 - **Performance budget.** The app's own per-frame CPU cost is measured and enforced on the production build: about 10 ms editing the 20-character / 10-camera / 200-prop scene (budget 12 ms; 60 fps is 16.7 ms) and about 6 ms per 1080p export frame (budget 8.5 ms; 4× real time is 10.4 ms). Those frames take 83 and 13 draw calls. The wall-clock half needs a real GPU: run `pnpm bench` on your machine. This container has none, so that half has not been run here.
-- **Provider dialects** carry provenance. Kling, Veo, Seedance and Runway limits are sourced from vendor or vendor-published API references and dated; the Prompt tab shows which ones. H3, Luma and Wan limits are labelled as estimates. All dialects are editable JSON.
+- **Provider dialects** carry provenance. Kling, Veo, Seedance and Runway limits are checked against the vendors' primary API references and dated; the Prompt tab shows which ones. H3, Luma and Wan limits are labelled as estimates. All dialects are editable JSON.
 - **Determinism across machines:** tick "bit-exact" next to Export shot to render with the pure-TS rasterizer. A test checks that its pass bytes are identical in Chromium and in Node. The default WebGL export is byte-exact on one GPU/driver, and the manifest records which.

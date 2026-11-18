@@ -17,5 +17,10 @@
 
 **Known gaps**
 - The offline director's grammar is a pattern matcher; it handles the common staging verbs, camera moves, lens/time-of-day/aspect/fx commands and asks when the subject or target is ambiguous, but anything subtler needs a real Claude backend.
-- Dialect limits now record provenance (`verified: { on, sources, notes }`), and the Prompt tab shows "limits sourced <date>" or "limits are estimates". Kling (2500-char prompt/negative, 5/10 s), Veo (4/6/8 s, 16:9 and 9:16, negativePrompt) and Seedance (body params, inline flags, 4–12 s on 2.0) come from vendor docs. Runway (~1000 chars, 2–10 s) comes from Runway's published API reference skill, because docs.dev.runwayml.com and docs.byteplus.com were blocked by this session's network policy. H3, Luma and Wan are estimates.
+- Dialect limits record provenance (`verified: { on, sources, notes }`), and the Prompt tab shows "limits sourced <date>" or "limits are estimates". Primary vendor references checked on 2026-11-18:
+  - **Runway:** `promptText` ≤ 1000 UTF-16 chars; gen4.5 2–10 s at 1280:720 or 720:1280; veo3.1 4/6/8 s; seedance2 4–15 s.
+  - **BytePlus Seedance:** 2.5 series 4–30 s, 2.0 series 4–15 s, 1.0 pro 2–12 s; ratios incl. 21:9 and adaptive; recommended prompt ≤ 1000 English words; inline `--rs --rt --dur --seed --cf --wm`; no negative-prompt field.
+  - **Kling:** prompt and negative_prompt ≤ 2500 chars each.
+  - **Veo:** 4/6/8 s; 16:9 and 9:16; negativePrompt.
+  - **H3, Luma and Wan** remain estimates.
 - `fallbacks: "default"` (server-side refusal fallback) is sent in API mode; on platforms that reject it, remove it in `claude.ts`.
