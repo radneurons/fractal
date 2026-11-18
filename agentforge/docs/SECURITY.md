@@ -16,7 +16,7 @@
 
 ## External network requests
 
-- Google Fonts stylesheet (Inter, Space Grotesk, JetBrains Mono). The app falls back to system fonts if blocked. Self-host the fonts to remove this request.
+- None by default. Fonts (Inter, Space Grotesk, JetBrains Mono) and the Python runtime are bundled with the app.
 - Provider APIs only when you connect one.
 - MCP servers only when you connect one in MCP Lab.
 

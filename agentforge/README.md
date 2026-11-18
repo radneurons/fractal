@@ -27,6 +27,7 @@ Open the printed URL (default http://localhost:5173).
 | `npm run preview` | Serve the production build on port 4173 |
 | `npm test` | Unit, protocol and content-integrity tests (Vitest) — 532 tests |
 | `npm run e2e` | Full learner-journey test in Chromium (Playwright, 24 steps) — run `npm run build` first |
+| `npm run a11y` | Automated accessibility audit (axe-core, WCAG 2.1 A/AA) of 29 routes in dark, light and high-contrast themes — run `npm run build` first |
 | `npm run mcp:demo` | Start the bundled demo MCP server on http://localhost:8787/mcp for MCP Lab and Agent Studio |
 | `npm run typecheck` | TypeScript only |
 

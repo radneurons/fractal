@@ -282,9 +282,9 @@ function ReviewLab() {
   return (
     <div className="grid g2">
       <section className="card stack">
-        <div className="row between"><b>{d.title}</b><select className="select" style={{ width: 'auto' }} value={idx} onChange={(e) => { setIdx(+e.target.value); setMarks({}); setDone(false); }}>{REVIEW_DIFFS.map((x, i) => <option key={x.id} value={i}>{i + 1}. {x.title}</option>)}</select></div>
+        <div className="row between"><b>{d.title}</b><select className="select" aria-label="Choose a diff to review" style={{ width: 'auto' }} value={idx} onChange={(e) => { setIdx(+e.target.value); setMarks({}); setDone(false); }}>{REVIEW_DIFFS.map((x, i) => <option key={x.id} value={i}>{i + 1}. {x.title}</option>)}</select></div>
         <div className="small">Request to the agent: <i>{d.request}</i></div>
-        <pre className="small">{d.diff.split('\n').map((l, i) => <div key={i} style={{ color: l.startsWith('+') && !l.startsWith('+++') ? 'var(--success)' : l.startsWith('-') && !l.startsWith('---') ? 'var(--danger)' : undefined }}>{l}</div>)}</pre>
+        <pre className="small" tabIndex={0} aria-label="Diff">{d.diff.split('\n').map((l, i) => <div key={i} style={{ color: l.startsWith('+') && !l.startsWith('+++') ? 'var(--success)' : l.startsWith('-') && !l.startsWith('---') ? 'var(--danger)' : undefined }}>{l}</div>)}</pre>
       </section>
       <section className="card stack">
         <b>Which of these are real problems with this AI-generated change?</b>
