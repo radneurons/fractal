@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { GizmoHelper, GizmoViewport, Html, Line, OrbitControls, TransformControls } from '@react-three/drei';
+import { GizmoHelper, GizmoViewport, Html, OrbitControls, TransformControls } from '@react-three/drei';
+import { SLine as Line } from './SLine';
 import * as THREE from 'three';
-import { compileFrame, evalCamera, evalCharacter, samplePath, terrainHeight, characterPosition, qRotate, newId, nextIdColor, jointFrames, poseKeyFor, CLIP_DEFS, type Joint, type Project, type Vec3, type Op } from '@blockout/core';
+import { compileFrameShared, evalCamera, evalCharacter, samplePath, terrainHeight, characterPosition, qRotate, newId, nextIdColor, jointFrames, poseKeyFor, CLIP_DEFS, type Joint, type Project, type Vec3, type Op } from '@blockout/core';
 import { GLStage, LightRig } from '@blockout/render';
 import { S, useStudio, activeShot, type Mode, OVERLAYS } from '../store';
 import { Toggle } from '../ui';
@@ -12,12 +13,12 @@ const lift = (p: Project, v: readonly number[], dy = 0.03): [number, number, num
 
 function Stage() {
   const stage = useMemo(() => new GLStage(), []), lights = useMemo(() => new LightRig(1024), []);
-  const { scene, controls } = useThree(); const last = useRef<{ p: Project | null; t: number }>({ p: null, t: -1 });
+  const { scene, controls, gl } = useThree(); Object.assign(window as unknown as object, { __sceneGL: gl, __scene: scene }); const last = useRef<{ p: Project | null; t: number }>({ p: null, t: -1 });
   useFrame((_s, dt) => {
     const st = S(); st.tick(Math.min(dt, 0.1));
     const s = S(), p = s.project;
     stage.setLook('view', s.selection && s.selection.kind !== 'shot' ? s.selection.id : null);
-    if (last.current.p !== p || last.current.t !== s.t) { stage.sync(compileFrame(p, s.t)); last.current = { p, t: s.t }; }
+    if (last.current.p !== p || last.current.t !== s.t) { stage.sync(compileFrameShared(p, s.t)); last.current = { p, t: s.t }; }
     const tg = (controls as unknown as { target?: THREE.Vector3 })?.target;
     scene.background = lights.update(p, tg ? [tg.x, 0, tg.z] : [0, 0, 0], 40);
   });
@@ -26,7 +27,7 @@ function Stage() {
     if (s.mode === 'path') return addPathPoint(e);
     if (s.mode === 'scatter') { e.stopPropagation(); s.dispatch({ type: 'addScatter', scatter: { id: newId('sc'), kind: s.scatterKind, seed: Math.floor(e.point.x * 31 + e.point.z * 17) | 0, center: [e.point.x, 0, e.point.z], radius: s.sculpt.radius, count: s.scatterKind === 'grass' ? 120 : 12 } }); return; }
     if (s.mode === 'sculpt') { e.stopPropagation(); sculptAt(e.point); return; }
-    const id = GLStage.entityOf(e.object); if (!id || id === 'ground') return;
+    const id = GLStage.entityAt(e.object, e.instanceId); if (!id || id === 'ground') return;
     e.stopPropagation(); const p = s.project;
     const kind = p.characters[id] ? 'character' : p.props[id] ? 'prop' : p.fx[id] ? 'fx' : null; if (kind) s.select({ kind, id });
   };
@@ -90,8 +91,8 @@ function PoseRig() {
 }
 function Trails() {
   const project = useStudio((s) => s.project), t = useStudio((s) => s.t), on = useStudio((s) => s.overlays.trails); if (!on) return null;
-  const span = 1.5, steps = 18, ts = Array.from({ length: steps + 1 }, (_, i) => Math.max(0, t - span + (span * i) / steps));
-  return <>{Object.values(project.characters).map((c) => { const pts = ts.map((tt) => { const p = evalCharacter(project, c, tt).pos; return [p[0], p[1] + c.height * 0.5, p[2]] as [number, number, number]; }); const moved = Math.hypot(pts[0][0] - pts[steps][0], pts[0][2] - pts[steps][2]) > 0.05; return moved ? <Line key={c.id} points={pts} color={c.idColor} lineWidth={3} transparent opacity={0.55} /> : null; })}
+  const span = 1.5, steps = 12, ts = Array.from({ length: steps + 1 }, (_, i) => Math.max(0, t - span + (span * i) / steps));
+  return <>{Object.values(project.characters).map((c) => { const pts = ts.map((tt) => { const p = characterPosition(project, c, tt); return [p[0], p[1] + c.height * 0.5, p[2]] as [number, number, number]; }); const moved = Math.hypot(pts[0][0] - pts[steps][0], pts[0][2] - pts[steps][2]) > 0.05; return moved ? <Line key={c.id} points={pts} color={c.idColor} lineWidth={3} transparent opacity={0.55} /> : null; })}
     {Object.values(project.cameras).map((c) => { const pts = ts.map((tt) => evalCamera(project, c, tt).pos as [number, number, number]); return Math.hypot(pts[0][0] - pts[steps][0], pts[0][1] - pts[steps][1], pts[0][2] - pts[steps][2]) > 0.05 ? <Line key={c.id} points={pts} color="#5ea8ff" lineWidth={2} transparent opacity={0.45} /> : null; })}</>;
 }
 /** Focus-plane gizmo for the active/selected camera: the plane in focus, plus near/far limits of acceptable sharpness. */
@@ -99,10 +100,17 @@ function FocusPlane() {
   const project = useStudio((s) => s.project), t = useStudio((s) => s.t), sel = useStudio((s) => s.selection), shot = useStudio(activeShot), on = useStudio((s) => s.overlays.frusta);
   const id = sel?.kind === 'camera' ? sel.id : shot?.cameraId, cam = id ? project.cameras[id] : undefined; if (!on || !cam) return null;
   const cs = evalCamera(project, cam, t), coc = 0.03 * (cam.sensorWidth / 36), H = (cs.focal * cs.focal) / (cs.fstop * coc) / 1000, d = cs.focus, near = (H * d) / (H + d), far = d < H ? (H * d) / (H - d) : Infinity;
-  const plane = (dist: number, color: string, opacity: number, label?: string) => { const th = Math.tan(cs.fovY / 2), h = 2 * th * dist, w = h * cs.aspect, c = qRotate(cs.quat, [0, 0, -dist]); return <group key={label ?? color + dist} position={[cs.pos[0] + c[0], cs.pos[1] + c[1], cs.pos[2] + c[2]]} quaternion={cs.quat as unknown as THREE.Quaternion}>
+  const plane = (key: string, dist: number, color: string, opacity: number, label?: string) => { const th = Math.tan(cs.fovY / 2), h = 2 * th * dist, w = h * cs.aspect, c = qRotate(cs.quat, [0, 0, -dist]); return <group key={key} position={[cs.pos[0] + c[0], cs.pos[1] + c[1], cs.pos[2] + c[2]]} quaternion={cs.quat as unknown as THREE.Quaternion}>
     <mesh><planeGeometry args={[w, h]} /><meshBasicMaterial color={color} transparent opacity={opacity} side={THREE.DoubleSide} depthWrite={false} /></mesh>
     {label && <Html position={[0, -h / 2, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}><div className="whitespace-nowrap rounded bg-black/60 px-1 text-[10px] text-white">{label}</div></Html>}</group>; };
-  return <>{plane(d, '#f0b43c', 0.16, `focus ${d.toFixed(1)} m · f/${cs.fstop.toFixed(1)} · sharp ${near.toFixed(1)}–${far === Infinity ? '∞' : far.toFixed(1)} m`)}{near > 0.2 && plane(near, '#f0b43c', 0.05)}{far < 300 && plane(far, '#f0b43c', 0.05)}</>;
+  return <>{plane('focus', d, '#f0b43c', 0.16, `focus ${d.toFixed(1)} m · f/${cs.fstop.toFixed(1)} · sharp ${near.toFixed(1)}–${far === Infinity ? '∞' : far.toFixed(1)} m`)}{near > 0.2 && plane('near', near, '#f0b43c', 0.05)}{far < 300 && plane('far', far, '#f0b43c', 0.05)}</>;
+}
+/** A camera's spline path (time-independent): cached per camera object + project. */
+const pathCache = new WeakMap<object, { p: Project; pts: [number, number, number][] | null }>();
+function cameraPath(project: Project, cam: Project['cameras'][string]) {
+  const hit = pathCache.get(cam); if (hit && hit.p.characters === project.characters && hit.p.terrain === project.terrain) return hit.pts;
+  const pts = !cam.attach && cam.keys.length > 1 ? Array.from({ length: 33 }, (_, i) => evalCamera(project, { ...cam, shake: { ...cam.shake, profile: 'none' } }, cam.keys[0].t + ((cam.keys[cam.keys.length - 1].t - cam.keys[0].t) * i) / 32).pos as [number, number, number]) : null;
+  pathCache.set(cam, { p: project, pts }); return pts;
 }
 function CameraGizmos({ project, ghost }: { project: Project; ghost?: boolean }) {
   const t = useStudio((s) => s.t), sel = useStudio((s) => s.selection), show = useStudio((s) => s.overlays.frusta), shot = useStudio(activeShot);
@@ -111,7 +119,7 @@ function CameraGizmos({ project, ghost }: { project: Project; ghost?: boolean })
     const cs = evalCamera(project, cam, t), th = Math.tan(cs.fovY / 2), d = 1.4, active = shot?.cameraId === cam.id, selected = sel?.kind === 'camera' && sel.id === cam.id;
     const corner = (x: number, y: number): [number, number, number] => { const v = qRotate(cs.quat, [x * th * cs.aspect * d, y * th * d, -d]); return [cs.pos[0] + v[0], cs.pos[1] + v[1], cs.pos[2] + v[2]]; };
     const c = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)], P = cs.pos as [number, number, number], col = ghost ? '#d97757' : selected ? '#ffffff' : active ? '#5ea8ff' : '#8b92a0';
-    const path = !cam.attach && cam.keys.length > 1 ? Array.from({ length: 33 }, (_, i) => evalCamera(project, { ...cam, shake: { ...cam.shake, profile: 'none' } }, cam.keys[0].t + ((cam.keys[cam.keys.length - 1].t - cam.keys[0].t) * i) / 32).pos as [number, number, number]) : null;
+    const path = cameraPath(project, cam);
     return <group key={cam.id}>
       <Line points={[P, c[0], c[1], P, c[2], c[3], P, c[0], c[3], c[2], c[1]]} color={col} lineWidth={active || selected || ghost ? 2 : 1} dashed={ghost} dashSize={0.2} gapSize={0.15} />
       {path && <Line points={path} color={col} lineWidth={1} dashed dashSize={0.25} gapSize={0.18} />}

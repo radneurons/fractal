@@ -28,6 +28,12 @@ Connect Claude Code or Claude Desktop over MCP:
 pnpm mcp:install   # prints the exact config snippet
 ```
 
+Measure the performance budget on your own GPU (opens a browser window):
+
+```bash
+pnpm bench
+```
+
 Keep webcam mocap fully offline (downloads the pose model once):
 
 ```bash
@@ -57,7 +63,7 @@ pnpm test          # unit, golden-image, contract (recorded Claude fixtures), MC
 ```
 
 ```bash
-pnpm test:e2e      # Playwright: brief flow, docking, pop-outs, curves, GLB import, offline mocap, collaboration, phone camera, audio + cut mix, HTTP-provider takes, export determinism, performance
+pnpm test:e2e      # Playwright (includes the performance budget): brief flow, docking, pop-outs, curves, GLB import, offline mocap, collaboration, phone camera, audio + cut mix, HTTP-provider takes, export determinism, performance
 ```
 
 Per-phase notes, including known gaps and the honest performance numbers: `docs/phase-1.md` … `docs/phase-6.md`.
@@ -67,6 +73,6 @@ Per-phase notes, including known gaps and the honest performance numbers: `docs/
 Every feature in the original brief is implemented and covered by tests (141 unit, contract and golden tests; 15 Playwright E2E tests, including the brief's own create → path → camera → export → generate → view flow).
 
 What is not certified:
-- **Performance budget.** The 60 fps / 4×-real-time targets are asserted only on a hardware GPU. CI here has software GL, where the CPU side measures about 1 ms per frame for the 20-character, 10-camera, 200-prop scene.
+- **Performance budget.** The app's own per-frame CPU cost is measured and enforced on the production build: about 10 ms editing the 20-character / 10-camera / 200-prop scene (budget 12 ms; 60 fps is 16.7 ms) and about 6 ms per 1080p export frame (budget 8.5 ms; 4× real time is 10.4 ms). Those frames take 83 and 13 draw calls. The wall-clock half needs a real GPU: run `pnpm bench` on your machine. This container has none, so that half has not been run here.
 - **Provider dialects** (Seedance, H3, Kling, …) are editable JSON with sensible limits and vocabularies, not vendor-certified specs; adjust them per model.
 - **Determinism across machines** is byte-exact with the software renderer. WebGL output is byte-exact on one GPU/driver, and the manifest records which.

@@ -16,6 +16,23 @@
 
 **Known gaps / honest numbers**
 - Determinism is byte-exact for the software renderer everywhere, and for WebGL on the same GPU + driver + browser. Different GPUs rasterize differently, so the manifest records the renderer string; use `soft: true` when cross-machine identity matters.
-- Speed budget (≥ 4× real time at 1080p clay; 60 fps editing) is asserted only when a hardware GPU is present. This repo's CI container has software GL (SwiftShader) and measured 0.06× real time and ~6 fps editing; the CPU side (scene compile) measured ~1 ms/frame for the 20/10/200 scene. The budget is therefore **unverified on real hardware**.
+- **Speed budget.** It is enforced by `e2e/perf-budget.spec.ts` against the production build; see "Performance pass" below.
 - No ProRes; the PNG sequence is the lossless option.
 - The software renderer has no cast shadows; WebGL clay does.
+
+**Performance pass (after phase 6)**
+
+Profiling the 20-character / 10-camera / 200-prop scene first measured ~365 ms of main-thread time per frame. The fixes:
+1. **Shader recompiles every frame.** drei's `<Line>` disposes its material whenever its `points` array changes, so every animated overlay recompiled its shader each frame. It is replaced by `SLine`, which keeps one material and rewrites positions in place.
+2. **Context churn.** The Blockout view created a new WebGL context whenever the active camera changed. It now keeps one renderer for its lifetime and draws straight into the visible canvas (no GPU→CPU copy per frame).
+3. **Draw calls.** About 820 meshes became about a dozen: GLStage instances character parts and set pieces per mesh kind. Per-instance colour carries the view tint, the exact ID colour, or white for clay; per-instance previous matrices keep optical flow exact.
+4. **Repeated work.** Frames are compiled once and shared by every viewer; static props compile once; camera paths are cached; trails use positions only; the encoder waits on `dequeue` events instead of polling.
+
+Measured here (2.3 GHz server vCPU, production build; GPU process pinned to other cores):
+
+| | main-thread CPU per frame | budget | draw calls | triangles |
+|---|---|---|---|---|
+| Editing 20 / 10 / 200, playing | ~9.5–10.3 ms | 12 ms (60 fps = 16.7 ms) | 83 | ~351k incl. shadow pass |
+| 1080p clay export (H.264 + mux) | ~6.1–6.3 ms (≥ 6.7× real time if not GPU-bound) | 8.5 ms (4× = 10.4 ms) | 13 | ~101k |
+
+`e2e/perf-budget.spec.ts` asserts these CPU budgets everywhere. On a hardware GPU it also asserts the wall-clock targets (≥ 55 fps editing, ≥ 4× real-time export). Run `pnpm bench` on your machine for the wall-clock numbers: it opens a browser window on your GPU. This container has no GPU (software raster runs at ~2 fps), so the wall-clock half has not been run here.

@@ -1,7 +1,7 @@
 /** WebGL backend (three.js). `GLStage` mirrors the compiled drawable list into meshes and is shared by the
  *  editor viewport and the offscreen exporter; `GLPassRenderer` renders control passes frame-stepped. */
 import * as THREE from 'three';
-import { compileFrame, evalCamera, sunState, lightDir, terrainMesh, GROUND_ID, type CamState, type FrameScene, type Project, type Shot, type Terrain, type MeshKind } from '@blockout/core';
+import { compileFrame, compileFrameShared, evalCamera, sunState, lightDir, terrainMesh, GROUND_ID, type CamState, type FrameScene, type Project, type Shot, type Terrain, type MeshKind } from '@blockout/core';
 import { DEPTH_FAR, DEPTH_NEAR, flowMaxDisp, shotTime, type PassName, type PassRenderer } from './passes';
 import { drawPose, poseKeypoints } from './soft';
 
@@ -14,16 +14,32 @@ const geo = (k: MeshKind) => (geoCache[k] ??= GEO[k]());
 const hexVec = (hex: string) => { const n = parseInt(hex.slice(1), 16); return new THREE.Vector3(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255); };
 
 const VERT = /* glsl */ `
-uniform mat4 prevModel; uniform mat4 prevViewProj; varying vec3 vN; varying float vZ; varying vec4 vCur; varying vec4 vPrev;
-void main(){ vec4 lp = vec4(position,1.0); vec3 n = normal;
+uniform mat4 prevModel; uniform mat4 prevViewProj; varying vec3 vN; varying float vZ; varying vec4 vCur; varying vec4 vPrev; varying vec3 vColor;
+#ifdef BATCH_PREV
+attribute vec4 prevI0; attribute vec4 prevI1; attribute vec4 prevI2; attribute vec4 prevI3;
+#endif
+void main(){ vec4 lp = vec4(position,1.0); vec3 n = normal; vColor = vec3(1.0);
 #ifdef USE_INSTANCING
   lp = instanceMatrix * lp; n = mat3(instanceMatrix) * n;
 #endif
-  vec4 mv = modelViewMatrix * lp; vN = normalize(normalMatrix * n); vZ = -mv.z; gl_Position = projectionMatrix * mv; vCur = gl_Position; vPrev = prevViewProj * prevModel * lp; }`;
+#ifdef USE_INSTANCING_COLOR
+  vColor = instanceColor;
+#endif
+  vec4 mv = modelViewMatrix * lp; vN = normalize(normalMatrix * n); vZ = -mv.z; gl_Position = projectionMatrix * mv; vCur = gl_Position;
+#ifdef BATCH_PREV
+  vPrev = prevViewProj * mat4(prevI0, prevI1, prevI2, prevI3) * vec4(position, 1.0);
+#else
+  vPrev = prevViewProj * prevModel * lp;
+#endif
+}`;
 const FRAG = /* glsl */ `
-uniform int mode; uniform vec3 color; uniform float near; uniform float far; uniform vec2 res; uniform float maxDisp; varying vec3 vN; varying float vZ; varying vec4 vCur; varying vec4 vPrev;
+uniform int mode; uniform vec3 color; uniform float near; uniform float far; uniform vec2 res; uniform float maxDisp; varying vec3 vN; varying float vZ; varying vec4 vCur; varying vec4 vPrev; varying vec3 vColor;
 void main(){
+#ifdef BATCH_PREV
+  if (mode == 0) gl_FragColor = vec4(vColor, 1.0);
+#else
   if (mode == 0) gl_FragColor = vec4(color, 1.0);
+#endif
   else if (mode == 1) { float v = clamp(1.0 - log(vZ / near) / log(far / near), 0.0, 1.0); gl_FragColor = vec4(vec3(v), 1.0); }
   else if (mode == 2) { float mm = min(16777215.0, floor(vZ * 1000.0 + 0.5)); gl_FragColor = vec4(floor(mm / 65536.0) / 255.0, floor(mod(mm, 65536.0) / 256.0) / 255.0, mod(mm, 256.0) / 255.0, 1.0); }
   else if (mode == 3) { vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n; gl_FragColor = vec4(n * 0.5 + 0.5, 1.0); }
@@ -47,12 +63,15 @@ export class GLStage {
   private clayGround = new THREE.MeshStandardMaterial({ color: 0x9d9d9d, roughness: 1, metalness: 0 });
   private tint = new Map<string, THREE.Material>(); private data = new Map<string, THREE.ShaderMaterial>();
   private black = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  /** Batches: one InstancedMesh per mesh kind for all character parts and set pieces (draw-call count stays ~constant). */
+  private batches = new Map<MeshKind, { mesh: THREE.InstancedMesh; cap: number; n: number; ids: Float32Array; tints: Float32Array; sel: Float32Array; white: Float32Array; entities: string[]; prev: THREE.InstancedInterleavedBuffer }>();
+  private batchWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
   look: StageLook = 'view'; uniforms = { near: DEPTH_NEAR, far: DEPTH_FAR, res: new THREE.Vector2(1, 1), maxDisp: 8, prevViewProj: new THREE.Matrix4() };
   selected: string | null = null;
 
-  private dataMat(mode: number, idColor: string): THREE.ShaderMaterial {
-    const key = mode === 0 ? `0:${idColor}` : `${mode}`; let m = this.data.get(key);
-    if (!m) { m = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide, uniforms: { mode: { value: mode }, color: { value: hexVec(idColor) }, near: { value: 0 }, far: { value: 0 }, res: { value: this.uniforms.res }, maxDisp: { value: 8 }, prevModel: { value: new THREE.Matrix4() }, prevViewProj: { value: this.uniforms.prevViewProj } } }); this.data.set(key, m); }
+  private dataMat(mode: number, idColor: string, batched = false): THREE.ShaderMaterial {
+    const key = (mode === 0 ? `0:${batched ? 'batch' : idColor}` : `${mode}`) + (batched ? ':b' : ''); let m = this.data.get(key);
+    if (!m) { m = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide, defines: batched ? { BATCH_PREV: 1 } : {}, uniforms: { mode: { value: mode }, color: { value: hexVec(idColor) }, near: { value: 0 }, far: { value: 0 }, res: { value: this.uniforms.res }, maxDisp: { value: 8 }, prevModel: { value: new THREE.Matrix4() }, prevViewProj: { value: this.uniforms.prevViewProj } } }); this.data.set(key, m); }
     m.uniforms.near.value = this.uniforms.near; m.uniforms.far.value = this.uniforms.far; m.uniforms.maxDisp.value = this.uniforms.maxDisp;
     return m;
   }
@@ -69,12 +88,25 @@ export class GLStage {
     if (L === 'clay' || L === 'pose' || L === 'canny') return u.layer === 'ground' ? this.clayGround : this.clay;
     return this.dataMat(MODES[L as keyof typeof MODES], u.idColor);
   }
-  private apply(mesh: THREE.Object3D) { const m = this.materialFor(mesh.userData as never); mesh.visible = !!m; if (!m) return; if ((mesh as THREE.Mesh).isMesh) (mesh as THREE.Mesh).material = m; else mesh.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).material = m; }); }
+  /** Colours for a batch under the current look (view tint / exact id colour / white for clay-like looks). */
+  private batchLook(b: { mesh: THREE.InstancedMesh; n: number; ids: Float32Array; tints: Float32Array; sel: Float32Array; white: Float32Array; entities: string[] }) {
+    const L = this.look, col = b.mesh.instanceColor!.array as Float32Array;
+    if (L === 'view') { col.set(b.tints.subarray(0, b.n * 3)); if (this.selected) for (let i = 0; i < b.n; i++) if (b.entities[i] === this.selected) col.set(b.sel.subarray(i * 3, i * 3 + 3), i * 3); }
+    else if (L === 'id') col.set(b.ids.subarray(0, b.n * 3)); else col.set(b.white.subarray(0, b.n * 3));
+    b.mesh.instanceColor!.needsUpdate = true;
+    const m: THREE.Material | null = L === 'view' || L === 'clay' || L === 'pose' || L === 'canny' ? this.batchWhite : L === 'fx' ? this.black : this.dataMat(MODES[L as keyof typeof MODES], '#000000', true);
+    b.mesh.material = m;
+  }
+  private apply(mesh: THREE.Object3D) { if (mesh.userData.batch) { const b = this.batches.get(mesh.userData.batch); if (b) this.batchLook(b); return; } const m = this.materialFor(mesh.userData as never); mesh.visible = !!m; if (!m) return; if ((mesh as THREE.Mesh).isMesh) (mesh as THREE.Mesh).material = m; else mesh.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).material = m; }); }
   setLook(look: StageLook, selected: string | null = null) { if (look === this.look && selected === this.selected) { for (const m of this.data.values()) { m.uniforms.near.value = this.uniforms.near; m.uniforms.far.value = this.uniforms.far; m.uniforms.maxDisp.value = this.uniforms.maxDisp; } return; } this.look = look; this.selected = selected; this.group.traverse((o) => { if ((o as THREE.Mesh).isMesh) this.apply(o as THREE.Mesh); }); }
 
   sync(scene: FrameScene, prev?: FrameScene) {
-    const seen = new Set<string>(), prevM = prev ? new Map(prev.drawables.map((d) => [d.key, d.matrix])) : null;
+    const seen = new Set<string>(), prevM = prev ? new Map(prev.drawables.map((d) => [d.key, d.matrix])) : null, groups = new Map<MeshKind, typeof scene.drawables>();
+    for (const d of scene.drawables) if (d.layer !== 'fx' && !d.assetId) { let g = groups.get(d.kind); if (!g) groups.set(d.kind, (g = [])); g.push(d); }
+    for (const [kind, b] of this.batches) if (!groups.has(kind)) { b.n = 0; b.mesh.count = 0; }
+    for (const [kind, list] of groups) this.syncBatch(kind, list, prevM);
     for (const d of scene.drawables) {
+      if (d.layer !== 'fx' && !d.assetId) continue;
       seen.add(d.key); let mesh = this.meshes.get(d.key);
       const model = d.assetId ? modelRegistry.map.get(d.assetId) : undefined, mv = model ? modelRegistry.version : 0;
       if (!mesh || mesh.userData.kind !== d.kind || mesh.userData.idColor !== d.idColor || mesh.userData.modelVersion !== mv) {
@@ -112,7 +144,33 @@ export class GLStage {
       this.apply(this.ground); this.group.add(this.ground); this.groundSrc = scene.terrain;
     }
   }
-  /** Entity id under a raycast hit (walks up userData). */
+  private syncBatch(kind: MeshKind, list: FrameScene['drawables'], prevM: Map<string, number[]> | null) {
+    let b = this.batches.get(kind); const n = list.length;
+    if (!b || b.cap < n) {
+      if (b) { this.group.remove(b.mesh); b.mesh.dispose(); }
+      const cap = Math.max(64, 1 << Math.ceil(Math.log2(n))), mesh = new THREE.InstancedMesh(geo(kind), this.batchWhite, cap);
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3); mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+      const prev = new THREE.InstancedInterleavedBuffer(new Float32Array(cap * 16), 16, 1); prev.setUsage(THREE.DynamicDrawUsage);
+      const g = mesh.geometry = geo(kind).clone(); for (let c = 0; c < 4; c++) g.setAttribute(`prevI${c}`, new THREE.InterleavedBufferAttribute(prev, 4, c * 4));
+      mesh.frustumCulled = false; mesh.castShadow = true; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.userData = { batch: kind, layer: 'batch', entityIds: [] as string[] };
+      b = { mesh, cap, n: 0, ids: new Float32Array(cap * 3), tints: new Float32Array(cap * 3), sel: new Float32Array(cap * 3), white: new Float32Array(cap * 3).fill(1), entities: [], prev };
+      this.batches.set(kind, b); this.group.add(mesh);
+    }
+    const M = b.mesh.instanceMatrix.array as Float32Array, P = b.prev.array as Float32Array, tmp = new THREE.Color(), base = new THREE.Color(0xd4d4d4);
+    for (let i = 0; i < n; i++) {
+      const d = list[i]; M.set(d.matrix, i * 16); P.set(prevM?.get(d.key) ?? d.matrix, i * 16);
+      if (b.entities[i] !== d.entityId || b.mesh.userData.colors?.[i] !== d.idColor) {
+        const v = hexVec(d.idColor); b.ids[i * 3] = v.x; b.ids[i * 3 + 1] = v.y; b.ids[i * 3 + 2] = v.z; tmp.set(d.idColor);
+        const t = base.clone().lerp(tmp, 0.42), sc = base.clone().lerp(tmp, 0.75).multiplyScalar(1.15);
+        b.tints[i * 3] = t.r; b.tints[i * 3 + 1] = t.g; b.tints[i * 3 + 2] = t.b; b.sel[i * 3] = sc.r; b.sel[i * 3 + 1] = sc.g; b.sel[i * 3 + 2] = sc.b;
+        b.entities[i] = d.entityId; (b.mesh.userData.colors ??= [])[i] = d.idColor;
+      }
+    }
+    b.n = n; b.mesh.count = n; b.mesh.userData.entityIds = b.entities; b.mesh.instanceMatrix.needsUpdate = true; b.prev.needsUpdate = true;
+    this.batchLook(b);
+  }
+  /** Entity id under a raycast hit (walks up userData; resolves instanced batches by instance id). */
+  static entityAt(o: THREE.Object3D | null, instanceId?: number): string | null { if (o?.userData?.batch && instanceId !== undefined) return (o.userData.entityIds as string[])[instanceId] ?? null; return GLStage.entityOf(o); }
   static entityOf(o: THREE.Object3D | null): string | null { while (o) { if (o.userData?.entityId) return o.userData.entityId as string; o = o.parent; } return null; }
 }
 
@@ -164,7 +222,7 @@ export class GLPassRenderer implements PassRenderer {
     this.rtA = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter }); this.rtB = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
     this.renderer.setSize(w, h, false);
   }
-  private sceneAt(p: Project, t: number): FrameScene { if (this.last && this.last.project === p && this.last.t === t) return this.last.scene; const scene = compileFrame(p, t); this.last = { project: p, t, scene }; return scene; }
+  private sceneAt(p: Project, t: number): FrameScene { if (this.last && this.last.project === p && this.last.t === t) return this.last.scene; const scene = compileFrameShared(p, t); this.last = { project: p, t, scene }; return scene; }
   /** Render one pass at scene time t onto `output`. `prev` enables optical flow. */
   renderAt(p: Project, t: number, cs: CamState, pass: PassName, w: number, h: number, prev?: { t: number; cam: CamState }): void {
     const scene = this.sceneAt(p, t), r = this.renderer;

@@ -114,6 +114,12 @@ function fxDrawables(p: Project, f: Fx, t: number, out: Drawable[]): void {
   }
 }
 
+/** Props do not move over time: compile them once per (prop object, terrain). */
+const propCache = new WeakMap<Prop, { terrain: Terrain; list: Drawable[] }>();
+function staticProp(p: Project, pr: Prop): Drawable[] {
+  const hit = propCache.get(pr); if (hit && hit.terrain === p.terrain) return hit.list;
+  const list = propDrawables(pr, terrainHeight(p.terrain, pr.pos[0], pr.pos[2])); propCache.set(pr, { terrain: p.terrain, list }); return list;
+}
 const scatterCache = new WeakMap<Scatter, { terrain: Terrain; set: InstanceSet[] }>();
 function scatterInstances(p: Project, sc: Scatter): InstanceSet[] {
   const hit = scatterCache.get(sc); if (hit && hit.terrain === p.terrain) return hit.set;
@@ -137,7 +143,7 @@ export function compileFrame(p: Project, t: number): FrameScene {
     const c = p.characters[id], st = evalCharacter(p, c, t), sk = characterSkeleton(p, c, t, st);
     states[id] = st; skeletons[id] = sk; characterDrawables(c, sk, drawables);
   }
-  for (const id of Object.keys(p.props).sort()) { const pr = p.props[id]; propDrawables(pr, terrainHeight(p.terrain, pr.pos[0], pr.pos[2]), drawables); }
+  for (const id of Object.keys(p.props).sort()) { const pr = p.props[id]; for (const d of staticProp(p, pr)) drawables.push(d); }
   for (const id of Object.keys(p.fx).sort()) fxDrawables(p, p.fx[id], t, drawables);
   const instances = Object.keys(p.scatter).sort().flatMap((id) => scatterInstances(p, p.scatter[id]));
   return { t, drawables, instances, terrain: p.terrain, skeletons, states };
@@ -173,3 +179,10 @@ export function terrainMesh(t: Terrain): UnitMesh {
   return { pos, idx };
 }
 export { mPos, cross };
+
+/** compileFrame memoised on (project identity, t), shared by every viewer that draws the same frame. */
+const frameMemo = new WeakMap<Project, Map<number, FrameScene>>();
+export function compileFrameShared(p: Project, t: number): FrameScene {
+  let m = frameMemo.get(p); if (!m) { m = new Map(); frameMemo.set(p, m); }
+  let f = m.get(t); if (!f) { if (m.size > 8) m.delete(m.keys().next().value as number); f = compileFrame(p, t); m.set(t, f); } return f;
+}

@@ -34,7 +34,7 @@ export async function createVideoSink(width: number, height: number, fps: number
       if (err) throw err; const timestamp = Math.round((frame * 1e6) / fps), duration = Math.round(1e6 / fps);
       const vf = source instanceof Uint8ClampedArray || source instanceof Uint8Array ? new VideoFrame(source as Uint8Array<ArrayBuffer>, { format: 'RGBA', codedWidth: width, codedHeight: height, timestamp, duration }) : new VideoFrame(source as CanvasImageSource, { timestamp, duration });
       pumpAudio((frame + 1) / fps); enc.encode(vf, { keyFrame: frame % (fps * 2) === 0 }); vf.close();
-      while (enc.encodeQueueSize > 8) await new Promise((r) => setTimeout(r, 1));
+      while (enc.encodeQueueSize > 8) await new Promise<void>((r) => { if ('ondequeue' in enc) enc.addEventListener('dequeue', () => r(), { once: true }); else setTimeout(r, 2); });
     },
     audioCodec: ac?.codec ?? null,
     async finish() { await enc.flush(); enc.close(); if (aenc) { pumpAudio(Infinity); await aenc.flush(); aenc.close(); } if (err) throw err; if (mp4) { mp4.finalize(); return { ext: 'mp4', bytes: new Uint8Array(mp4.target.buffer), codec: pick.codec }; } webm!.finalize(); return { ext: 'webm', bytes: new Uint8Array(webm!.target.buffer), codec: pick.codec }; },

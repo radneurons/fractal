@@ -9,20 +9,24 @@ const isPopout = () => new URLSearchParams(location.search).has('view');
 
 /** Live view through a camera using the *export* renderer, so what you see is exactly what the passes contain. */
 export function BlockoutCanvas({ pass, cameraId, style, className, maxWidth = 960 }: { pass: PassName; cameraId: string | null; style?: React.CSSProperties; className?: string; maxWidth?: number }) {
-  const ref = useRef<HTMLCanvasElement>(null), wrap = useRef<HTMLDivElement>(null);
+  const glRef = useRef<HTMLCanvasElement>(null), poseRef = useRef<HTMLCanvasElement>(null), wrap = useRef<HTMLDivElement>(null), props = useRef({ pass, cameraId, maxWidth }); props.current = { pass, cameraId, maxWidth };
+  // One renderer for the component's lifetime, drawing straight into the visible WebGL canvas (no GPU→CPU copy per frame).
+  // The pose pass is CPU-drawn, so it goes to a sibling 2D canvas.
   useEffect(() => {
-    const cv = ref.current!, gl = new GLPassRenderer(document.createElement('canvas')), ctx = cv.getContext('2d')!; let raf = 0, key = '', lastP: Project | null = null;
+    const cv = glRef.current!, pc = poseRef.current!, gl = new GLPassRenderer(cv), pctx = pc.getContext('2d')!; let raf = 0, key = '', lastP: Project | null = null;
     const loop = () => {
-      raf = requestAnimationFrame(loop); const s = S(), p = s.ghost ?? s.project, cam = cameraId ? p.cameras[cameraId] : null, box = wrap.current!.getBoundingClientRect(); if (!cam || box.width < 8) return;
-      const a = ASPECTS[p.aspect]; let w = Math.min(maxWidth, box.width, box.height * a); w = Math.max(64, Math.round(w / 2) * 2); const h = Math.max(2, Math.round(w / a / 2) * 2);
-      const k = `${s.t}|${pass}|${cameraId}|${w}|${h}`; if (k === key && p === lastP) return; key = k; lastP = p;
-      if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+      raf = requestAnimationFrame(loop); const { pass: ps, cameraId: cid, maxWidth: mw } = props.current, s = S(), p = s.ghost ?? s.project, cam = cid ? p.cameras[cid] : null, box = wrap.current!.getBoundingClientRect(); if (!cam || box.width < 8) return;
+      const a = ASPECTS[p.aspect]; let w = Math.min(mw, box.width, box.height * a); w = Math.max(64, Math.round(w / 16) * 16); const h = Math.max(2, Math.round(w / a / 2) * 2);
+      const k = `${s.t}|${ps}|${cid}|${w}|${h}`; if (k === key && p === lastP) return; key = k; lastP = p;
       const prevT = Math.max(0, s.t - 1 / p.fps);
-      gl.renderAt(p, s.t, evalCamera(p, cam, s.t), pass, w, h, { t: prevT, cam: evalCamera(p, cam, prevT) }); ctx.drawImage(gl.output as HTMLCanvasElement, 0, 0);
+      gl.renderAt(p, s.t, evalCamera(p, cam, s.t), ps, w, h, { t: prevT, cam: evalCamera(p, cam, prevT) });
+      const isPose = gl.output !== cv; cv.style.display = isPose ? 'none' : ''; pc.style.display = isPose ? '' : 'none';
+      if (isPose) { if (pc.width !== w || pc.height !== h) { pc.width = w; pc.height = h; } pctx.drawImage(gl.output as HTMLCanvasElement, 0, 0); }
     };
     loop(); return () => { cancelAnimationFrame(raf); gl.dispose(); };
-  }, [pass, cameraId, maxWidth]);
-  return <div ref={wrap} className={`flex h-full w-full items-center justify-center ${className ?? ''}`} style={style}><canvas ref={ref} data-testid={`blockout-canvas-${pass}`} className="max-h-full max-w-full" /></div>;
+  }, []);
+  return <div ref={wrap} className={`flex h-full w-full items-center justify-center ${className ?? ''}`} style={style}>
+    <canvas ref={glRef} data-testid={`blockout-canvas-${pass}`} className="max-h-full max-w-full" /><canvas ref={poseRef} className="max-h-full max-w-full" style={{ display: 'none' }} /></div>;
 }
 
 export function FrameGuides() {

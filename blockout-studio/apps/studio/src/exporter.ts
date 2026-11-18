@@ -19,13 +19,13 @@ export async function exportShotPackage(shot: Shot, o: ExportOpts = {}): Promise
   return { ...res, seconds: (performance.now() - t0) / 1000, hash: hashBytes(res.zip) };
 }
 /** Clay-pass throughput at a given height, as a multiple of real time. `encode` includes WebCodecs. */
-export async function benchClay(height = 1080, frames = 48, encode = true): Promise<{ fps: number; xRealtime: number; width: number; height: number; renderer: string; encoded: boolean }> {
+export async function benchClay(height = 1080, frames = 48, encode = true): Promise<{ fps: number; xRealtime: number; width: number; height: number; renderer: string; encoded: boolean; drawCalls: number; triangles: number }> {
   const p = S().project, shot = p.shots[3] ?? p.shots[0], gl = exportRenderer() as GLPassRenderer, [w, h] = passSize(p, height), n = Math.min(frames, shotFrames(p, shot));
   const sink = encode ? await createVideoSink(w, h, p.fps) : null;
-  gl.renderShotFrame(p, shot, 0, 'clay', w, h); const t0 = performance.now();
+  gl.renderShotFrame(p, shot, 0, 'clay', w, h); gl.renderer.info.autoReset = false; gl.renderer.info.reset(); gl.renderShotFrame(p, shot, 0, 'clay', w, h); const perFrame = { calls: gl.renderer.info.render.calls, triangles: gl.renderer.info.render.triangles }; gl.renderer.info.autoReset = true; const t0 = performance.now();
   for (let f = 0; f < n; f++) { gl.renderShotFrame(p, shot, f, 'clay', w, h); if (sink) await sink.add(gl.output, f); else gl.renderer.getContext().finish(); }
   if (sink) await sink.finish();
-  const fps = n / ((performance.now() - t0) / 1000);
-  return { fps, xRealtime: fps / p.fps, width: w, height: h, renderer: gl.info, encoded: !!sink };
+  const fps = n / ((performance.now() - t0) / 1000), info = perFrame;
+  return { fps, xRealtime: fps / p.fps, width: w, height: h, renderer: gl.info, encoded: !!sink, drawCalls: info.calls, triangles: info.triangles };
 }
 if (typeof window !== 'undefined') Object.assign(((window as unknown as Record<string, object>).__blockout ??= {}), { exportShotPackage, benchClay, hashBytes });
