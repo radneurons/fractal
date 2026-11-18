@@ -22,7 +22,7 @@ export interface Studio {
   overlays: Record<Overlay, boolean>; blockoutPass: PassName; theme: 'dark' | 'light'; snap: boolean; rightTab: string;
   proposals: Proposal[]; ghostId: string | null; ghost: Project | null; chat: ChatMsg[]; toast: { text: string; kind: 'info' | 'error' } | null;
   sculpt: { op: 'raise' | 'lower' | 'smooth' | 'flatten'; radius: number; strength: number }; scatterKind: 'grass' | 'rock' | 'tree';
-  viewCam: { pos: [number, number, number]; target: [number, number, number]; fov: number } | null; resultOpacity: number; exportHeight: number; poseJoint: string | null; currentTakeId: string | null; compareTakeId: string | null;
+  viewCam: { pos: [number, number, number]; target: [number, number, number]; fov: number } | null; resultOpacity: number; exportHeight: number; exportExact: boolean; poseJoint: string | null; currentTakeId: string | null; compareTakeId: string | null;
   dispatch(op: Op, meta?: { label?: string; author?: string; coalesce?: string }): boolean;
   undo(): void; redo(): void; load(p: Project, log?: LogEntry[]): void;
   setTime(t: number): void; step(frames: number): void; togglePlay(mode?: 'scene' | 'cut'): void; tick(dt: number): void;
@@ -49,7 +49,7 @@ export const useStudio = create<Studio>((set, get) => ({
   selection: null, activeShotId: 's1', focus: 'scene', tool: 'translate', mode: 'select',
   overlays: { thirds: true, golden: false, safe: false, axis: true, eyelines: false, onion: false, trails: true, frusta: true, paths: true }, blockoutPass: 'clay', theme: 'dark', snap: true, rightTab: 'inspector',
   proposals: [], ghostId: null, ghost: null, chat: [], toast: null,
-  sculpt: { op: 'raise', radius: 6, strength: 0.4 }, scatterKind: 'grass', viewCam: null, resultOpacity: 0, exportHeight: 720, poseJoint: null, currentTakeId: null, compareTakeId: null,
+  sculpt: { op: 'raise', radius: 6, strength: 0.4 }, scatterKind: 'grass', viewCam: null, resultOpacity: 0, exportHeight: 720, exportExact: false, poseJoint: null, currentTakeId: null, compareTakeId: null,
   dispatch(op, meta = {}) {
     try {
       let { project, history } = get(); const now = Date.now();

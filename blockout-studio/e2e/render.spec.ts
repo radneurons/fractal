@@ -19,3 +19,13 @@ test('video encoding path produces a package with encoded passes', async ({ page
   expect(r.passes.id.storage).toBe('png-sequence'); // data passes are never lossy
   expect(['video', 'png-sequence']).toContain(r.passes.clay.storage);
 });
+
+test('bit-exact export matches the Node software renderer byte for byte (cross-machine determinism)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.goto('/?fresh'); await page.waitForFunction(() => !!(window as any).__blockout);
+  const browser = await page.evaluate(async () => { const s = (window as any).__studio.getState(), shot = { ...s.project.shots[3], end: s.project.shots[3].start + 0.25 }; const r = await (window as any).__blockout.exportShotPackage(shot, { height: 90, soft: true, video: false, passes: ['clay', 'id', 'depthMetric', 'pose'] }); return Object.fromEntries(Object.entries(r.files as Record<string, Uint8Array>).filter(([k]) => k.startsWith('passes/')).map(([k, v]) => [k, (window as any).__blockout.hashBytes(v)])); });
+  const { demoProject } = await import('../packages/core/src/index'), { buildShotPackage, softRenderer, hashBytes } = await import('../packages/render/src/index');
+  const p = demoProject(), node = await buildShotPackage(p, { ...p.shots[3], end: p.shots[3].start + 0.25 }, { renderer: softRenderer, passes: ['clay', 'id', 'depthMetric', 'pose'], height: 90 });
+  const nodeHashes = Object.fromEntries(Object.entries(node.files).filter(([k]) => k.startsWith('passes/')).map(([k, v]) => [k, hashBytes(v)]));
+  expect(Object.keys(browser).length).toBeGreaterThan(10); expect(browser).toEqual(nodeHashes); // V8-in-Chromium and Node produce identical pass bytes
+});

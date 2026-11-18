@@ -15,7 +15,7 @@
 - `pnpm test:e2e`: WebGL export run twice gives byte-identical zips; encoded-video path; clay speed benchmark; 20 characters / 10 cameras / 200 props editing benchmark.
 
 **Known gaps / honest numbers**
-- Determinism is byte-exact for the software renderer everywhere, and for WebGL on the same GPU + driver + browser. Different GPUs rasterize differently, so the manifest records the renderer string; use `soft: true` when cross-machine identity matters.
+- Determinism: the "bit-exact" export option (software renderer) gives identical bytes on every machine. `e2e/render.spec.ts` checks that a Chromium export and a Node render of the same shot hash identically, pass for pass. The default WebGL export is byte-exact on one GPU + driver + browser; different GPUs rasterize differently, so the manifest records the renderer string.
 - **Speed budget.** It is enforced by `e2e/perf-budget.spec.ts` against the production build; see "Performance pass" below.
 - No ProRes; the PNG sequence is the lossless option.
 - The software renderer has no cast shadows; WebGL clay does.
