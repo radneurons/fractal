@@ -35,4 +35,4 @@ console.log(`vocal activity vs aligned words: precision ${(tp / (tp + fp || 1)).
 for (const l of ly.lines.slice(0, Number(process.env.LINES ?? 12))) {
   console.log(`  ${f(l.start)} [${a.sections[l.section]?.label}]${l.hook ? '*' : ' '} ` + l.words.map((i) => { const w = ly.words[i]; return (w.role === 'hero' ? w.display.toUpperCase() : w.display) + (w.confidence < 0.5 ? '?' : '') + (w.element && w.element !== 'none' ? `{${w.element}}` : ''); }).join(' '));
 }
-writeFileSync(outLrc, toEnhancedLrc(ly, { title: t.title, artist: t.artist }));
+writeFileSync(outLrc, toEnhancedLrc(ly, { title: t.title })); // no artist: file tags can carry a real name

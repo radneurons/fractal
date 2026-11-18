@@ -77,7 +77,7 @@ export class Breakout extends Canvas2DEffect {
     if (this.s.paletteSource === 'artwork' && ctx.artwork) this.P = { ...this.P, a: ctx.artwork.vivid1, b: ctx.artwork.vivid2, d: ctx.artwork.dominant };
     this.bar = Math.round(H * this.num('bars'));
     this.title = (this.s.title || ly.meta?.title || '').toUpperCase();
-    this.artist = (this.s.artist || ly.meta?.artist || '').toUpperCase();
+    this.artist = (this.s.artist || '').toUpperCase(); // only what the user typed, never file tags
     this.halftones.clear();
     const sc = scratchCtx();
     const unit = (text: string, key: string) => { sc.font = font(key, sizeForCap(key, 100)); return sc.measureText(text).width / 100; };
@@ -110,8 +110,9 @@ export class Breakout extends Canvas2DEffect {
       this.fit(s, W * box[0], wh * box[1], box[2]);
       // a sticker on the first line of a section and on some others, slapped on a downbeat
       if (this.bool('stickers') && (firstOfSection || hash01(s.seed, 3) < 0.4)) {
-        const pick = Math.floor(hash01(s.seed, 4) * 5);
-        const text = firstOfSection ? label.toUpperCase() : [`${Math.round(a.bpm)} BPM`, `${KEYS[a.key.tonic] ?? 'C'} ${a.key.mode === 'minor' ? 'MIN' : 'MAJ'}`, 'VOL.01', '★★★', `NO.${String(li + 1).padStart(2, '0')}`][pick];
+        // graphic stickers and facts from the analysis only: no section names, no numbering
+        const pick = Math.floor(hash01(s.seed, 4) * 4);
+        const text = [`${Math.round(a.bpm)} BPM`, `${KEYS[a.key.tonic] ?? 'C'} ${a.key.mode === 'minor' ? 'MINOR' : 'MAJOR'}`, '★★★', '✦ ✦ ✦'][pick];
         const db = a.downbeats[lowerBound(a.downbeats, line.start + 0.15)];
         s.sticker = { text, t: db !== undefined && db < line.end ? db : line.start + 0.35, corner: Math.floor(hash01(s.seed, 5) * 4), tone: Math.floor(hash01(s.seed, 6) * 3) };
       }
@@ -606,16 +607,13 @@ export class Breakout extends Canvas2DEffect {
     g.save();
     g.font = font(UI, sizeForCap(UI, cap)); g.textBaseline = 'middle';
     g.fillStyle = P.w; g.globalAlpha = 0.85;
-    const label = brk ? 'BREAK' : (s?.label ?? '').toUpperCase();
-    const labelX = W * 0.97 - cap * 2, labelW = g.measureText(label).width;
+    const labelX = W * 0.97 - cap * 2, labelW = 0;
     // the title takes what is left of the top bar, cut with an ellipsis
     let head = this.title ? `▶ ${this.title}${this.artist ? ' — ' + this.artist : ''}` : '▶ BREAKOUT';
     const room = labelX - labelW - cap * 2 - W * 0.03;
     while (head.length > 3 && g.measureText(head).width > room) head = head.slice(0, -2) + '…';
     g.textAlign = 'left';
     g.fillText(head, W * 0.03, bar / 2);
-    g.textAlign = 'right';
-    g.fillText(label, labelX, bar / 2);
     const on = this.beatPulse(t, 9) > 0.4;
     g.globalAlpha = 1; g.fillStyle = on ? P.a : '#444';
     g.beginPath(); g.arc(W * 0.97 - cap * 0.6, bar / 2, cap * 0.45, 0, Math.PI * 2); g.fill();

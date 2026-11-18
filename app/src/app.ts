@@ -67,7 +67,8 @@ export class App {
       this.audioBlob = blob; this.audioHash = hash;
       const s = this.state.settings;
       s.title = tags.title ?? name.replace(/\.[a-z0-9]+$/i, '');
-      s.artist = tags.artist ?? '';
+      // the artist stays blank unless the user types one: file tags often carry a real name
+      s.artist = '';
       this.song = { name, audio, analysis, lyrics: { words: [], lines: [], source: 'plain' }, stamp: Date.now() };
       this.stage.artwork = null;
       if (tags.picture) {
@@ -107,7 +108,6 @@ export class App {
     const a0: Analysis = { ...song.analysis, sections: this.baseSections };
     const ly = buildLyrics(parsed, a0);
     if (parsed.meta.title) this.state.settings.title = parsed.meta.title;
-    if (parsed.meta.artist) this.state.settings.artist = parsed.meta.artist;
     this.commitLyrics(ly, parsed.format !== 'plain', notify);
   }
 
