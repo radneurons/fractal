@@ -439,11 +439,11 @@ export function buildShell(root: HTMLElement, app: App, canvas: HTMLCanvasElemen
       const beat = a && a.bpm ? 60 / a.bpm : 0.5;
       app.player.seek(app.player.time + dir * (e.shiftKey ? beat : 5));
     } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code.startsWith('Digit')) {
-      // 1–9 and 0 select effects 1–10; Shift+1–7 select 11–17
+      // 1–9 and 0 select effects 1–10; Shift+1–9 and Shift+0 select 11–20 (later ones: the effect grid)
       const d = Number(e.code.slice(5));
-      const idx = e.shiftKey ? 9 + d : d === 0 ? 9 : d - 1;
+      const idx = e.shiftKey ? (d === 0 ? 19 : 9 + d) : d === 0 ? 9 : d - 1;
       const cls = allEffects()[idx];
-      if (cls && (!e.shiftKey || (d >= 1 && d <= 7))) { app.setEffect(cls.meta.id); hooks.onEdit('Switch effect'); refresh(); }
+      if (cls) { app.setEffect(cls.meta.id); hooks.onEdit('Switch effect'); refresh(); }
     }
   });
 

@@ -21,6 +21,8 @@ export const FONTS = {
   abril: { family: 'LE Abril', file: 'AbrilFatface.ttf', weight: '400' },
   rubik: { family: 'LE Rubik Mono', file: 'RubikMonoOne.ttf', weight: '400' },
   elite: { family: 'LE Special Elite', file: 'SpecialElite.ttf', weight: '400' },
+  /** ZCOOL KuaiLe, subset to a dozen comic sound-effect glyphs (叩 炸 轰 砰 嘭 啪 哐 咚 爆 冲 跳 ！) */
+  comic: { family: 'LE Comic CJK', file: 'ZcoolKuaiLe-comic.ttf', weight: '400' },
 } satisfies Record<string, FontDef>;
 
 export type FontKey = keyof typeof FONTS;
