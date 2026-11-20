@@ -22,5 +22,8 @@
   - **BytePlus Seedance:** 2.5 series 4–30 s, 2.0 series 4–15 s, 1.0 pro 2–12 s; ratios incl. 21:9 and adaptive; recommended prompt ≤ 1000 English words; inline `--rs --rt --dur --seed --cf --wm`; no negative-prompt field.
   - **Kling:** prompt and negative_prompt ≤ 2500 chars each.
   - **Veo:** 4/6/8 s; 16:9 and 9:16; negativePrompt.
-  - **H3, Luma and Wan** remain estimates.
+  - **MiniMax H3:** prompt ≤ 7000 chars; integer 4–15 s; 768P/2K; common ratios or adaptive; ≤ 9 images, 3 videos and 3 audio clips as references.
+  - **Luma Ray 2:** ray-2 / ray-flash-2; 540p–4k; duration string (e.g. "5s"); keyframes frame0/frame1; loop; aspect_ratio; no negative field.
+  - **Wan:** prompt ≤ 1500 chars on 2.6/2.5 (800 on 2.2/2.1, 5000 on 2.7); negative ≤ 500; 5/10 s (2–15 s on 2.7).
+  - Every vendor dialect now has a dated primary source; only the internal `canonical` and `mock` dialects have no vendor limits.
 - `fallbacks: "default"` (server-side refusal fallback) is sent in API mode; on platforms that reject it, remove it in `claude.ts`.

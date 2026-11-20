@@ -16,7 +16,7 @@ describe('dialects', () => {
     const h3 = P.assemble(s4, P.getDialect('h3')).text; expect(h3).toMatch(/^Subject: /); expect(h3).toMatch(/\nCamera: .*360 orbit/); expect(h3).toMatch(/At 0\.0s, /);
     expect(P.assemble(s4, P.getDialect('kling')).text).not.toMatch(/\[\d/); expect(P.assemble(s2, P.getDialect('runway')).text).toMatch(/^Camera: /);
     for (const d of P.listDialects()) expect(P.assemble(s4, d, 'blur').text.length).toBeLessThanOrEqual(d.maxChars);
-    expect(P.assemble(s4, P.getDialect('wan')).dropped.length).toBeGreaterThan(0);
+    P.registerDialect({ id: 'tiny-limit', name: 'Tiny', maxChars: 400 }); expect(P.assemble(s4, P.getDialect('tiny-limit')).dropped.length).toBeGreaterThan(0);
   });
   it('new dialects are plugins (data), not code', () => { P.registerDialect({ id: 'my-model', name: 'Mine', layout: 'tagged', maxChars: 300, vocab: { orbit: 'ARC SHOT' }, order: ['camera', 'action'] }); const t = P.assemble(P.describeShot(demo, shotFacts(demo, demo.shots[3])), P.getDialect('my-model')).text; expect(t).toMatch(/^Camera: .*ARC SHOT/); expect(t.length).toBeLessThanOrEqual(300); expect(() => P.registerDialect({ id: 'Bad Id' })).toThrow(); });
 });
